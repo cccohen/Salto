@@ -1,0 +1,2097 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+// -------------------------------Variables----------------------------------------
+objref boundvec, origboundlist, newboundlist, weightvec, weightmat, origweightlist, newweightlist, errlist, scalelist
+objref drand, diamvec, speedvec, graphobj, prand
+
+nefunvec = new Vector()
+errlogvec = new Vector()
+paramquadvec = new Vector()
+allerrlogvec = new Vector()
+paramlogvec = new Vector()
+
+strdef pheader, theader, vheader, eheader, alleheader, pnnheader, varstr
+
+fitoff = 1
+nefun = 0
+nquad = 0
+time = 0
+newg = 0
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------adj_injbound-------------------------------------
+// $1 = mode
+proc adj_injbound() {local f, pifdelt localobj tempxvec
+
+	if (!$1) {
+	
+		for f = 0, nf-1 {
+
+			if (injvec.x[f]) {
+
+				// search for index in xdat at which x >= pifdel
+				pifdelt = RegionFitness[f].xdat.x[RegionFitness[f].xdat.indwhere(">=", getpifdel())]
+		
+				if (RegionFitness[f].boundary.x[0] < pifdelt) {
+		
+					RegionFitness[f].boundary.x[0] = pifdelt
+					RegionFitness[f].weight.x[0] = 0
+
+					tempxvec = new Vector()
+					tempxvec.append(RegionFitness[f].xdat)
+					RegionFitness[f].set_modelx(tempxvec)
+					
+					num = setnsig(pifdelt, 5)
+					print "Fit start time adjusted to ", num, "ms for ", FitnessGenerator[0].yvarlist.o(f).s
+				}
+			}
+		}
+	}
+
+	tempstr = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------adj_weight---------------------------------------
+// Places a derivative-adjusted weight scale on voltage traces.
+// should take analogue Bessel filter setting on the amplifier in kHz.
+proc adj_weight() {local points_to_adv, f, lo_bound, up_bound, indlo, indhi, k localobj tempvec, tempxvec, tempyvec, boundvec, weightvec
+
+	points_to_adv = 1/dt/bess
+	tempvec = new Vector()
+	tempvec.append(points_to_adv)
+	tempvec.floor()
+	points_to_adv = tempvec.x[0]	
+
+	for f = 0, nf-1 {
+
+		lo_bound = RegionFitness[f].boundary.x[0]
+		up_bound = RegionFitness[f].boundary.x[RegionFitness[f].boundary.size-1]
+
+		tempxvec = new Vector()
+		tempxvec.append(RegionFitness[f].xdat)
+
+		tempyvec = new Vector()
+		tempyvec.append(RegionFitness[f].ydat)
+
+		indlo = tempxvec.indwhere("==", lo_bound)
+		indhi = tempxvec.indwhere("==", up_bound)
+				
+		tempvec = new Vector()
+		boundvec = new Vector()
+
+		k = indlo
+		while (k <= indhi) {
+			
+			boundvec.append(tempxvec.x[k])
+			tempvec.append(tempyvec.mean(k, k+points_to_adv-1))
+			k += points_to_adv			
+		}
+
+		boundvec.append(tempxvec.x[indhi])		
+
+		tempvec.deriv(bess*dt, 1)
+
+		tempvec.resize(tempvec.size+1)
+		tempvec.x[tempvec.size-1] = tempvec.x[tempvec.size-2]
+		
+		for k = 0, tempvec.size-1 {
+
+			tempvec.x[k] = abs(tempvec.x[k])
+			if (tempvec.x[k] < 1) tempvec.x[k] = 1
+		}
+
+		weightvec = new Vector()
+		weightvec.append(RegionFitness[f].weight.x[0])
+		weightvec.append(tempvec)
+
+		RegionFitness[f].boundary = new Vector()
+		RegionFitness[f].boundary.append(boundvec)
+		
+		RegionFitness[f].weight = new Vector()
+		RegionFitness[f].weight.append(weightvec)
+
+		RegionFitness[f].set_modelx(tempxvec)
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------add_weight---------------------------------------
+proc add_weight() {local f, k, points_to_adv, lo_bound, up_bound, indlo, indhi, nbound, indi, tempnum, m, sizecount localobj tempvec, origboundlist, boundvec, newboundlist, origweightlist, newweightlist, testvec, errlist, scalelist, weightvec
+
+	points_to_adv = min_weight*(1/dt/bess)
+	tempvec = new Vector()
+	tempvec.append(points_to_adv)
+	tempvec.floor()
+	points_to_adv = tempvec.x[0]
+
+	crveclist(nf, origboundlist)
+	crveclist(nf, newboundlist)
+
+	crveclist(nf, origweightlist)
+
+	// save original boundary/weight vecs in origbound/origweightlist, and create new boundary vecs in newboundlist
+	for f = 0, nf-1 {
+			
+		origboundlist.o(f).resize(RegionFitness[f].boundary.size)
+		for k = 0, origboundlist.o(f).size-1 origboundlist.o(f).x[k] = RegionFitness[f].boundary.x[k]
+
+		origweightlist.o(f).resize(RegionFitness[f].weight.size)
+		for k = 0, origweightlist.o(f).size-1 origweightlist.o(f).x[k] = RegionFitness[f].weight.x[k]		
+
+		tempxvec = new Vector()
+		tempxvec.append(RegionFitness[f].xdat)
+
+		lo_bound = origboundlist.o(f).x[0]
+		up_bound = origboundlist.o(f).x[origboundlist.o(f).size-1]
+
+		indlo = tempxvec.indwhere("==", lo_bound)
+		indhi = tempxvec.indwhere("==", up_bound)		
+		
+		nbound = (indhi-indlo+1)/points_to_adv
+		tempvec = new Vector()
+		tempvec.append(nbound)
+		tempvec.floor()
+		nbound = tempvec.x[0]
+
+		if (nbound < min_weight) {
+
+			print "add_weight() cannot be used for fit variable ", f, "because nbound = ", nbound, " is too low or min_weight = ", min_weight, " is too high."
+			print "Consider increasing the total range of weight intervals."
+			stop
+		}
+
+		boundvec = new Vector()
+		boundvec.append(tempxvec.x[indlo])
+
+		k = indlo
+		while (k <= indhi) {
+
+			boundvec.append(tempxvec.x[k+points_to_adv-1])
+			k += points_to_adv
+		}
+
+		if (boundvec.size < nbound+1) boundvec.append(tempxvec.x[indhi])
+
+		newboundlist.o(f).resize(boundvec.size)
+		for k = 0, newboundlist.o(f).size-1 newboundlist.o(f).x[k] = boundvec.x[k]
+	}
+	
+	// create new weight vecs in newweightlist
+	tempnum = 0
+	for f = 0, nf-1 tempnum += newboundlist.o(f).size
+	crveclist(tempnum-nf, newweightlist)
+
+	for f = 0, nf-1 {
+
+		weightmat = new Matrix(newboundlist.o(f).size, newboundlist.o(f).size-1)
+		for k = 0, weightmat.ncol-1 weightmat.x[0][k] = origweightlist.o(f).x[0]
+
+		weightvec = new Vector(weightmat.nrow, 0)
+		weightvec.x[0] = origweightlist.o(f).x[0]
+
+		weightvec.x[1] = 1
+		weightmat.setcol(0, weightvec)
+
+		k = 1
+		while (k <= weightmat.ncol-1) {
+
+			if (weightvec.x[k] == 1) {
+
+				weightvec.x[k] = 0
+				weightvec.x[k+1] = 1
+				weightmat.setcol(k, weightvec)
+			}
+
+			k += 1
+		}
+
+		for k = 0, weightmat.ncol-1 {
+
+			newweightlist.o(f*weightmat.ncol+k).resize(weightmat.nrow)
+			for m = 0, newweightlist.o(f*weightmat.ncol+k).size-1 newweightlist.o(f*weightmat.ncol+k).x[m] = weightmat.x[m][k]
+		}
+	}
+
+	// create a list containing the errors from each newboundlist and newweightlist combination
+	crveclist(nf, errlist)
+	// size-1 because not counting the first bound/weight, which is always 0
+	for k = 0, errlist.count-1 errlist.o(k).resize(newboundlist.o(k).size-1)
+	// determine if all new weightvecs will be of equal size, to save time
+	testvec = new Vector()
+	for k = 0, newboundlist.count-1 testvec.append(newboundlist.o(k).size-1)
+	tempnum = 0
+	for k = 0, testvec.size-2 if (testvec.x[k] == testvec.x[k+1]) tempnum += 1
+
+	if (tempnum == testvec.size-1) {
+	
+		print "add weight time saver activated"
+
+		for m = 0, newboundlist.o(0).size-2 {
+
+			for f = 0, nf-1 {
+
+				RegionFitness[f].boundary = new Vector()
+				RegionFitness[f].boundary.append(newboundlist.o(f))
+					
+				RegionFitness[f].weight = new Vector()
+				RegionFitness[f].weight.append(newweightlist.o(f*(newboundlist.o(0).size-1)+m))
+
+				tempxvec = new Vector()
+				tempxvec.append(RegionFitness[f].xdat)
+
+				RegionFitness[f].set_modelx(tempxvec)
+			}
+
+			FitnessGenerator[0].efun()
+			print "Completed run ", m, "of ", newboundlist.o(0).size-2
+				
+			for k = 0, errlist.count-1 errlist.o(k).x[m] = RegionFitness[k].ydat_.meansqerr(FitnessGenerator[0].yveclist.o(k), RegionFitness[k].dw_)
+		}
+	
+	} else {
+	
+		print "add weight time saver NOT activated"
+
+		sizecount = 0
+
+		for f = 0, nf-1 {
+
+			sizecount += newboundlist.o(f).size-1
+			
+			for k = sizecount-(newboundlist.o(f).size-1), sizecount-1 {
+
+				RegionFitness[f].boundary = new Vector()
+				RegionFitness[f].boundary.append(newboundlist.o(f))
+				
+				RegionFitness[f].weight = new Vector()
+				RegionFitness[f].weight.append(newweightlist.o(k))
+
+				tempxvec = new Vector()
+				tempxvec.append(RegionFitness[f].xdat)
+
+				RegionFitness[f].set_modelx(tempxvec)
+
+				FitnessGenerator[0].efun()
+				print "Completed run ", k, "of ", testvec.sum-1
+
+				errlist.o(f).x[k] = RegionFitness[f].ydat_.meansqerr(FitnessGenerator[0].yveclist.o(f), RegionFitness[f].dw_)
+			}
+		}
+	}
+
+	// calculate ratio of weight to add/scale for each time/bound interval, and place these in a new list.
+	crveclist(errlist.count, scalelist)
+	for k = 0, scalelist.count-1 scalelist.o(k).resize(errlist.o(k).size)
+	// append minimum errors from each fit variable's fit
+	tempvec = new Vector()
+	for k = 0, errlist.count-1 tempvec.append(errlist.o(k).min)
+
+	// calculate ratio to min error
+	for k = 0, scalelist.count-1 {
+
+		for m = 0, scalelist.o(k).size-1 {
+
+			scalelist.o(k).x[m] = errlist.o(k).x[m]/tempvec.x[k]
+		}
+	}
+
+	// apply add weight scale
+	for f = 0, nf-1 {
+
+		weightvec = new Vector()
+		RegionFitness[f].boundary = new Vector()
+
+		if (origweightlist.o(f).size-1 >= scalelist.o(f).size) {
+
+			points_to_adv = (origweightlist.o(f).size-1)/scalelist.o(f).size
+			tempvec = new Vector()
+			tempvec.append(points_to_adv)
+			tempvec.floor
+			points_to_adv = tempvec.x[0]
+
+			weightvec.append(origweightlist.o(f))			
+
+			k = 1
+			indi = 1
+			for m = 0, scalelist.o(f).size-1 {
+				
+				k = indi
+				while (k <= indi+points_to_adv-1) {
+
+					weightvec.x[k] *= scalelist.o(f).x[m]
+					k += 1
+				}
+
+				indi += points_to_adv
+			}
+
+			RegionFitness[f].boundary.append(origboundlist.o(f))
+		
+		} else {
+
+			weightvec.append(origweightlist.o(f).x[0])
+			weightvec.append(scalelist.o(f))
+			
+			RegionFitness[f].boundary.append(newboundlist.o(f))
+		}
+
+		RegionFitness[f].weight = new Vector()
+		RegionFitness[f].weight.append(weightvec)
+
+		tempxvec = new Vector()
+		tempxvec.append(RegionFitness[f].xdat)
+
+		RegionFitness[f].set_modelx(tempxvec)
+
+		print "test: add_weight without adj_weight"
+		print "..................................."
+		print "final weightvec", f
+		print "..................................."
+		for k = 0, RegionFitness[f].weight.size-1 {
+
+			print RegionFitness[f].weight.x[k]
+		}
+		print "..................................."
+	}
+
+	allerrlogvec = new Vector()
+	paramlogvec = new Vector()
+
+	print "...add weight ended..."
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------getthresh----------------------------------------
+// based on the 3 sigma approach
+proc getthresh() {local f, deli, k localobj tempyvec, tempvec
+
+	speedvec = new Vector()
+
+	for f = 0, nf-1 {
+
+		tempyvec = new Vector()
+
+		deli = RegionFitness[f].xdat.indwhere(">=", stim.del)
+
+		for k = 0, deli tempyvec.append(RegionFitness[f].ydat.x[k])
+
+		tempvec = new Vector()
+
+		tempvec.deriv(tempyvec, dt, 1)
+
+		speedvec.append(4*tempvec.stdev())
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ------------------------------croutiampdirman-----------------------------------
+proc croutiampdirman() {
+
+	getmod()
+	sprint(manstr, "outdir")
+	crdir(root, manstr)
+	sprint(mandir, "%s%s%s", root, manstr, "/")
+	crdir(mandir, modstr)
+	sprint(moddir, "%s%s%s", mandir, modstr, "/")
+
+	getiamp()
+	crdir(moddir, iampstr)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------getpheader--------------------------------------
+proc getpheader() {local p
+
+	sprint(pheader, "%s%s", pnamelist.o(0).label, "_norm")
+	for p = 1, pnamelist.count-1 sprint(pheader, "%s\t%s%s", pheader, pnamelist.o(p).label, "_norm")
+	sprint(pheader, "%s\n", pheader)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------getpnnheader-------------------------------------
+proc getpnnheader() {local p
+
+	sprint(pnnheader, "%s", pnamelist.o(0).label)
+	for p = 1, pnamelist.count-1 sprint(pnnheader, "%s\t%s", pnnheader, pnamelist.o(p).label)
+	sprint(pnnheader, "%s\n", pnnheader)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------geteheader---------------------------------------
+proc geteheader() {local f
+	
+	// construct emat/errlogmat header
+	// each col fitvar name, then col total, then tol
+	sprint(eheader, "%s", fitvarlist.o(0).label)
+	for f = 1, nf-1 sprint(eheader, "%s\t%s", eheader, fitvarlist.o(f).label)
+	sprint(eheader, "%s\t%s\t%s\n", eheader, "total", "tol")
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -----------------------------getalleheader--------------------------------------
+proc getalleheader() {local f
+
+	// construct allerrlogmat header
+	// each col fitvar name, then col total
+	sprint(alleheader, "%s", fitvarlist.o(0).label)
+	for f = 1, nf-1 sprint(alleheader, "%s\t%s", alleheader, fitvarlist.o(f).label)
+	sprint(alleheader, "%s\t%s\n", alleheader, "total")
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------getvheader---------------------------------------
+proc getvheader() {local f
+
+	// construct vmat header
+	// col0 = time, col1,...,coln = v(fit variables)
+	sprint(vheader, "%s", "time")
+	for f = 0, nf-1 sprint(vheader, "%s\t%s", vheader, fitvarlist.o(f).label)
+	sprint(vheader, "%s\n", vheader)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------gettheader---------------------------------------
+proc gettheader() {
+	
+	// construct tmat header
+	sprint(theader, "%s\t%s\t%s\t%s\n", "t-tot", "t-each", "avg", "sem")
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------getpnnmat----------------------------------------
+obfunc getpnnmat() {local p localobj tempmat
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) pmat obj organized in columns"
+			print "Output: pnnmat"
+			stop
+		}
+	}
+
+	tempmat = new Matrix($o1.nrow, $o1.ncol)
+	getplow()
+	for p = 0, tempmat.ncol-1 tempmat.setcol(p, $o1.getcol(p).mul(plowvec.x[p]))
+
+	return tempmat
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc savemanopt() {local f, k, p, nfcount, npcount localobj tempmat, tempvec
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "No arguments required. Will save the following elements of a manually run optimization:"
+			print "Time, as simulation times, in tmat.dat"
+			print "Optimized voltages, in vmat.dat"
+			print "Errors following each quad, including the final quad (but not repeated), in errlogmat.dat"
+			print "Errors following each run, in allerrlogmat.dat"
+			print "Output (final) errors, in emat.dat"
+			stop
+		}
+	}	
+
+	croutiampdirman()
+
+	// save as tmat
+	// additonal time statistics also produced here and saved:
+	// col0 = time per simulation (seconds)
+	// col1 = average
+	// col2 = sem = sigma/sqrt(n)
+	tempmat = new Matrix(timevec.size, 4)
+	for k = 0, tempmat.nrow-1 tempmat.x[k][0] = timevec.x[k]
+	if (timevec.size > 1) {
+		for k = 0, tempmat.nrow-1 {
+			if (!k) {
+				tempmat.x[k][1] = tempmat.x[k][0]
+			} else {
+				tempmat.x[k][1] = timevec.x[k]-timevec.x[k-1]
+			}
+		}
+		tempmat.x[0][2] = tempmat.getcol(0).mean
+		tempmat.x[0][3] = tempmat.getcol(0).stderr
+	}
+	gettheader()
+	getiampdir()
+	savemat(iampdir, "tmat.dat", tempmat, tformvec, theader)
+
+	
+	// vmat
+	tempmat = new Matrix(nrows, nf+1)
+	tempmat.setcol(0, tdatvec)
+	// copy into vmat the full optimized model traces
+	for f = 0, nf-1 {
+
+		// if boundaries are different from default, output full trace v
+		if (RegionFitness[f].boundary.x[0] > RegionFitness[f].xdat.x[0] || RegionFitness[f].boundary.x[RegionFitness[f].boundary.size-1] < RegionFitness[f].xdat.x[RegionFitness[f].xdat.size-1] || RegionFitness[f].boundary.size > 2) {
+
+			// save previous boundaries
+			tempvec = new Vector()
+			tempvec.append(RegionFitness[f].boundary)
+
+			// set new (default) boundaries
+			RegionFitness[f].boundary = new Vector()
+			RegionFitness[f].boundary.append(RegionFitness[f].xdat.x[0], RegionFitness[f].xdat.x[RegionFitness[f].xdat.size-1])
+			
+			// make these new boundaries effective (must use different xdat vector)
+			tempxvec = new Vector()
+			tempxvec.append(RegionFitness[f].xdat)
+			RegionFitness[f].set_modelx(tempxvec)
+
+			// get default optimized voltage trace
+			FitnessGenerator[0].efun()
+			tempmat.setcol(f+1, FitnessGenerator[0].yveclist.o(f))
+
+			// restore original bounds
+			RegionFitness[f].boundary = new Vector()
+			RegionFitness[f].boundary.append(tempvec)
+			RegionFitness[f].set_modelx(tempxvec)
+		
+		} else {
+
+			tempmat.setcol(f+1, FitnessGenerator[0].yveclist.o(f))
+		}
+	}
+	getvheader()
+	savemat(iampdir, "vmat.dat", tempmat, vformvec, vheader)
+
+	
+	// errlogmat: organized as fit variable0,...,n, total error and tolerance,
+	// with the exit code (the start index of the first fitvar err of the last
+	// quad) as the last value in the first column
+	// save as errlogmat
+	tempmat = new Matrix((errlogvec.size-2)/(nf+1)+1, nf+2)
+	nfcount = 0
+	for k = 0, tempmat.nrow-3 {
+		
+		for f = 0, nf {
+
+			tempmat.x[k][f] = errlogvec.x[k+f+nfcount*(nf+1)]
+		}
+
+		nfcount+=1
+
+		tempmat.x[k][nf+1] = errlogvec.x[errlogvec.size-2]
+	}
+	tempmat.x[tempmat.nrow-1][0] = errlogvec.x[errlogvec.size-1]
+	geteheader()
+	savemat(iampdir, "errlogmat.dat", tempmat, vformvec, eheader)
+
+	
+	// allerrlogmat: organized as fit variable0,...,n, total error for each fit run.
+	// save as allerrlogmat
+	tempmat = new Matrix(allerrlogvec.size/(nf+1), nf+1)
+	nfcount = 0
+	for k = 0, tempmat.nrow-1 {
+		
+		for f = 0, nf {
+
+			tempmat.x[k][f] = allerrlogvec.x[k+f+nfcount*nf]
+		}
+
+		nfcount+=1
+	}
+	getalleheader()
+	savemat(iampdir, "allerrlogmat.dat", tempmat, vformvec, alleheader)
+
+
+	// emat: organized as fit variable0,...,n, total error and tolerance
+	// save as emat 
+	tempmat = new Matrix(1, nf+2)
+	for f = 0, nf tempmat.x[0][f] = errlogvec.x[errlogvec.size-1-1+errlogvec.x[errlogvec.size-1]+f]
+	tempmat.x[0][nf+1] = errlogvec.x[errlogvec.size-2]
+	savemat(iampdir, "emat.dat", tempmat, vformvec, eheader)
+
+
+	// save paramlogmat as p0,...,pn (all opt params), for all iterations
+	tempmat = new Matrix(paramlogvec.size/getnp(), getnp())
+	npcount = 0
+	for k = 0, tempmat.nrow-1 {
+
+		for p = 0, tempmat.ncol-1 {
+
+			tempmat.x[k][p] = paramlogvec.x[p+npcount*tempmat.ncol]
+		}
+
+		npcount+=1
+	}
+	getpheader()
+	savemat(iampdir, "paramlogmat.dat", tempmat, maxformvec, pheader)
+
+	
+	// save paramquadmat as p0,...,pn (all opt params), for all quads
+	// the exit code will be saved on the last row of the first col
+	tempmat = new Matrix(((paramquadvec.size-1)/getnp())+1, getnp())
+	npcount = 0
+	for k = 0, tempmat.nrow-2 {
+
+		for p = 0, tempmat.ncol-1 {
+
+			tempmat.x[k][p] = paramquadvec.x[p+npcount*tempmat.ncol]
+		}
+
+		npcount+=1
+	}
+	tempmat.x[tempmat.nrow-1][0] = paramquadvec.x[paramquadvec.size-1]
+	savemat(iampdir, "paramquadmat.dat", tempmat, maxformvec, pheader)
+
+	
+	// save pmat as p0,...,pn (all opt params)
+	tempmat = new Matrix(1, getnp())
+	for p = 0, getnp()-1 {
+
+		tempmat.x[0][p] = paramquadvec.x[p+paramquadvec.size+paramquadvec.x[paramquadvec.size-1]]
+	}
+	savemat(iampdir, "pmat.dat", tempmat, maxformvec, pheader)
+
+	
+	// save pmat-nn, the non-normalized version of pmat
+	getpnnheader()
+	tempmat = getpnnmat(tempmat)
+	savemat(iampdir, "pmat-nn.dat", tempmat, maxformvec, pnnheader)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ------------------------------saveallerrlogmat----------------------------------
+proc saveallerrlogmat() {local f, m, nfcount, k localobj tempmat
+
+	// construct allerrlogmat header
+	// each col fitvar name, then col total
+	sprint(alleheader, "%s", fitvarlist.o(0).label)
+	for f = 1, nf-1 sprint(alleheader, "%s\t%s", alleheader, fitvarlist.o(f).label)
+	sprint(alleheader, "%s\t%s\n", alleheader, "total")
+
+	// create output directory
+	croutiampdirman()
+
+	// allerrlogmat: organized as fit variable0,...,n, total error for each fit run.
+	// save as allerrlogmat
+	tempmat = new Matrix(allerrlogvec.size/(nf+1), nf+1)
+	
+	nfcount = 0
+
+	for m = 0, tempmat.nrow-1 {
+
+		for f = 0, nf {
+
+			tempmat.x[m][f] = allerrlogvec.x[m+nfcount*nf+f]
+		} 
+		
+		nfcount += 1
+	}
+	getiampdir()
+	savemat(iampdir, "allerrlogmat.dat", tempmat, vformvec, alleheader)
+
+	// save paramlogmat as p0,...,pn (all opt params), for all iterations
+	tempmat = new Matrix(paramlogvec.size/getnp(), getnp())
+	npcount = 0
+	for k = 0, tempmat.nrow-1 {
+
+		for p = 0, tempmat.ncol-1 {
+
+			tempmat.x[k][p] = paramlogvec.x[p+npcount*tempmat.ncol]
+		}
+
+		npcount+=1
+	}
+	getpheader()
+	savemat(iampdir, "paramlogmat.dat", tempmat, maxformvec, pheader)	
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ---------------------------------savepelog--------------------------------------
+proc savepelog() {local f, m, k, p, nfcount, npcount localobj tempmat
+
+	// create output directory
+	croutiampdirman()
+
+	// allerrlogmat: organized as fit variable0,...,n, total error for each fit run.
+	// save as allerrlogmat
+	tempmat = new Matrix(allerrlogvec.size/(nf+1), nf+1)
+	
+	nfcount = 0
+
+	for m = 0, tempmat.nrow-1 {
+
+		for f = 0, nf {
+
+			tempmat.x[m][f] = allerrlogvec.x[m+nfcount*nf+f]
+		} 
+		
+		nfcount += 1
+	}
+	getalleheader()
+	getiampdir()
+	savemat(iampdir, "allerrlogmat.dat", tempmat, vformvec, alleheader)
+
+
+	// save paramlogmat as p0,...,pn (all opt params), for all iterations
+	tempmat = new Matrix(paramlogvec.size/getnp(), getnp())
+	npcount = 0
+	for k = 0, tempmat.nrow-1 {
+
+		for p = 0, tempmat.ncol-1 {
+
+			tempmat.x[k][p] = paramlogvec.x[p+npcount*tempmat.ncol]
+		}
+
+		npcount+=1
+	}
+	getpheader()
+	savemat(iampdir, "paramlogmat.dat", tempmat, maxformvec, pheader)	
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ----------------------------------savepnn---------------------------------------
+proc savepnn() {local p, m, pcount localobj tempmat, tempvec
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) filename of param mat (normalized)"
+			print "2) iamp address within iampvec. if unknown, use getiampind(iamp) [iamp in nA]."
+			print "3) row address within param mat containing log of interest. leave blank to obtain entire matrix."
+			print "Output: non-normalized param mat of chosen row organized with each parameter in a separate column"
+			stop
+		}
+	}
+
+	getiampdir($2)
+	getmat(iampdir, $s1, tempmat)
+
+	strf.head($s1, "[.]", headstr)
+	strf.tail($s1, "[.]", tailstr)	
+
+	if (numarg() > 2) {
+
+		tempvec = new Vector()		
+	
+		tempvec.append(tempmat.getrow($3))
+
+		tempmat = new Matrix(tempvec.size, 1)
+		tempmat.setcol(0, tempvec)
+		tempmat = delzeromat(tempmat)
+
+		tempvec = new Vector()
+		tempvec.append(tempmat.getcol(0))
+
+		tempmat = new Matrix(tempvec.size/getnp(), getnp())
+		
+		pcount = 0
+
+		for m = 0, tempmat.nrow-1 {
+
+			for p = 0, tempmat.ncol-1 {
+
+				tempmat.x[m][p] = tempvec.x[p+pcount*getnp()]
+			}
+
+			pcount += 1
+		}
+		
+		sprint(filestr, "%s%g%s%s", headstr, $3, "-nn.", tailstr)
+	
+	} else {
+
+		sprint(filestr, "%s%s%s", headstr, "-nn.", tailstr)
+	}
+
+	getpnnheader()
+	tempmat = getpnnmat(tempmat)
+
+	croutiampdirman($2)
+	savemat(iampdir, filestr, tempmat, maxformvec, pnnheader)
+
+	filestr = ""
+	headstr = ""
+	tailstr = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ---------------------------------getnp------------------------------------------
+// takes no argument.
+// outputs number of parameters entered for simulation.
+func getnp() {
+
+	return ParmFitness[0].parmlist.count()
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc updparampanel() {local p
+
+	for p = 0, getnp()-1 pvec.x[p] = RunFitParm[p].val * plowvec.x[p]
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// update param and error log if fit present
+proc updpelog() {local f, p, yfitsize, ydatsize
+
+	yfitsize = 0
+	ydatsize = 0
+
+	for f = 0, nf-1 {
+
+		yfitsize += FitnessGenerator[0].yveclist.o(f).size
+		ydatsize += RegionFitness[f].ydat_.size
+	}
+
+	if (yfitsize == ydatsize) {
+
+		for p = 0, getnp()-1 paramlogvec.append(RunFitParm[p].val)
+		for f = 0, nf-1 allerrlogvec.append(RegionFitness[f].ydat_.meansqerr(FitnessGenerator[0].yveclist.o(f), RegionFitness[f].dw_))
+		allerrlogvec.append(allerrlogvec.c(allerrlogvec.size-nf, allerrlogvec.size-1).sum)
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// updates both pnorm and corresponding RunFitParm with pnorm arguments of different type
+proc updfitparam() {local p, i, k
+
+	if (argtype(1) == 1) {
+
+		// whole vector input
+		if (numarg() == 1) {
+
+			if (argtype(1) == 1) {
+
+				for p = 0, $o1.size-1 {
+
+					RunFitParm[p].val = $o1.x[p]
+					setpnorm(p, $o1.x[p])
+				}
+			}
+
+		// vector + vector range from $2 to $3 as input 
+		} else if (numarg() == 3) {
+
+			if (argtype(1) == 1) {
+
+				for k = 0, $o1.size-1 {
+
+					RunFitParm[k+$2].val = $o1.x[k]
+					setpnorm(k+$2, $o1.x[k])
+				}
+			}
+		}
+	
+	// input as individual parameters 
+	} else {
+
+		for i = 1, numarg() {
+
+			RunFitParm[i-1].val = $i
+			setpnorm(i-1, $i)
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// check number of RunFitParm variables against number that should be present, 
+// based on setnp(), and fixes these accordingly. Should be run once before opts.
+proc updrfp() {local k, tempnum
+
+	getpnorm()
+	getplow()
+	getphi()
+	getdoarg()
+	getuselog()
+
+	tempnum = ParmFitness[0].parmlist.count
+
+	for k = 0, pnormvec.size-1 {
+
+		if (k < tempnum) {
+
+			sprint(tempstr, "%s%s", pnamelist.o(k).label, "_norm")
+			if (uselogvec.x[k]) {
+				ParmFitness[0].parmlist.o(k).set(tempstr, pnormvec.x[k], 1, phivec.x[k]/plowvec.x[k], doargvec.x[k], uselogvec.x[k])
+			} else {
+				if (plowvec.x[k] < 0 && phivec.x[k] >= 0) {
+					ParmFitness[0].parmlist.o(k).set(tempstr, pnormvec.x[k], phivec.x[k]/plowvec.x[k], 1, doargvec.x[k], uselogvec.x[k])
+				}
+			}
+
+			tempobj = ParmFitness[0].parmlist.o(k)
+			tempobj.setname(tempstr)
+			ParmFitness[0].parmlist.remove(k)
+			ParmFitness[0].parmlist.insrt(k, tempobj)
+			objref tempobj
+			objref domainbox, domainlist, parmbox
+
+		} else {
+
+			sprint(tempstr, "%s%s", pnamelist.o(k).label, "_norm")
+			tempobj = new RunFitParm(tempstr)
+			if (uselogvec.x[k]) {
+				tempobj.set(tempstr, pnormvec.x[k], 1, phivec.x[k]/plowvec.x[k], doargvec.x[k], uselogvec.x[k])
+			} else {
+				if (plowvec.x[k] < 0 && phivec.x[k] >= 0) {
+					tempobj.set(tempstr, pnormvec.x[k], phivec.x[k]/plowvec.x[k], 1, doargvec.x[k], uselogvec.x[k])
+				}
+			}
+			ParmFitness[0].declare(tempobj)
+			ParmFitness[0].parmlist.append(tempobj)
+			objref domainbox, domainlist, parmbox
+			if (strf.head(tempstr, "\\$", teststr) == -1) {
+				sprint(tempstr, "%s.val = %s", tempobj, tempstr)
+				execute1(tempstr)
+			}
+		}
+	}
+
+	if (pnormvec.size < ParmFitness[0].parmlist.count) {
+
+		tempnum = ParmFitness[0].parmlist.count - pnormvec.size
+
+		k = 0
+		while (k < tempnum) {
+
+			ParmFitness[0].parmlist.remove(ParmFitness[0].parmlist.count-1)
+			objref domainbox, domainlist, parmbox
+			k += 1
+		}
+	}
+
+	ParmFitness[0].def_parmlist_use()
+
+	tempstr = ""
+	objref tempobj
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------showdom------------------------------------------
+proc showdom() {
+
+	ParmFitnessGui[0].showdomain(1637.9, 724, 218.74, 213.12)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ------------------------------initfit-------------------------------------------
+// takes no argument.
+// resets parameter panel values to default. Do not use in parallel contexts.
+proc initfit() {
+
+	nquad = 0
+	nefun = 0
+	nefunvec = new Vector()
+	time = 0
+	timevec = new Vector()
+	errlogvec = new Vector()
+	allerrlogvec = new Vector()
+	paramquadvec = new Vector()
+	paramlogvec = new Vector()
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ------------------------------initpnormdef--------------------------------------
+proc initpnormdef() {local p
+
+	for p = 0, getnp()-1 {
+
+		RunFitParm[p].val = pnormdefvec.x[p]
+		setpnorm(p, pnormdefvec.x[p])
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// change fit data according to iiamp and imported vdat
+// $1 = iiamp
+// $2 = mode
+proc changedata() {local f localobj boundvec, weightvec, tempxvec
+
+	for f = 0, nf-1 {
+
+		// store already set bounds, if different from default
+		if (RegionFitness[f].boundary.x[0] != RegionFitness[f].xdat.x[0] || RegionFitness[f].boundary.x[RegionFitness[f].boundary.size-1] != RegionFitness[f].xdat.x[RegionFitness[f].xdat.size-1] || RegionFitness[f].boundary.size > 2) {
+
+			// store those bounds in boundvec
+			boundvec = new Vector()
+			boundvec.append(RegionFitness[f].boundary)
+			// also store the associated weights in weightvec
+			weightvec = new Vector()
+			weightvec.append(RegionFitness[f].weight)
+
+			// set data to new iamp
+			RegionFitness[f].set_data(vdatmat.getcol(0), vdatmat.getcol($1*nf+f+1))
+
+			// restore previous boudaries and weights (the associated dw get taken care of)
+			RegionFitness[f].boundary = new Vector()
+			RegionFitness[f].boundary.append(boundvec)
+			RegionFitness[f].weight = new Vector()
+			RegionFitness[f].weight.append(weightvec)
+
+			// to finalize the restoration in the GUI, need...
+			tempxvec = new Vector()
+			tempxvec.append(RegionFitness[f].xdat)
+			RegionFitness[f].set_modelx(tempxvec)
+		
+		} else {
+
+			// if already set bounds same as default, simply change data for new iamp
+			RegionFitness[f].set_data(vdatmat.getcol(0), vdatmat.getcol($1*nf+f+1))
+		}
+	}
+
+	strdef chgdata_iampstr
+	getiamp($1, chgdata_iampstr)
+	print "Fit data changed to ", chgdata_iampstr, " voltage response"
+	chgdata_iampstr = ""	
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------reseticlamp--------------------------------------
+// $1 = iiamp
+// $2 = 0, or 1; whether to rewrite and reload associated data files and windows
+
+proc reseticlamp() {local wstart, wkill, win, interval, wcount
+	
+	{stim.amp = iampvec.x[$1]}
+	printclamp()
+	changedata($1)
+	
+	if ($2 == 1) {
+
+		writenum(ses, iampfilestr, iampvec.x[$1])
+		writefitdata($1)
+
+		writevtplot(iampvec.x[$1])
+		writevxplot(iampvec.x[$1])
+		writeshape(iampvec.x[$1])
+
+		loadfile(1, ses, vtplotfilestr)
+		loadfile(1, ses, vxplotfilestr)
+		loadfile(1, ses, shapeplotfilestr)
+	}
+	
+
+	// deprecated: as window replacement is slow and does not seem to work for every window type.
+	// windows are therefore replaced directly on top of each other.
+	// window replacement is best for GUI-based model exploration. Otherwise, 
+	// substantial slowdown occurs with every cycle of window replacement.
+	// if (!para) {
+		
+	// 	wstart = 3
+	// 	wkill = 2+nf
+	// 	win = wstart + getvar(ses, "resetbit.dat") * (PWM.count - wstart - wkill)
+	// 	sprint(wstr, "%s%d%s", "PWM.close(", win, ")")
+	// 	timer = new Timer(wstr)
+	// 	interval = 0.2
+	// 	timer.seconds(interval)
+	// 	PWM.close(win)
+	// 	wcount = win
+		
+	// 	while (wcount <= win+nf+1) {
+	// 		timer.start()
+	// 		wcount += 1
+	// 	}
+	// 	timer.end()
+
+	// 	while (wcount <= win+nf+2) {
+		
+	// 		if (wcount > win+nf+1) {	
+
+	// 			writevtplot(mode, stim.amp)
+	// 			writevxplot(mode, stim.amp)
+	// 			writeshape(mode, stim.amp)
+
+	// 			if (mode == 0) {
+					
+	// 				loadfile(1, ses, "vtplot-pas.ses")
+	// 				loadfile(1, ses, "vxplot-pas.ses")
+	// 				loadfile(1, ses, "shapeplot-pas.ses")
+
+	// 			} else if (mode == 1) {
+
+	// 				loadfile(1, ses, "vtplot-act.ses")
+	// 				loadfile(1, ses, "vxplot-act.ses")
+	// 				loadfile(1, ses, "shapeplot-act.ses")					
+	// 			}
+
+	// 			writebit(ses, "resetbit.dat", 1)
+
+	// 			wcount = win+nf+3
+	// 		}
+	// 	}
+		
+	// 	wstr = ""
+	// }
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------optimize-----------------------------------------
+// The NU algorithm, serial version (GUI-based).
+// See genopt for the massively parallel version.
+
+// Description: a "just-enough" or sufficiency approach to optimization, ideal 
+// for unevenly- distributed parameters, such as myelin over a primary axon, 
+// or weakly-constrained parameters in general, due to intrinsic noise or possibly
+// other factors.
+
+// $1 is the tolerance (optional).
+// $2 is the maxstepsize (optional).
+
+proc optimize() {local p, f
+
+	// variable tracking whether this optimize procedure is running
+	fitoff = 0
+	// minimum nquad to be performed
+	MulfitPraxWrap[1].nstep = 1
+	// set attributes of praxis
+	if (numarg() == 2) {
+		
+		tol = $1
+		maxstepsize = $2
+	}
+	attr_praxis(tol, maxstepsize, 0)
+	// start optimize. Stop button needs to be pressed twice on the gui to exit.
+	MulRunFitter[0].prun()
+
+	// exit strategy
+	while (!fitoff) {
+
+		if (stoprun) {
+		
+			nquad = 0
+			nefun = 0
+			nefunvec = new Vector()
+			time = 0
+			timevec = new Vector()
+			errlogvec = new Vector()
+			allerrlogvec = new Vector()
+			paramquadvec = new Vector()
+			paramlogvec = new Vector()
+			fitoff = 1
+			break
+		 
+		} else {
+
+			// optimization variables of interest
+			// net number of quads performed (to be adjusted below)
+			nquad += 1
+			// net number of error functions evaluated (to be adjusted below)
+			nefunvec.append(MulRunFitter[0].opt.nefun)
+			// total time elapsed in seconds.
+			time += MulRunFitter[0].opt.time
+			if (time) timevec.append(time)			
+			strdef tsimstr
+			tsim = setnsig(time/3600, 3)
+			sprint(tsimstr, "%g", tsim)				
+			
+			// error and parameter logging
+			for f = 0, nf-1 errlogvec.append(RegionFitness[f].ydat_.meansqerr(FitnessGenerator[0].yveclist.o(f), RegionFitness[f].dw_))
+			errlogvec.append(errlogvec.c(errlogvec.size-nf, errlogvec.size-1).sum)
+			for p = 0, getnp()-1 paramquadvec.append(RunFitParm[p].val)
+			
+			// ------------------------------------------------------------------------------------------------------------------------------------
+			// If error is marginal, i.e. in the noise, then exit.
+			if (errlogvec.x[errlogvec.size-1] < tol) {
+
+				// add tol to errlog in the 2nd to last position.
+				errlogvec.append(tol)				
+
+				// step back to relevant nefun if appropriate (the penultimate).
+				if (nefunvec.size >= 2) {
+
+					nefun = nefunvec.sum-nefunvec.x[nefunvec.size-1]
+					nquad -= 1
+					print "Net total: nquad=", nquad, "nefun=", nefun, "time=", time, "e=", errlogvec.x(errlogvec.size-2)
+					print "Optimization completed in ", tsimstr, " hour(s)"
+
+					// exit codes
+					// the last position is occupied by the exit code.
+					// the exit code answers the question: how many steps back from the last position in a given solution vector do you need to take in order to retrieve
+					// the first position of the relevant solution set?
+					// exit codes are added to errlog and paramquad.
+					errlogvec.append(-2*(nf+1)-1)
+
+					// step back to penultimate, to avoid over-optimization with error found in the noise.
+					paramquadvec.append(-2*getnp())					
+				
+				} else {
+				
+					nefun = nefunvec.sum
+					print "Net total: nquad=", nquad, "nefun=", nefun, "time=", time, "e=", errlogvec.x(errlogvec.size-1)
+
+					errlogvec.append(-(nf+1)-1)
+					paramquadvec.append(-getnp())
+				}				
+	
+				print "Reason for exit: error is in the noise"
+				fitoff = 1
+			}
+
+			// ------------------------------------------------------------------------------------------------------------------------------------
+			// If enough quads have been performed, check if can exit.
+			if (!fitoff && errlogvec.size > 2*(nf+1)) {
+				
+				// If error improvement is increasingly marginal and in the noise, then exit. The penultimate quad becomes the relevant, non-over-optimized one.
+				if (abs(errlogvec.x[errlogvec.size-(nf+1)-1] - errlogvec.x[errlogvec.size-2*(nf+1)-1]) > abs(errlogvec.x[errlogvec.size-1] - errlogvec.x[errlogvec.size-(nf+1)]) && abs(errlogvec.x[errlogvec.size-(nf+1)-1] - errlogvec.x[errlogvec.size-1]) < tol) {
+						
+						updfitparam(paramquadvec.c(paramquadvec.size-2*getnp(), paramquadvec.size-getnp()-1))
+						FitnessGenerator[0].efun()
+						nquad -= 1
+						nefun = nefunvec.sum-nefunvec.x[nefunvec.size-1]
+						print "Net total: nquad=", nquad, "nefun=", nefun, "time=", time, "e=", errlogvec.x[errlogvec.size-(nf+1)-1]
+						print "Optimization completed in ", tsimstr, " hour(s)"
+						
+						errlogvec.append(tol)
+						errlogvec.append(-2*(nf+1)-1)
+						paramquadvec.append(-2*getnp())
+
+						print "Reason for exit: error improvement is marginal and in the noise"
+						fitoff = 1
+
+				}
+			}
+		
+			// ------------------------------------------------------------------------------------------------------------------------------------
+			if (!fitoff) {
+
+				nefun = nefunvec.sum
+				print "total: nquad=", nquad, "nefun=", nefun, "time=", time, "e=", MulfitPraxWrap[1].minerr
+				optimize(tol, maxstepsize)
+			}
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -----------------------------optimizewrap---------------------------------------
+proc optimizewrap() {
+
+	initfit()
+
+	if (numarg() == 2 && argtype(1) == 0 && argtype(2) == 0) {
+
+		optimize($1, $2)
+	
+	} else {
+
+		optimize()
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -----------------------------setoptpanel----------------------------------------
+proc setoptpanel() {
+
+	optibox = new VBox(3)
+	optibox.intercept(1)
+	xpanel("", 1)
+	xbutton("optimize", "optimizewrap()")
+	xlabel(" spatially non-uniform parameter distributions")
+	xpanel()
+	xpanel("", 1)
+	xpvalue("nquad", &nquad, 0, "", 0, 1)
+	xlabel(" ")
+	xpvalue("nefun", &nefun, 0, "", 0, 1)
+	xpanel()
+	optibox.intercept(0)
+	// optibox.map("Non-uniform (NU) optimization", 667.9, 961, 360.96, 93.12)
+	optibox.map("Non-uniform (NU) optimization", 998, 961, 360.96, 93.12)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -----------------------------getoptsoln-----------------------------------------
+proc getoptsoln() {local chk, origmode, k, np_pas, np localobj tempmat
+
+	chk = chkcwd(cwd)
+	if (chk) cwd = getcwd()
+
+	$o1 = new Vector()
+
+	if (chkdir(root, "outdir")) {
+
+		origmode = mode
+		mode = 0
+		getmod()
+
+		if (chkdir(out, modstr) && chkdir(moddir, "pematr.dat")) {
+
+			np_pas = setnp(mode)
+			getmat(moddir, "pematr.dat", tempmat)
+			for k = 0, np_pas-1 $o1.append(tempmat.getrow(tempmat.nrow-2).x[k])
+		}
+
+		mode = origmode
+		np = setnp(mode)
+		getmod()
+
+		if (mode == 1) {
+
+			getiampdir()
+		
+			if (chkdir(out, modstr)) {
+
+				if (chkdir(moddir, iampstr)) {
+
+					if (chkdir(iampdir, "pmat.dat")) {
+
+						getmat(iampdir, "pmat.dat", tempmat)
+						for k = np_pas, np-1 $o1.append(tempmat.getrow(0).x[k])
+					}
+				}
+			}
+		}
+	}
+
+	chdir(cwd)
+	if (chk) cwd = ""	
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc perr() {local f
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "No arguments required. Will print each fit error sequentially."
+			stop
+		}
+	}
+
+	for f = 0, nf-1 {
+
+		sprint(numstr, vformvec, RegionFitness[f].ydat_.meansqerr(FitnessGenerator[0].yveclist.o(f), RegionFitness[f].dw_))
+		sprint(tempstr, "%s%s", tempstr, numstr)
+	}
+
+	print tempstr
+
+	numstr = ""
+	tempstr = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc ppnorm() {local k, np_pas
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "No arguments required. Will print each pnorm."
+			stop
+		}
+	}
+
+	np_pas = setnp(0)
+	setnp(mode)
+
+	for k = np_pas, pnormvec.size-1 print pnormvec.x[i]
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc getsecparam() {local seg, countseg, pos, nrecrows, k localobj tempvec, tempmat
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) section name (string) or sectionlist (object)"
+			print "2) variable of interest to record, e.g. v or vext (string)"
+			print "3) optional file name header (string, i.e. sectionlist name)"
+			stop
+		}
+	}
+
+	countseg = 0
+	if (argtype(1) == 2) {
+
+		forsec $s1 countseg = nseg 
+	
+	} else {
+
+		forsec $o1 countseg += nseg
+	}
+
+	nrecrows = tstop/dt
+	tempvec = new Vector(1, nrecrows)
+	tempvec.floor
+	nrecrows = tempvec.x[0]+1
+	crveclist(countseg+1, templist)
+	for k = 0, templist.count-1 templist.o(k).resize(nrecrows)
+
+	strdef exprtok_left, exprtok_right
+	if (!strcmp($s2, "v")) sprint(exprtok_left, ".v(")
+	if (!strcmp($s2, "vext")) sprint(exprtok_left, ".vext(")
+	sprint(exprtok_right, ")")	
+	
+	templist.o(0).record(&t)
+	num = 1
+	strdef getsecparamstr
+	if (argtype(1) == 2) {
+
+		forsec $s1 for seg = 1, nseg {
+
+			pos = (2*seg-1)/(2*nseg)
+			sprint(getsecparamstr, "%s%g%s%s%s%g%s%s", "~templist.o(", num, ").record(&", $s1, exprtok_left, pos, exprtok_right, exprtok_right)
+			execute(getsecparamstr)
+			num += 1
+		}
+
+	} else {
+
+		forsec $o1 for seg = 1, nseg {
+
+			pos = (2*seg-1)/(2*nseg)
+			sprint(getsecparamstr, "%s%g%s%s%s%g%s%s", "~templist.o(", num, ").record(&", secname(), exprtok_left, pos, exprtok_right, exprtok_right)
+			execute(getsecparamstr)
+			num += 1
+		}
+	}
+
+	init()
+	run()
+
+	getmod()
+	if (numarg() == 3 && argtype(3) == 2) {
+
+		if (argtype(1) == 2) {
+
+			sprint(tempstr, "%s%s%s%s%s%s%s%s", $s3, "_", $s1, "_", $s2, "_", modstr, ".dat")
+		
+		} else {
+
+			sprint(tempstr, "%s%s%s%s%s%s", $s3, "_", $s2, "_", modstr, ".dat")	
+		}
+
+	} else {
+
+		if (argtype(1) == 2) {
+
+			sprint(tempstr, "%s%s%s%s%s%s", $s1, "_", $s2, "_", modstr, ".dat")
+		
+		} else {
+
+			sprint(tempstr, "%s%s%s%s", $s2, "_", modstr, ".dat")	
+		}				
+	}
+	
+	tempmat = new Matrix(nrecrows, countseg+1)
+	for k = 0, templist.count-1 tempmat.setcol(k, templist.o(k))
+	savemat(ses, tempstr, tempmat, vformvec)
+
+	objref templist
+	tempstr = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc gadd() {local seg, pos
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Add v(t) plot"
+			print "Enter:"
+			print "1) section (string) or sectionlist (object) to plot"
+			print "2) variable of interest to plot (string), e.g. \"v\" or \"vext\""
+			stop
+		}
+	}
+
+	strdef exprtok_left, exprtok_right
+	if (!strcmp($s2, "v")) sprint(exprtok_left, ".v(")
+	if (!strcmp($s2, "vext")) sprint(exprtok_left, ".vext(")
+	sprint(exprtok_right, ")")
+	
+	if (!newg) {
+
+		graphobj = new Graph(0)
+		graphobj.size(-1e-7, tstop, -80, 40)
+		graphobj.view(-1e-7, -80, tstop, 120, 612, 726, 678.72, 277.12)		
+		newg = 1
+	
+	} else {
+
+		graphobj.erase_all()
+	}
+
+	if (argtype(1) == 2) {
+	
+		forsec $s2 for seg = 1, nseg {
+
+			pos = (2*seg-1)/(2*nseg)
+			sprint(varstr, "%s%s%g%s", $s2, exprtok_left, pos, exprtok_right)
+			graphobj.addexpr(varstr)
+		}
+
+	} else {
+
+		forsec $o1 for seg = 1, nseg {
+
+			pos = (2*seg-1)/(2*nseg)
+			sprint(varstr, "%s%s%g%s", secname(), exprtok_left, pos, exprtok_right)
+			graphobj.addexpr(varstr)
+		}
+	}
+
+	graphList[0].append(graphobj)
+}
+// --------------------------------------------------------------------------------
+
+
+
+
+// --------------------------------------------------------------------------------
+proc chlam() {local k localobj tempvec
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) expected number of lamellae, e.g. 16"
+			print "2) base multiple for changing this, e.g. 2 or 10"
+			print "3) start power range (>= 0), ex: 0"
+			print "4) end power range, ex: 6"
+			print "5) desired sectionlist (object) or section name (string) to record"
+			print "6) variable of interest (string). Ex: \"v\" or \"vext\""
+			print "7) optional filename header (string)"
+			stop
+		}
+	}
+
+	tempvec = new Vector(3, 0)
+
+	tempvec.x[0] = Cmy_norm * $1 * 2
+	tempvec.x[1] = Rmy_norm/($1 * 2)
+	tempvec.x[2] = (smy-1)/($1 * 2)
+
+	for k = 0, $4-$3 {
+
+		Cmy_norm = tempvec.x[0]/(($2^($3+k))*2)
+		Rmy_norm = tempvec.x[1] * (($2^($3+k))*2)
+		smy = 1 + tempvec.x[2] * (($2^($3+k))*2)
+
+		getpnorm()
+		updfitparam(pnormvec)
+		init()
+
+		strdef lamstr
+		sprint(lamstr, "%s%g", "lamellae = ", $2^($3+k))
+		if (numarg() == 7) {
+
+			sprint(lamstr, "%s%s%s", $s7, ", ", lamstr)
+
+		} else {
+
+			sprint(lamstr, "%s%s", "_", lamstr)			
+		}
+		
+		if (argtype(5) == 2) {
+
+			getsecparam($s5, $s6, lamstr)
+	
+		} else {
+
+			getsecparam($o5, $s6, lamstr)
+		}
+	}
+
+	Cmy_norm = tempvec.x[0]/($1 * 2)
+	Rmy_norm = tempvec.x[1] * ($1 * 2)
+	smy = (tempvec.x[2] * $1 * 2) + 1
+
+	getpnorm()
+	updfitparam(pnormvec)
+	init()
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc chdelta1() {local mpa, mpn, apa, apn, k, delta_pa, delta_pn
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) desired delta_pa (nm)"
+			print "2) desired delta_pn (nm)"
+			stop
+		}
+	}
+
+	delta_pa = 12.3
+	delta_pn = 7.4
+
+	if (!chgdelta1) {
+
+		dpa = getdiam(interparanodal)
+		apa = PI*delta_pa*(1e-7)*(dpa*(1e-4)+delta_pa*(1e-7))
+		Rpa = rpa_norm * rpa_low * (1e6) * apa
+
+		dpn = getdiam(paranodal)
+		apn = PI*delta_pn*(1e-7)*(dpn*(1e-4)+delta_pn*(1e-7))
+		Rpn = rpa_norm * parafact_norm * rpa_low * (1e6) * apn
+
+		rpa_norm_orig = rpa_norm
+
+		chgdelta1 = 1
+	}
+	
+	mpa = $1/delta_pa
+	apa = PI*delta_pa*(1e-7)*mpa*(dpa*(1e-4)+delta_pa*(1e-7)*mpa)
+	rpa_norm = ((Rpa/apa)*(1e-6))/rpa_low
+	
+	mpn = $2/delta_pn
+	apn = PI*delta_pn*(1e-7)*mpn*(dpn*(1e-4)+delta_pn*(1e-7)*mpn)	
+	parafact_norm = (((Rpn/apn)*(1e-6))/rpa_low)/rpa_norm_orig
+
+	getpnorm()
+	updfitparam(pnormvec)
+
+	init()
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc chdelta() {local delta_pa, delta_pn, k
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) desired submyelin space to change the radius of (string), e.g. \"pa\", \"pn\", or \"papn\""
+			print "2) base multiple to effect this change, ex: 2, 10, etc"
+			print "3) the power range start, ex: -2"
+			print "4) the power range end, ex: 3"
+			print "5) the desired sectionlist (object) or section name (string) to record"
+			print "6) the variable of interest (string), e.g. \"v\" or \"vext\""
+			print "7) a file name header (string)"
+			stop
+		}
+	}
+
+	delta_pa = 12.3
+	delta_pn = 7.4
+	strdef chdelta_header
+
+	for k = 0, $4-$3 {
+
+		if (!strcmp($s1, "pa")) {
+			
+			chdelta1(($2^($3+k))*delta_pa, delta_pn)
+			sprint(chdelta_header, "%s%s%s%s%g%s", $s7, ", chdelta_", $s1, " ", ($2^($3+k))*delta_pa, " nm")
+		}
+
+		if (!strcmp($s1, "pn")) {
+			
+			chdelta1(delta_pn, ($2^($3+k))*delta_pn)
+			sprint(chdelta_header, "%s%s%s%s%g%s", $s7, ", chdelta_", $s1, " ", ($2^($3+k))*delta_pn, " nm")
+		}
+
+		if (!strcmp($s1, "papn")) {
+			
+			chdelta1(($2^($3+k))*delta_pa, ($2^($3+k))*delta_pn)
+			sprint(chdelta_header, "%s%s%s%s%g%s%g%s", $s7, ", chdelta_", $s1, " ", ($2^($3+k))*delta_pa, " nm and ", ($2^($3+k))*delta_pn, " nm")
+		}		
+
+		if (argtype(5) == 2) {
+		
+			getsecparam($s5, $s6, chdelta_header)
+
+		} else {
+
+			getsecparam($o5, $s6, chdelta_header)
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc chdelta_pa() {local dpa, dpn, apa, apn, Rpa, Rpn, k, rpa_norm_orig, parafact_norm_orig, Rmy_norm_orig
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) base multiple for changing delta, e.g. 2 or 10"
+			print "2 & 3) the power range, e.g. -2, 2"
+			print "4) the desired sectionlist to record"
+			print "5) the variable of interest. Ex: v or vext"
+			print "6) an optional filename header"
+			stop
+		}
+	}
+
+	dpa = getdiam(interparanodal)
+	dpn = getdiam(paranodal)
+	
+	apa = PI*12.3*(1e-7)*(dpa*(1e-4)+12.3*(1e-7))
+	apn = PI*7.4*(1e-7)*(dpn*(1e-4)+7.4*(1e-7))
+	
+	Rpa = rpa_norm * rpa_low * (1e6) * apa
+	Rpn = rpa_norm * parafact_norm * rpa_low * (1e6) * apn
+	
+	Rmy = Rmy_norm * Rmy_low
+
+	rpa_norm_orig = rpa_norm
+	parafact_norm_orig = parafact_norm
+	Rmy_norm_orig = Rmy_norm
+
+	for k = 0, $3-$2 {
+
+		apa = PI*12.3*(1e-7)*($1^($2+k))*(dpa*(1e-4)+12.3*(1e-7)*($1^($2+k)))
+		apn = PI*7.4*(1e-7)*($1^($2+k))*(dpn*(1e-4)+7.4*(1e-7)*($1^($2+k)))
+
+		rpa_norm = ((Rpa/apa)*(1e-6))/rpa_low
+		parafact_norm = (((Rpn/apn)*(1e-6))/rpa_low)/rpa_norm
+
+		Rmy_norm = (Rmy/((0.5*(dpa+dpn))/((0.5*(dpa+dpn)) + 2*(0.5*(dpa+dpn)*$1^($2+k)))))/Rmy_low
+
+		getpnorm()
+		updfitparam(pnormvec)
+
+		sprint(varstr, "%s%g", "new delta *= ", ($1^($2+k)))
+
+		if (numarg() == 6 && argtype(6) == 2) sprint(varstr, "%s%s%s", $s6, ", ", varstr)
+		
+		getsecparam($s5, $o4, varstr)
+	}
+
+	rpa_norm = rpa_norm_orig
+	parafact_norm = parafact_norm_orig
+	Rmy_norm = Rmy_norm_orig
+	
+	getpnorm()
+	updfitparam(pnormvec)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc chdelta_pa() {local ad, apa, Rpa, k, rpa_norm_orig, Rmy_norm_orig
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) an expected delta (nm), e.g. 12.3 Current rpa corresponds to base delta_pa."
+			print "2) a base multiple for changing delta, e.g. 2 or 10"
+			print "3 & 4) the power range, e.g. -2, 2"
+			print "5) the desired sectionlist to record"
+			print "6) the variable of interest. Ex: v or vext"
+			print "7) an optional filename header"
+			stop
+		}
+	}
+
+	ad = getdiam(internodal)
+	apa = PI*12*(1e-7)*(ad*(1e-4)+12*(1e-7))
+	Rpa = rpa_norm * rpa_low * (1e6) * apa
+	Rmy = Rmy_norm * Rmy_low
+
+	rpa_norm_orig = rpa_norm
+	Rmy_norm_orig = Rmy_norm
+
+	for k = 0, $4-$3 {
+
+		apa = PI*12*(1e-7)*(1/12)*(ad*(1e-4)+12*(1e-7)*(1/12))
+		rpa_norm = ((Rpa/apa)*(1e-6))/rpa_low
+		Rmy_norm = (Rmy/(ad/(ad + 2*(12*(1/12)))))/Rmy_low
+
+		getpnorm()
+		updfitparam(pnormvec)
+		init()
+
+		sprint(varstr, "%s%g%s%g%s", "base delta_pa = ", $1, "nm, new delta_pa = ", $1*($2^($3+k)), "nm")
+
+		if (numarg() == 7 && argtype(7) == 2) sprint(varstr, "%s%s%s", $s7, ", ", varstr)
+		
+		getsecparam($s6, $o5, varstr)
+	}
+
+	rpa_norm = rpa_norm_orig
+	Rmy_norm = Rmy_norm_orig
+	
+	getpnorm()
+	updfitparam(pnormvec)
+	init()
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc chparam() {local k localobj tempvec, paramvec
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) the parameter of interest (string), e.g. \"Ri\""
+			print "2) the base multiple for fold changes, e.g. 2 or 10"
+			print "3) the start range of the number of fold changes, e.g. -5"
+			print "4) the end range of the number of fold changes, e.g. 5"
+			print "5) the desired section name (string) or sectionlist (object) to record, e.g. \"axon[10]\" or axonal"
+			print "6) the desired variable to record (string), e.g. \"v\" or \"vext\""
+			print "7) an optional file header"
+
+			print "\nHere is the list of available parameters:"
+			for k = 0, pnamelist.count-1 print pnamelist.o(k).label
+			stop
+		}
+	}
+
+	tempvec = new Vector(2, 0)
+
+	for k = 0, pnamelist.count-1 {
+
+		if (!strcmp($s1, pnamelist.o(k).label)) {
+
+			tempvec.x[0] = k
+			k = pnamelist.count-1
+		}
+	}
+	tempvec.x[1] = pnormvec.x[tempvec.x[0]]
+
+	paramvec = new Vector($4-$3+1, 0)
+
+	for k = 0, $4-$3 {
+
+		paramvec.x[k] = tempvec.x[1] * $2^($3+k)
+
+		pnormvec.x[tempvec.x[0]] = paramvec.x[k]
+		updfitparam(pnormvec)
+		init()
+
+		strdef header
+		sprint(header, "%s%s%g%s%s", $s1, "=", ($2^($3+k)), "*", $s1)
+
+		if (numarg() == 7 && argtype(7) == 2) sprint(header, "%s%s%s", $s7, ", ", header)
+
+		if (argtype(5) == 1) {
+			
+			getsecparam($s6, $o5, header)
+		
+		} else if (argtype(5) == 2) {
+
+			getsecparam($s6, $s5, header)
+		
+		} else {
+
+			print "Error: enter the desired section name (string) or sectionlist (object) to record, e.g. \"axon[10]\" or axonal"
+			stop
+		}
+	}
+
+	savepelog()
+
+	pnormvec.x[tempvec.x[0]] = tempvec.x[1]
+	updfitparam(pnormvec)
+	init()
+
+	tempstr = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+func getthresh() {local dx localobj tempvec
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) time vector"
+			print "2) voltage vector"
+			print "3) desired dV/dt threshold (V/s)"
+			print "Returns threshold onset (time vector units)"
+			stop
+		}
+	}
+
+	dx = ($o1.x[$o1.size-1]-$o1.x[0])/($o1.size-1)
+
+	tempvec = new Vector()
+
+	tempvec.deriv($o2, dx, 1)
+
+	return $o1.x[tempvec.indwhere(">=", $3)]
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc chdiam() {local k, m localobj diamvec, tempvec, drand
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) sectionlist"
+			print "2) diameter slice to add or remove from each measurement in given sectionlist in um (e.g. 0.3 um)"
+			stop
+		}
+	}
+
+	diamvec = new Vector()
+	forsec $o1 for (x, 0) diamvec.append(diam(x))
+
+	drand = new Random()
+	drand.normal(0, 1)
+
+	tempvec = new Vector()
+	for k = 0, diamvec.size-1 tempvec.append(diamvec.x[k] + drand.repick()*$2)
+
+	m = -1
+	forsec $o1 for (x, 0) {
+
+		m += 1
+		diam(x) = tempvec.x[m]
+	}
+
+	print "DIAMETER CHANGE ACTIVATED"
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc randomizep() {local k localobj prand, tempvec
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Randomize parameter range (0, np-1) within parameter bound (plow, phi)"
+			print "Enter:"
+			print "1) start range, i.e. 0 or 8"
+			print "2) end range, i.e. getnp()-1"
+			print "3) optional: randomization seed (0-n). Default = 0."
+			stop
+		}
+	}
+
+	if (numarg() == 3) {
+		prand = new Random($3)
+	} else {
+		prand = new Random()
+	}
+	tempvec = new Vector()
+
+	getplow()
+	getphi()
+
+	for k = $1, $2 {
+
+		prand.uniform(1, phivec.x[k]/plowvec.x[k])
+		tempvec.append(prand.repick())
+	}
+
+	updfitparam(tempvec, $1, $2)
+
+	init()
+}
+// --------------------------------------------------------------------------------

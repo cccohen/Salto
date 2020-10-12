@@ -1,0 +1,362 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+// -------------------------------------Variables-----------------------------------------
+objref pmat, vmat, emat, tmat, errloglist, paramquadlist, paramloglist
+objref pmatr, ematr, ematrp
+objref pmatr_all, ematr_all, pmatr_nn, pmat_nn
+objref temppmat, tempemat, temppemat
+
+strdef theader, vheader, peheader
+// ---------------------------------------------------------------------------------------
+
+
+
+// -----------------------------------getmoddir-------------------------------------------
+proc getmoddir() {
+
+	sprint(modstr, "%s%s%s", modeltypestr, "-", axontypestr)
+	sprint(moddir, "%s%s%s", out, modstr, "/")
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// -----------------------------------getiampdir------------------------------------------
+proc getiampdir() {local amplitude
+	
+	amplitude = setnsig(iampvec.x[$1]*1000, 3)
+	if (amplitude >= 0) {
+		sprint(ampstr, "%s%g%s", "+", amplitude, "pA")
+	} else {
+		sprint(ampstr, "%g%s", amplitude, "pA")
+	}
+
+	getmoddir()
+
+	sprint($s2, "%s%s%s", moddir, ampstr, "/")
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// -----------------------------------rankopt---------------------------------------------
+proc rankopt() {local k, m localobj tempmat, tempvec, pmatr_all, ematr_all
+
+	for k = 0, iampvec.size-1 {
+
+		getiampdir(k, iampdir)
+
+		if (chkdir(moddir, ampstr)) {
+
+			getmat(iampdir, "emat.dat", tempmat)
+
+			tempvec = new Vector()
+			tempvec.append(tempmat.getcol(nf).sortindex)
+
+			// pmat -> pmatr_all
+			getmat(iampdir, "pmat.dat", tempmat)
+			pmatr_all = new Matrix(tempmat.nrow, tempmat.ncol)
+
+			getpheader()
+			for m = 0, pmatr_all.nrow-1 pmatr_all.setrow(m, tempmat.getrow(tempvec.x[m]))
+
+			savemat(iampdir, "pmatr-all.dat", pmatr_all, maxformvec, pheader)
+
+			// emat -> ematr_all
+			getmat(iampdir, "emat.dat", tempmat)
+			ematr_all = new Matrix(tempmat.nrow, tempmat.ncol)
+
+			geteheader()
+			for m = 0, ematr_all.nrow-1 ematr_all.setrow(m, tempmat.getrow(tempvec.x[m]))
+
+			savemat(iampdir, "ematr-all.dat", ematr_all, vformvec, eheader)
+
+			// save tempvec as esortivec
+			tempmat = new Matrix(tempvec.size, 1)
+			tempmat.setcol(0, tempvec)
+			savemat(iampdir, "esortivec.dat", tempmat, "%g\t")
+		}
+	}
+
+	print "rankopt-all complete"
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ----------------------------------keepopt----------------------------------------------
+proc keepopt() {local k, m, p, q localobj tempmat, tempvec, pmatr, ematr
+
+	setpname(mode)
+	getplow()
+	getphi()
+
+	for k = 0, iampvec.size-1 {
+
+		getiampdir(k, iampdir)
+
+		if (chkdir(moddir, ampstr)) {
+
+			getmat(iampdir, "pmatr-all.dat", tempmat)
+			tempvec = new Vector()		
+
+			for m = 0, tempmat.nrow-1 {
+
+				q = 0
+				
+				for p = 0, tempmat.ncol-2 {
+
+					if (tempmat.x[m][p] <= 1.025 || tempmat.x[m][p] >= 0.975*phivec.x[p]/plowvec.x[p]) q += 1
+				}
+
+				if (!q) tempvec.append(m)
+			}
+			
+			// pmatr_all -> pmatr
+			if (tempvec.size) {
+			
+				pmatr = new Matrix(tempvec.size, tempmat.ncol)
+				getpheader()
+				for m = 0, pmatr.nrow-1 pmatr.setrow(m, tempmat.getrow(tempvec.x[m]))
+				savemat(iampdir, "pmatr.dat", pmatr, maxformvec, pheader)
+
+				tempmat = new Matrix(tempvec.size, 1)
+				tempmat.setcol(0, tempvec)
+
+				savemat(iampdir, "keeprvec.dat", tempmat, "%g\t")
+
+				// ematr_all -> ematr
+				getmat(iampdir, "ematr-all.dat", tempmat)
+				ematr = new Matrix(tempvec.size, tempmat.ncol)
+				geteheader()
+				for m = 0, ematr.nrow-1 ematr.setrow(m, tempmat.getrow(tempvec.x[m]))
+
+				savemat(iampdir, "ematr.dat", ematr, vformvec, eheader)		
+			
+			} else {
+
+				pmatr = new Matrix(1, tempmat.ncol)
+				getpheader()
+				for p = 0, tempmat.ncol-1 pmatr.x[0][p] = 0
+				savemat(iampdir, "pmatr.dat", pmatr, maxformvec, pheader)
+
+				// ematr_all -> ematr
+				getmat(iampdir, "ematr-all.dat", tempmat)
+				ematr = new Matrix(1, tempmat.ncol)
+				geteheader()
+				for p = 0, tempmat.ncol-1 ematr.x[0][p] = 0
+
+				savemat(iampdir, "ematr.dat", ematr, vformvec, eheader)						
+			}
+
+			nnopt(k)
+		}
+	}
+
+	print "keepopt complete"
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ------------------------------------nnopt----------------------------------------------
+proc nnopt() {local m, p localobj tempmat, pmatr_nn, pmat_nn
+
+	getplow()
+
+	getiampdir($1, iampdir)
+
+	// pmatr-all
+	getmat(iampdir, "pmatr-all.dat", tempmat)
+
+	pmatr_nn = new Matrix(tempmat.nrow, tempmat.ncol)
+
+	for m = 0, tempmat.nrow-1 {
+		
+		for p = 0, tempmat.ncol-1 {
+
+			pmatr_nn.x[m][p] = tempmat.x[m][p] * plowvec.x[p]
+		}
+	}
+
+	getpheader()
+	savemat(iampdir, "pmatr-all-nn.dat", pmatr_nn, maxformvec, pnnheader)
+
+	// pmatr
+	getmat(iampdir, "pmatr.dat", tempmat)
+
+	pmatr_nn = new Matrix(tempmat.nrow, tempmat.ncol)
+
+	for m = 0, tempmat.nrow-1 {
+		
+		for p = 0, tempmat.ncol-1 {
+
+			pmatr_nn.x[m][p] = tempmat.x[m][p] * plowvec.x[p]
+		}
+	}
+
+	getpnnheader()
+	savemat(iampdir, "pmatr-nn.dat", pmatr_nn, maxformvec, pnnheader)
+
+	// pmat
+	getmat(iampdir, "pmat.dat", tempmat)
+
+	pmat_nn = new Matrix(tempmat.nrow, tempmat.ncol)
+
+	for m = 0, tempmat.nrow-1 {
+		
+		for p = 0, tempmat.ncol-1 {
+
+			pmat_nn.x[m][p] = tempmat.x[m][p] * plowvec.x[p]
+		}
+	}
+
+	getpnnheader()
+	savemat(iampdir, "pmat-nn.dat", pmat_nn, maxformvec, pnnheader)
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ----------------------------------getematrp--------------------------------------------
+proc getematrp() {local k, m, f, moveon localobj tempmat
+
+	para = 1
+
+	for k = 0, iampvec.size-1 {
+
+		reseticlamp(iampvec.x[k])
+	
+		getiampdir(k, iampdir)
+		getmat(iampdir, "rpmat.dat", tempmat)
+
+		ematrp = new Matrix(tempmat.nrow, nf+2)
+
+		for m = 0, tempmat.nrow-1 {
+
+			updfitparm(tempmat.getrow(m))
+			FitnessGenerator[0].efun()
+
+			for f = 0, nf-1 ematrp.x[m][f] = RegionFitness[f].ydat_.meansqerr(FitnessGenerator[0].yveclist.o(f), RegionFitness[f].dw_)
+
+			moveon = 0
+			while (!moveon) {
+
+				if (ematrp.x[m][nf-1]) moveon = 1
+			}
+
+			for f = 0, nf-1 ematrp.x[m][nf] += ematrp.x[m][f]
+			ematrp.x[m][nf+1] = tol
+		}
+
+		geteheader()
+		savemat(iampdir, "ematrp.dat", ematrp, vformvec, eheader)
+	}
+
+	para = 0
+	print "ematrp saved"
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ----------------------------------combineper-------------------------------------------
+proc combineper() {local k, m, iampcount, counter localobj temppmat, tempemat, tempmat, temppemat
+
+	getpnnheader()
+	strf.left(pnnheader, strf.len(pnnheader)-1)
+	sprint(pnnheader, "%s%s", pnnheader, "\t")
+	geteheader()
+	sprint(peheader, "%s%s", pnnheader, eheader)
+
+	iampcount = 0
+	for k = 0, iampvec.size-1 {
+		
+		getiampdir(k, iampdir)
+		
+		if (iampvec.x[k] > float_epsilon || iampvec.x[k] < float_epsilon) {
+
+			if (chkdir(moddir, ampstr)) iampcount += 1
+		}
+	}
+
+	// pmatr-nn
+	tempmat = new Matrix(iampcount, getnp()+nf+2)
+	counter = -1
+	
+	for k = 0, iampvec.size-1 {
+
+		if (iampvec.x[k] > float_epsilon || iampvec.x[k] < float_epsilon) {
+
+			getiampdir(k, iampdir)
+
+			if (chkdir(moddir, ampstr)) {
+			
+				counter += 1
+				
+				// pmatr-nn
+				getmat(iampdir, "pmatr-nn.dat", temppmat)
+				getmat(iampdir, "ematr.dat", tempemat)
+				tempmat.setrow(counter, temppmat.getrow(0).append(tempemat.getrow(0)))
+			}
+		}
+	}
+	
+	temppemat = new Matrix(tempmat.nrow+2, tempmat.ncol)
+	for m = 0, tempmat.nrow-1 temppemat.setrow(m, tempmat.getrow(m))
+	
+	tempmat = delzeromat(tempmat)
+	for p = 0, temppemat.ncol-1 {
+		temppemat.x[temppemat.nrow-2][p] = tempmat.getcol(p).mean()
+		if (tempmat.getcol(p).size > 1) temppemat.x[temppemat.nrow-1][p] = tempmat.getcol(p).stderr()
+	}
+
+	getmoddir()
+	savemat(moddir, "pematr-nn.dat", temppemat, maxformvec, peheader)		
+
+	print "combined pematr-nn saved"
+
+	// pmatr
+	tempmat = new Matrix(iampcount, getnp()+nf+2)
+	counter = -1
+	
+	for k = 0, iampvec.size-1 {
+
+		if (iampvec.x[k] > float_epsilon || iampvec.x[k] < float_epsilon) {
+
+			getiampdir(k, iampdir)
+
+			if (chkdir(moddir, ampstr)) {
+			
+				counter += 1
+				
+				// pmatr-nn
+				getmat(iampdir, "pmatr.dat", temppmat)
+				getmat(iampdir, "ematr.dat", tempemat)
+				tempmat.setrow(counter, temppmat.getrow(0).append(tempemat.getrow(0)))
+			}
+		}
+	}
+	
+	temppemat = new Matrix(tempmat.nrow+2, tempmat.ncol)
+	for m = 0, tempmat.nrow-1 temppemat.setrow(m, tempmat.getrow(m))
+	
+	tempmat = delzeromat(tempmat)
+	for p = 0, temppemat.ncol-1 {
+		temppemat.x[temppemat.nrow-2][p] = tempmat.getcol(p).mean()
+		if (tempmat.getcol(p).size > 1) temppemat.x[temppemat.nrow-1][p] = tempmat.getcol(p).stderr()
+	}
+
+	getmoddir()
+	savemat(moddir, "pematr.dat", temppemat, maxformvec, peheader)		
+
+	print "combined pematr saved"
+}
+// ---------------------------------------------------------------------------------------
+

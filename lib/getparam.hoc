@@ -1,0 +1,1015 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+
+// -------------------------------getsteps-----------------------------------------
+// takes a tdatvec
+func getsteps() {
+
+	if (has_data) {
+
+		return 1/(tdatvec.x[1] - tdatvec.x[0])
+
+	} else {
+
+		return 100
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------setdt-------------------------------------------
+// modified version of the original
+proc setdt() {local Dt
+	if (using_cvode_) return
+	Dt = 1/steps_per_ms
+	nstep_steprun = int(Dt/dt)
+	if (nstep_steprun == 0) {
+		nstep_steprun = 1
+	}
+	dtnew = Dt/nstep_steprun	
+	if (abs(dt*nstep_steprun*steps_per_ms - 1) > 1e-6) {
+		// print "Changed dt"
+		dt = dtnew
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------gettstop-----------------------------------------
+func gettstop() {
+
+	if (has_data) {
+
+		return tdatvec.x[tdatvec.size-1]
+	
+	} else {
+
+		if (mode == 0) {
+
+			return 100
+		
+		} else if (mode == 1) {
+
+			return 50
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------settol------------------------------------------
+func settol() {local iiamp, iidel, f localobj templist
+
+	if ($1 != -1) {
+		iiamp = $1
+	} else {
+		iiamp = getvarp(ses, iiampfilestr)
+	}
+	
+	iidel = tdatvec.indwhere(">=", getvarp(ses, idelfilestr))
+
+	// obtain relevant v and place it (or them) into a list
+	templist = new List()
+	f = 0
+	while (f < nf) {
+
+		templist.append(vdatmat.getcol(iiamp*nf+f+1))
+		f += 1
+	}
+
+	// the combined noise of the recording is defined as the sum of each recording's intrinsic variance
+	noisevec = new Vector()
+	
+	for f = 0, templist.count-1 noisevec.append(templist.o(f).var(0, iidel))
+
+	print "Error tolerance set to ", setnsig(setnsig(noisevec.sum, nsigv), 5), "mV^2"
+	
+	return setnsig(noisevec.sum, nsigv)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ----------------------------setmaxstepsize--------------------------------------
+// takes (1) tol
+// outputs maxstepsize = 4sqrt(tol)
+func setmaxstepsize() {
+	
+	return setnsig(4*sqrt($1), nsigv)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------getdiam------------------------------------------
+// takes (1) secname or sectionlist
+// outputs average sec diam (um)
+func getdiam() {local diameter, Nseg
+
+	if (argtype(1) == 2 && numarg() == 1) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Input either:"
+			print "1) section name as string"
+			print "or 2) sectionlist object"
+			print "Returns section or sectionlist average diameter"
+			stop
+		}
+	}
+
+	diameter = 0
+	Nseg = 0
+
+	if (argtype(1) == 2) {
+	
+		forsec $s1 {
+
+			Nseg += nseg
+
+			for (x, 0) diameter += diam(x)
+
+		}		
+
+	} else if (argtype(1) == 1) {
+
+		forsec $o1 {
+
+			Nseg += nseg
+			
+			for (x, 0) diameter += diam(x)
+		}
+	}
+
+	return diameter/Nseg
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------getarea-----------------------------------------
+// takes (1) secname
+// outputs sec area (um2)
+func getarea() {local a
+
+	a = 0
+
+	forsec $s1 for (x, 0) a += area(x)
+
+	return a
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ---------------------------------getG-------------------------------------------
+// takes (1) secname
+// outputs average G for that section (mho/cm2)
+func getG() {local G, Gext, Nseg
+
+	G = 0
+	Gext = 0
+	Nseg = 0
+	
+	forsec $s1 {
+
+		Nseg = nseg
+		
+		if (ismembrane("extracellular")) {
+
+			for (x, 0) {
+
+				G += g_pas(x)
+				Gext += xg[0](x)
+			}
+
+			return 1/(Nseg * (1/G + 1/Gext))
+
+		} else {
+
+			for (x, 0) {
+
+				G += g_pas(x)
+			}
+
+			return G/Nseg
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ---------------------------------getg-------------------------------------------
+// takes (1) secname
+// outputs average g for that section (mho * cm)
+func getg() {
+
+	return getG($s1) * PI * getdiam($s1) * (1e-4)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ---------------------------------getC-------------------------------------------
+// takes (1) secname
+// outputs average capacitance (uF/cm2) for that section
+func getC() {
+
+	forsec $s1 {
+
+		if (ismembrane("extracellular")) {
+
+			if (xc[0] > 0) {
+
+				return 1/(1/cm + 1/xc[0])
+
+			} else {
+
+				return cm
+			}
+
+		} else {
+
+			return cm
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------gettau------------------------------------------
+// takes (1) secname. 
+// Outputs tau_sec (ms).
+func gettau() {
+
+	return (1/getG($s1)) * getC($s1) * (1e-3)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -----------------------------getmaxrecdist--------------------------------------
+// takes no argument. requires a seticlamp and recloclist.count > 0.
+// outputs maximum path length between locstim and recloc (um)
+func getmaxrecdist() {local k localobj tempvec
+
+	tempvec = new Vector()
+	loclist2sub(recloclist, subloclist)
+	
+	for k = 0, recseclist.count-1 {
+		
+		sscanf(sublocstim, "%lf", &num)
+		forsec secstim distance(0, num)
+		
+		sscanf(subloclist.o(k).label, "%lf", &num)
+		forsec recseclist.o(k).label tempvec.append(distance(num))
+	}
+	
+	return tempvec.max
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -----------------------------getminrecdist--------------------------------------
+// takes no argument. requires a seticlamp and recloclist.count > 0.
+// outputs minimum path length between locstim and recloc (um)
+func getminrecdist() {local k localobj tempvec
+
+	tempvec = new Vector()
+	loclist2sub(recloclist, subloclist)
+	
+	for k = 0, recseclist.count-1 {
+
+		sscanf(sublocstim, "%lf", &num)
+		forsec secstim distance(0, num)
+
+		sscanf(subloclist.o(k).label, "%lf", &num)
+		forsec recseclist.o(k).label tempvec.append(distance(num))
+	}
+	
+	return tempvec.min
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -----------------------------getsostimdist--------------------------------------
+// takes no argument. requires a seticlamp and recloclist.count > 0.
+// outputs path length between soma and locstim (um)
+func getsostimdist() {
+
+	sscanf(sublocstim, "%lf", &num)
+	forsec secstim distance(0, num)
+	forsec "soma" return distance(0.5)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------getsecx-----------------------------------------
+// takes secname. requires 3d geometry and a seticlamp.
+// outputs avg sec 3d x.
+func getsecx() {local n localobj tempxvec
+	
+	tempxvec = new Vector()
+
+	forsec $s1 {
+		
+		for n = 0, n3d()-1 { 
+		
+			tempxvec.append(x3d(n))
+		}
+	}
+
+	return tempxvec.mean
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------getsecy-----------------------------------------
+// takes secname. requires 3d geometry and a seticlamp.
+// outputs avg sec 3d y.
+func getsecy() {local n localobj tempyvec
+	
+	tempyvec = new Vector()
+
+	forsec $s1 {			
+		
+		for n = 0, n3d()-1 { 
+		
+			tempyvec.append(y3d(n))
+		}
+	}
+
+	return tempyvec.mean
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ---------------------------------getr-------------------------------------------
+// takes (1) secname
+// outputs average ri (or ri + rext) in secname (Mohm/cm)
+func getr() {local r, rext
+
+	r = 0
+	rext = 0
+	
+
+	forsec $s1 {
+
+		for (x, 0) r += ri(x)
+		
+		
+		if (ismembrane("extracellular")) {
+
+			return (r/(getdist($s1, 0, $s1, 1) * (1e-4))) + 1/xg[0]
+
+		} else {
+
+			return r/(getdist($s1, 0, $s1, 1) * (1e-4))
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ------------------------------getrext-------------------------------------------
+// takes (1) secname
+// outputs rext only for secname if extracellular
+func getrext() {
+
+	if (ismembrane("extracellular")) {
+
+		forsec $s1 return 1/xg[0]
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------getlambda----------------------------------------
+// takes (1) secname
+// outputs average lambda along secname (cm)
+func getlambda() {
+
+	return sqrt(1/(getg($s1) * getr($s1) * (1e6)))
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------getRinf----------------------------------------
+// takes (1) secname
+// outputs average input resistance at secname for semi-infinite cable (ohm)
+func getRinf() {
+
+	// see Rall 1977.
+	return (1/getg($s1))/(getlambda($s1))
+}
+// --------------------------------------------------------------------------------
+
+
+
+/// --------------------------------------------------------------------------------
+func getmaxev() {
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) iamp (nA)"
+			print "output: maximum expected voltage at stimulus location given provided iamp and already set stimulus location and duration"
+			stop
+		}
+	}
+
+	// see Rall 1977, eq. 4.23.
+	return $1 * (1e-6) * getRinf(secstim) * erf(sqrt(stim.dur/gettau(secstim)))
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+func getev() {
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) iamp (nA)"
+			print "2) desired section name, i.e. \"soma\""
+			print "3) location of desired section name (0-1)"
+			print "output: expected maximum voltage at desired section and location, given provided iamp and already set stimulus location and duration"
+			stop
+		}
+	}	
+
+	return getmaxev($1) * exp((-getdist(secstim, getsubloc(locstim), $s2, $3)*(1e-4))/getlambda($s2))
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -----------------------------getmaxrecori---------------------------------------
+// takes no argument. requires a seticlamp and recloclist.count > 0.
+// outputs orientation of maxrecdist section
+func getmaxrecori() {local k, dist, num
+
+	maxrecdist = getmaxrecdist()
+	maxsecori = -1
+
+	for k = 0, recseclist.count-1 {
+		
+		sscanf(sublocstim, "%lf", &num)
+		forsec secstim distance(0, num)
+		
+		sscanf(subloclist.o(k).label, "%lf", &num)
+		forsec recseclist.o(k).label dist = distance(num)
+		
+		if (dist == maxrecdist) {
+			forsec recseclist.o(k).label maxsecori = section_orientation()
+		}
+	}
+
+	return maxsecori
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ------------------------------getcellori----------------------------------------
+// takes no argument. requires a 3D soma.
+// outputs orientation of cell: 0 if horizontal (+45,-45), 1 if vertical (+45,+135)
+// vertical if  pi/4 (45) to 3pi/4 (135) and (pos side) 5pi/4 to 7pi/4
+// no need to take negative side into account as norm only
+func getcellori() {local x1, y1, xn, yn, normx, normy, cellangle
+
+	forsec "soma" {
+	
+		x1 = x3d(0)
+		xn = x3d(n3d()-1)
+		y1 = y3d(0)
+		yn = y3d(n3d()-1)
+	}
+
+	normx = abs(x1-xn)
+	normy = abs(y1-yn)
+
+	cellangle = atan(normy/normx)
+
+	if ((cellangle > 0.25*PI && cellangle < 0.75*PI) || (cellangle > 1.25*PI && cellangle < 1.75*PI)) {
+
+		return 1
+	
+	} else {
+
+		return 0
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------getpdef-----------------------------------------
+// takes no arguments
+// gets current pdef in pdefvec
+proc getpdef() {local k
+
+	pdefvec = new Vector()
+
+	for k = 0, pnamelist.count-1 {
+
+		sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_def")
+		execute(tempstr)
+		pdefvec.append(num)
+	}
+
+	tempstr = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ---------------------------------getp-------------------------------------------
+// takes no arguments
+// gets current p (parameters) in pvec
+proc getp() {local k
+
+	pvec = new Vector()
+
+	for k = 0, pnamelist.count-1 {
+
+		sprint(tempstr, "%s%s", "num = ", pnamelist.o(k).label)
+		execute(tempstr)
+		pvec.append(num)
+	}
+
+	tempstr = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------getpnormdef--------------------------------------
+// takes no arguments
+// gets current pnormdef in pnormdefvec
+proc getpnormdef() {local k
+
+	pnormdefvec = new Vector()
+
+	for k = 0, pnamelist.count-1 {
+
+		sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_norm_def")
+		execute(tempstr)
+		pnormdefvec.append(num)
+	}
+
+	tempstr = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ---------------------------------getpnorm---------------------------------------
+proc getpnorm() {local k
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Takes no arguments. Gets/updates current pnorm (_norm, AKA RunFitParm variables) in pnormvec."
+			print "Note: pnormvec does not track current pnorm."
+			stop
+		}
+	}
+
+	pnormvec = new Vector()
+
+	for k = 0, pnamelist.count-1 {
+
+		sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_norm")
+		execute(tempstr)
+		pnormvec.append(num)
+	}
+
+	tempstr = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------getplow-----------------------------------------
+// takes no arguments
+// gets current plow in plowvec
+proc getplow() {local k
+
+	plowvec = new Vector()
+
+	for k = 0, pnamelist.count-1 {
+
+		sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_low")
+		execute(tempstr)
+		plowvec.append(num)
+	}
+
+	tempstr = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ---------------------------------getphi-----------------------------------------
+// takes no arguments
+// gets current phi (defined parameter highs) in phivec
+proc getphi() {local k
+
+	phivec = new Vector()
+
+	for k = 0, pnamelist.count-1 {
+
+		sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_high")
+		execute(tempstr)
+		phivec.append(num)
+	}
+
+	tempstr = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------getdoarg----------------------------------------
+// takes no arguments
+// gets current parameter doarg in doargvec
+proc getdoarg() {local k
+
+	doargvec = new Vector()
+
+	for k = 0, pnamelist.count-1 {
+
+		sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_doarg")
+		execute(tempstr)
+		doargvec.append(num)
+	}
+
+	tempstr = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------getuselog---------------------------------------
+// takes no arguments
+// gets current parameter uselog in uselogvec
+proc getuselog() {local k
+
+	uselogvec = new Vector()
+
+	for k = 0, pnamelist.count-1 {
+
+		sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_uselog")
+		execute(tempstr)
+		uselogvec.append(num)
+	}
+
+	tempstr = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------getpifdel----------------------------------------
+func getpifdel() {local fdel, pifdel
+
+	// fit delay to fit start time post-injection on the injecting pipette's recording
+	// see methods for details. Units = ms.
+	if (mode == 0) {
+
+		fdel = 0.5
+		pifdel = stim.del + stim.dur + fdel			
+	
+	} else if (mode == 1) {
+
+		pifdel = 0
+	}
+
+	// delay to post-injection fit start
+	return pifdel
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ------------------------------getmodeltype--------------------------------------
+// takes mode and an optional quiet argument (use 0).
+// obtains model type based on locations of recordings/interest.
+proc getmodeltype() {local rec
+
+	// count locations
+	SOf = 0
+	AXf = 0
+	DEf = 0
+
+	SOstr = "soma"
+	AXstr = "axon"
+	DEstr = "dend"
+	APstr = "apic"
+
+	// define number and location of recordings
+	for rec = 0, nrec-1 {
+
+		if (strf.substr(recloclist.o(rec).label, SOstr) > -1) {
+		
+			SOf += 1
+		
+		} else if (strf.substr(recloclist.o(rec).label, AXstr) > -1) {
+		
+			AXf += 1
+		
+		} else if ((strf.substr(recloclist.o(rec).label, DEstr) > -1) || (strf.substr(recloclist.o(rec).label, APstr) > -1)) {
+
+			DEf += 1
+		}
+	}
+
+	// labels for combination of fit variables
+	SOAX = 0
+	SODE = 0
+	SO = 0
+	AX = 0
+	DE = 0
+
+	// Establish model type as a function of fit variable locations
+	if (SOf > 0 && AXf > 0 && DEf == 0) {
+
+		SOAX = 1
+		modeltypestr = "SOAX"
+
+		if (!numarg()) print SOf, "somatic and ", AXf, "axonal fit variables found"
+
+	} else if (SOf > 0 && DEf > 0 && AXf == 0) {
+
+		SODE = 1
+		modeltypestr = "SODE"		
+
+		if (!numarg()) print SOf, "somatic and ", DEf, "dendritic fit variables found"
+
+	} else if (SOf > 0 && AXf == 0 && DEf == 0) {
+
+		SO = 1
+		modeltypestr = "SO"		
+
+		if (!numarg()) print SOf, "somatic fit variable(s) found"
+	}
+
+	if ($1 == 0) {
+
+		sprint(modeltypestr, "%s%s%s", "pas", "-", modeltypestr)
+	
+	} else if ($1 == 1) {
+
+		sprint(modeltypestr, "%s%s%s", "act", "-", modeltypestr)
+	}
+
+	if (RmN_doarg) sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "RmN")
+	
+	if (RmA_doarg) sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "RmA")
+
+	if (RmI_doarg) sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "RmI")
+
+	if (RiA_doarg) sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "RiA")
+
+	if (per_int_doarg) sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "perint")
+
+	if (numarg() == 1) print "Model type ", modeltypestr
+
+	if ($1 == 0 && SODE) {
+
+		rpa_doarg = 0
+		Rmy_doarg = 0
+		Cmy_doarg = 0
+	}		
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -----------------------------writemodeltype-------------------------------------
+proc writemodeltype() {
+
+	sprint(modstrtype, "%s%s%s%s", modeltypestr, "-", axontypestr, ".type")
+
+	if (chkdir(root, ".type\n")) {
+
+		if (!chkdir(root, modstrtype)) {
+
+			sprint(tempstr, "%s%s", "mv -f *.type ", modstrtype)
+			sysdir(root, tempstr)
+			tempstr = ""
+		}
+
+	} else {
+
+		writestr(root, modstrtype)
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ------------------------------getmod--------------------------------------------
+// global
+proc getmod() {
+
+	getmodeltype(mode, 0)
+	getaxontype(0)
+
+	sprint(modstr, "%s%s%s", modeltypestr, "-", axontypestr)
+	sprint(moddir, "%s%s%s", out, modstr, "/")
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -----------------------------getiampind-----------------------------------------
+func getiampind() {
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) injection amplitude of interest (nA)"
+			print "output: that address within iampvec, if it exists. Else -1."
+			stop
+		}
+	}
+
+	if (iampvec.contains($1)) {
+
+		return iampvec.indwhere("==", $1)
+	
+	} else {
+
+		return -1
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------getiamp------------------------------------------
+// global or not, depending on whether an individual iampstr is given. An individual
+// iampstr should be given when the context varies.
+proc getiamp() {local amplitude
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) Enter iamp address within iampvec (optional). If unknown, use getiampind(iamp) [iamp in nA]."
+			print "Default: currently set iamp."
+			print "2) an iamp string, into which the iamp will be printed [nA or pA, depending on whichever is appropriate]."
+			print "Default: given or currently set iamp is printed into iampstr."
+			stop
+		}
+	}
+
+	if (!numarg()) {
+
+		amplitude = setnsig(stim.amp, 3)
+
+	} else {
+
+		amplitude = iampvec.x[$1]
+	}
+
+	if (amplitude < 1 && amplitude > -1) {
+
+		amplitude *= 1e3
+
+		if (amplitude >= 0) {
+
+			if (numarg() == 1 && argtype(1) == 0) {
+			
+				sprint(iampstr, "%s%g%s", "+", amplitude, "pA")
+
+			} else if (numarg() == 2 && argtype(1) == 0 && argtype(2) == 2) {
+
+				sprint($s2, "%s%g%s", "+", amplitude, "pA")
+			}
+		
+		} else {
+
+			if (numarg() == 1 && argtype(1) == 0) {
+			
+				sprint(iampstr, "%g%s", amplitude, "pA")
+
+			} else if (numarg() == 2 && argtype(1) == 0 && argtype(2) == 2) {
+
+				sprint($s2, "%g%s", amplitude, "pA")
+			}
+		}
+	
+	} else {
+
+		if (amplitude > 1) {
+
+			if (!numarg()) {
+
+				sprint(iampstr, "%s%g%s", "+", amplitude, "nA")
+
+			} else if (numarg() == 1 && argtype(1) == 0) {
+			
+				sprint(iampstr, "%s%g%s", "+", amplitude, "nA")
+
+			} else if (numarg() == 2 && argtype(1) == 0 && argtype(2) == 2) {
+
+				sprint($s2, "%s%g%s", "+", amplitude, "nA")
+			}
+		
+		} else {
+
+			if (numarg() == 1 && argtype(1) == 0) {
+			
+				sprint(iampstr, "%g%s", amplitude, "nA")
+
+			} else if (numarg() == 2 && argtype(1) == 0 && argtype(2) == 2) {
+
+				sprint($s2, "%g%s", amplitude, "nA")
+			}
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -----------------------------getiampdir-----------------------------------------
+// global or not, depending on how it is used. If context varies, then provide iiamp
+// individual iampdir str.
+proc getiampdir() {local amplitude
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) iamp address within iampvec (optional). Default: currently set iamp from iampvec."
+			print "May also use getiampind(iamp) [enter the iamp in nA]."
+			print "2) An iampdir string, into which the iamp directory will be printed (optional). Default: selected or default iamp is printed into iampdir."
+			stop
+		}
+	}
+	
+	getmod()
+
+	if (!numarg()) {
+
+		getiamp()
+		sprint(iampdir, "%s%s%s", moddir, iampstr, "/")
+	
+	} else if (numarg() == 1 && argtype(1) == 2) {
+
+		if (strcmp($s1, "help")) {
+
+			getiamp()
+			sprint($s1, "%s%s%s", moddir, iampstr, "/")
+		}
+
+	} else if (numarg() == 1 && argtype(1) == 0) {
+
+		getiamp($1)
+		sprint(iampdir, "%s%s%s", moddir, iampstr, "/")
+
+	} else if (numarg() == 2 && argtype(1) == 0 && argtype(2) == 2) {
+
+		getiamp($1)
+		sprint($s2, "%s%s%s", moddir, iampstr, "/")
+	
+	} else if (numarg() == 3 && argtype(1) == 0 && argtype(2) == 2 && argtype(3) == 2) {
+
+		getiamp($1, $s2)
+		sprint($s3, "%s%s%s", moddir, $s2, "/")
+	}
+}
+// --------------------------------------------------------------------------------

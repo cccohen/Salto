@@ -1,0 +1,1574 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+// -------------------------------------Variables-----------------------------------------
+objref parac, svec, vvec
+objref pmat, vmat, emat, tmat
+objref errloglist, allerrloglist, paramquadlist, paramloglist
+
+objref rpmat, pspacemat, genvec, mutmat, permvec
+objref errlogvecout, paramquadvecout, paramlogvecout, allerrlogvecout, rangemat
+
+strdef mutstart, mutp, mutcom, mutend, mutexec
+strdef pampstr, pampdir, rampstr1, rampstr2, rampstr3, rampstr4, rampstr5, rampstr6
+
+// number of genetic divisions into which each paramater's parameter space 
+// will be distributed.
+nd = 1
+// Maximum computational efficiency on supercomputers is ensured when ns (ideally total) 
+// is <= 2^10
+simax = 2^10
+// ---------------------------------------------------------------------------------------
+
+
+
+// --------------------------------------setgen--------------------------------------------
+// set to-be-optimized genes, i.e. parameters.
+proc setgen() {local p, tempnum
+
+	genvec = new Vector()
+
+	if (mode == 0) {		
+
+		for p = 0, getnp()-2 genvec.append(p)
+	
+	} else if (mode == 1) {
+
+		if (SOAX && axbleb_exists) {
+			
+			tempnum = setnp(0)
+			setnp(mode)
+			// Na so, ais, nod, end
+			// Kv1 so, ais, nod, end			
+			// Na_so
+			genvec.append(tempnum+0)
+			// Na_ais
+			genvec.append(tempnum+2)
+			// Na_int
+			genvec.append(tempnum+3)
+			// Na_nod
+			genvec.append(tempnum+4)
+			// Na_end
+			genvec.append(tempnum+5)
+			// Kv1_so
+			genvec.append(tempnum+11)
+			// Kv1_ais
+			genvec.append(tempnum+13)
+			// Kv1_int
+			genvec.append(tempnum+14)
+			// Kv1_nod
+			genvec.append(tempnum+15)
+			// Kv1_end
+			genvec.append(tempnum+16)
+		}
+	}
+	
+	ns = nd^(genvec.size)
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// -------------------------------------orgopt--------------------------------------------
+// function which organizes NU/evolutionary optimizations. Called by parallex.
+
+// $1 = iiamp
+// $2 = mode
+// $3 = para
+// $4 = uopt
+// $o5 = pvec from pmat
+// $6 = tol
+// $7 = maxstepsize
+// $o8 = errlogvec from errloglist
+// $o9 = paramquadvec from paramquadlist
+// $o10 = allerrlogvec from allerrloglist
+// $o11 = paramlogvec from paramloglist
+// $12 = sim
+// $13 = scount
+// $14 = istart
+// extra argument $15 = hoc_ac_ = id, which genopt sends on its own to optimizem
+
+func orgopt() {	
+		
+	if (!$4) {
+	
+		$o8.resize(0)
+		$o9.resize(0)
+		$o10.resize(0)
+		$o11.resize(0)
+	}
+
+	reseticlamp($1, 0)
+	if ($2 == 1) adj_weight()
+	if ($2 == 1 && $4) add_weight()
+	adj_injbound($2)
+
+	nefunvec = new Vector()
+	allerrlogvec = new Vector()
+	paramlogvec = new Vector()
+
+	fitoff = 1
+	nefun = 0
+	nquad = 0
+	time = 0
+
+	// for simplicity, everything received by genopt is sent to optimizem, in order
+	optimizem($1, $2, $3, $4, $o5, $6, $7, $o8, $o9, $o10, $o11, $12, $13, $14, hoc_ac_)
+
+	// the number of calls to genopt gets counted
+	return 1
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// -----------------------------------optimizem-------------------------------------------
+// The NU algorithm, massively parallel version (non-GUI-based).
+// See getfit for the serial version.
+
+// Description: a "just-enough" or sufficiency approach to optimization, ideal 
+// for unevenly- distributed parameters, such as myelin over a primary axon, 
+// or weakly-constrained parameters in general, due to intrinsic noise or possibly
+// other factors.
+
+// $1 = iiamp
+// $2 = mode
+// $3 = para
+// $4 = uopt
+// $o5 = pvec from pmat, to be optimized
+// $6 = tol
+// $7 = maxstepsize
+// $o8 = errlogvec from errloglist, to be updated with resultant errors
+// $o9 = paramquadvec from paramquadlist, to be updated with resultant parameters
+// $o10 = allerrlogvec from allerrloglist, to be updated
+// $o11 = paramlogvec from paramloglist, to be updated
+// $12 = sim
+// $13 = scount
+// $14 = istart
+// $15 = hoc_ac_ = id, which genopt sends on its own to optimizem
+
+proc optimizem() {local p, f, k, tsim, tempnum localobj svec, vvec, boundvec, tempxvec
+
+	// variable tracking whether optimizem is running
+	fitoff = 0
+	// assign fit parameters
+	for p = 0, $o5.size-1 RunFitParm[p].val = $o5.x[p]
+	// minimum nquad to be performed
+	MulfitPraxWrap[1].nstep = 1	
+	// set attributes of praxis
+	attr_praxis($6, $7, 0)
+	// start optimization.
+	MulRunFitter[0].prun()
+
+	// exit strategy
+	while (!fitoff) {
+		
+		// optimization variables of interest
+		// net number of quads performed (to be adjusted below)
+		nquad += 1		
+		// net number of error functions evaluated (to be adjusted below)
+		nefunvec.append(MulRunFitter[0].opt.nefun)
+		// total time elapsed in seconds.
+		time += MulRunFitter[0].opt.time
+		// simulation time tracker (total time, not net)
+		strdef tsimstr, iampsimstr
+		tsim = setnsig(time/3600, 3)
+		sprint(tsimstr, "%g", tsim)
+		getiamp($1, iampsimstr)		
+		// error and parameter logging
+		// error vec from errloglist is resized to accomodate the new resultant errors (+nf+1)
+		$o8.resize($o8.size+nf+1)
+		for f = 0, nf-1 {
+			$o8.x[$o8.size-(nf+1)+f] = RegionFitness[f].ydat_.meansqerr(FitnessGenerator[0].yveclist.o(f), RegionFitness[f].dw_)
+			$o8.x[$o8.size-1] += $o8.x[$o8.size-(nf+1)+f]
+		}
+		// paramquadvec from paramquadlist is resized to accomodate the new resultant parameters (+getnp())
+		$o9.resize($o9.size+getnp())
+		for p = 0, getnp()-1 $o9.x[$o9.size-getnp()+p] = RunFitParm[p].val
+		
+		// ------------------------------------------------------------------------------------------------------------------------------------
+		// If error is marginal, i.e. in the noise, then exit.
+		if ($o8.x[$o8.size-1] < $6) {
+			
+			// increase the size of errlog by 2 to cover the addition of tol and the exit code in the 2nd to and last positions, respectively.
+			$o8.resize($o8.size+2)
+			$o8.x[$o8.size-2] = $6
+			// increase the size of paramquad by 1 to cover the addition of the exit code in the last position.
+			$o9.resize($o9.size+1)
+			
+			// step back to relevant nefun if appropriate (the penultimate).
+			if (nefunvec.size >= 2) {
+
+				nquad -= 1
+			
+				nefun = nefunvec.sum-nefunvec.x[nefunvec.size-1]
+				print "Net total: nquad=", nquad, "nefun=", nefun, "time=", time, "e=", $o8.x[$o8.size-2]
+
+				// exit codes
+				// the last position is occupied by the exit code.
+				// the exit code answers the question: how many steps back from the last position in a given solution vector do you need to take in order to retrieve
+				// the first position of the relevant solution set?
+				// exit codes are added to errlog and paramquad.
+				$o8.x[$o8.size-1] = -2*(nf+1)-1
+				// step back to penultimate, to avoid over-optimization with error found in the noise.
+				$o9.x[$o9.size-1] = -2*getnp()
+			
+			} else {
+			
+				nefun = nefunvec.sum
+				print "Net total: nquad=", nquad, "nefun=", nefun, "time=", time, "e=", $o8.x[$o8.size-1]
+
+				$o8.x[$o8.size-1] = -(nf+1)-1
+				$o9.x[$o9.size-1] = -getnp()
+			}
+
+			print "Simulation ", $12, "of ", $13, "for ", iampsimstr, " completed in ", tsimstr, " hour(s)"
+			
+			// allerrlog is resized to fit the environment vector allerrlogvec
+			tempnum = $o10.size
+			$o10.resize(tempnum + allerrlogvec.size)
+			// allerrlog does not get an exit code
+			// the log of errors following each run is now stored			
+			for k = tempnum, $o10.size-1 $o10.x[k] = allerrlogvec.x[k-tempnum]
+			// paramlog is similarly resized to fit the environment vector paramlogvec
+			tempnum = $o11.size
+			$o11.resize(tempnum + paramlogvec.size)
+			// paramlog similarly does not get an exit code
+			// the log of parameters following each run is now stored
+			for k = tempnum, $o11.size-1 $o11.x[k] = paramlogvec.x[k-tempnum]
+			
+			// store optimized parameters
+			svec = new Vector()
+			for p = 0, getnp()-1 svec.append($o9.x[$o9.size-1+$o9.x[$o9.size-1]+p])
+			// print to sdout optimized parameters
+			for p = 0, getnp()-1 {
+				sprint(tempstr, "%g", svec.x[p]*plowvec.x[p])
+				print pnamelist.o(p).label, "= ", tempstr
+			}
+			// store sim time
+			svec.append(time)
+			// store optimized v
+			vvec = new Vector()
+			for f = 0, nf-1 {
+
+				// if boundaries are different from default, output full trace v
+				if (RegionFitness[f].boundary.x[0] > RegionFitness[f].xdat.x[0] || RegionFitness[f].boundary.x[RegionFitness[f].boundary.size-1] < RegionFitness[f].xdat.x[RegionFitness[f].xdat.size-1] || RegionFitness[f].boundary.size > 2) {
+
+					// save previous boundaries
+					boundvec = new Vector()
+					boundvec.append(RegionFitness[f].boundary)
+
+					// set new (default) boundaries
+					RegionFitness[f].boundary = new Vector()
+					RegionFitness[f].boundary.append(RegionFitness[f].xdat.x[0], RegionFitness[f].xdat.x[RegionFitness[f].xdat.size-1])
+					
+					// make these new boundaries effective (must use different xdat vector)
+					tempxvec = new Vector()
+					tempxvec.append(RegionFitness[f].xdat)
+					RegionFitness[f].set_modelx(tempxvec)
+
+					// ensure yveclist vector of the fit generator is of the correct size, i.e. the default
+					// for a correct call to meansqerr by RegionFitness[f].ydat_, comparing FitnessGenerator[0].yveclist.o(f) to RegionFitness[f].dw_
+					// for that comparison to work, yveclist.o(f).size must equal that of RegionFitness[f].dw_ and RegionFitness[f].ydat_, both of which
+					// are now default, i.e. RegionFitness[f].xdat.size.
+					FitnessGenerator[0].yveclist.o(f).resize(RegionFitness[f].xdat.size)					
+
+					// get default optimized voltage trace
+					FitnessGenerator[0].efun()
+					vvec.append(FitnessGenerator[0].yveclist.o(f))
+
+					// restore original bounds
+					RegionFitness[f].boundary = new Vector()
+					RegionFitness[f].boundary.append(boundvec)
+					RegionFitness[f].set_modelx(tempxvec)
+
+					// restore correct FitnessGenerator yveclist vector fit size
+					FitnessGenerator[0].yveclist.o(f).resize(RegionFitness[f].xdat_.size)					
+				
+				} else {
+					
+					vvec.append(FitnessGenerator[0].yveclist.o(f))
+				}	
+			}
+			
+			print "Reason for exit: error is in the noise"
+			// exit optimization
+			fitoff = 1	
+			// output simulation data
+			// for simplicity, data_out will receive everything optimizem received, plus svec and vvec ($o16 and $o17, respectively, for data_out)
+			data_out($1, $2, $3, $4, $o5, $6, $7, $o8, $o9, $o10, $o11, $12, $13, $14, $15, svec, vvec)		
+		}
+
+		// ------------------------------------------------------------------------------------------------------------------------------------
+		// If enough quads have been performed, check if can exit.
+		if (!fitoff && $o8.size > 2*(nf+1)) {
+			
+			// If error improvement is increasingly marginal and in the noise, then exit. The penultimate quad becomes the relevant, non-over-optimized one. Otherwise continue.
+			if ($o8.x[$o8.size-(nf+1)-1] - abs($o8.x[$o8.size-1]) < abs($o8.x[$o8.size-2*(nf+1)-1] - $o8.x[$o8.size-(nf+1)-1]) && $o8.x[$o8.size-(nf+1)-1] - abs($o8.x[$o8.size-1]) < $6) {
+				
+				// step back to relevant quad number (the penultimate).
+				nquad -= 1
+				// step back to relevant nefun (the penultimate).
+				nefun = nefunvec.sum-nefunvec.x[nefunvec.size-1]
+				// step back to relevant error, the penultimate
+				print "Net total: nquad=", nquad, "nefun=", nefun, "time=", time, "e=", $o8.x[$o8.size-(nf+1)-1]
+				print "Simulation ", $12, "of ", $13, "for ", iampsimstr, " completed in ", tsimstr, " hours"
+				
+				// increase the size of errlog by 2 to cover the addition of tol and the exit code in the 2nd to and last positions, respectively.
+				$o8.resize($o8.size+2)
+				$o8.x[$o8.size-2] = $6
+				// increase the size of paramquad by 1 to cover the addition of the exit code in the last position.
+				$o9.resize($o9.size+1)
+
+				// exit codes
+				// the last position is occupied by the exit code.
+				// the exit code answers the question: how many steps back from the last position in a given solution vector do you need to take in order to retrieve
+				// the first position of the relevant solution set?
+				// exit codes are added to errlog, the quad error log, and paramquad, the parameter equivalent.
+				$o8.x[$o8.size-1] = -2*(nf+1)-1
+				// paramquadvec is resized to fit its own exit code, -2*getnp(), to step back to the penultimate quad's start.
+				$o9.x[$o9.size-1] = -2*getnp()
+				
+				// allerrlog is resized to fit the environment vector allerrlogvec
+				tempnum = $o10.size
+				$o10.resize(tempnum + allerrlogvec.size)
+				// allerrlog does not get an exit code
+				// the log of errors following each run is now stored
+				for k = tempnum, $o10.size-1 $o10.x[k] = allerrlogvec.x[k-tempnum]					
+				// paramlog is similarly resized to fit the environment vector paramlogvec
+				tempnum = $o11.size
+				$o11.resize(tempnum + paramlogvec.size)
+				// paramlog similarly does not get an exit code
+				// the log of parameters following each run is now stored
+				for k = tempnum, $o11.size-1 $o11.x[k] = paramlogvec.x[k-tempnum]
+				
+				// store optimized parameters
+				svec = new Vector()
+				for p = 0, getnp()-1 svec.append($o9.x[$o9.size-1+$o9.x[$o9.size-1]+p])
+				// print to sdout optimized parameters
+				for p = 0, getnp()-1 {
+					sprint(tempstr, "%g", svec.x[p]*plowvec.x[p])
+					print pnamelist.o(p).label, "= ", tempstr
+				}
+				// store sim time
+				svec.append(time)
+				// store optimized v
+				vvec = new Vector()
+				for f = 0, nf-1 {
+
+					// if boundaries are different from default, output full trace v
+					if (RegionFitness[f].boundary.x[0] > RegionFitness[f].xdat.x[0] || RegionFitness[f].boundary.x[RegionFitness[f].boundary.size-1] < RegionFitness[f].xdat.x[RegionFitness[f].xdat.size-1] || RegionFitness[f].boundary.size > 2) {
+
+						// save previous boundaries
+						boundvec = new Vector()
+						boundvec.append(RegionFitness[f].boundary)
+
+						// set new (default) boundaries
+						RegionFitness[f].boundary = new Vector()
+						RegionFitness[f].boundary.append(RegionFitness[f].xdat.x[0], RegionFitness[f].xdat.x[RegionFitness[f].xdat.size-1])
+						
+						// make these new boundaries effective (must use different xdat vector)
+						tempxvec = new Vector()
+						tempxvec.append(RegionFitness[f].xdat)
+						RegionFitness[f].set_modelx(tempxvec)
+
+						// ensure yveclist vector of the fit generator is of the correct size, i.e. the default
+						// for a correct call to meansqerr by RegionFitness[f].ydat_, comparing FitnessGenerator[0].yveclist.o(f) to RegionFitness[f].dw_
+						// for that comparison to work, yveclist.o(f).size must equal that of RegionFitness[f].dw_ and RegionFitness[f].ydat_, both of which
+						// are now default, i.e. RegionFitness[f].xdat.size.
+						FitnessGenerator[0].yveclist.o(f).resize(RegionFitness[f].xdat.size)							
+
+						// get default optimized voltage trace
+						FitnessGenerator[0].efun()
+						vvec.append(FitnessGenerator[0].yveclist.o(f))
+
+						// restore original bounds
+						RegionFitness[f].boundary = new Vector()
+						RegionFitness[f].boundary.append(boundvec)
+						RegionFitness[f].set_modelx(tempxvec)
+
+						// restore correct FitnessGenerator yveclist vector fit size
+						FitnessGenerator[0].yveclist.o(f).resize(RegionFitness[f].xdat_.size)
+					
+					} else {
+
+						vvec.append(FitnessGenerator[0].yveclist.o(f))
+					}
+				}
+				
+				print "Reason for exit: error improvement is marginal and in the noise"
+				// exit optimization
+				fitoff = 1
+				// output simulation data
+				// for simplicity, data_out will receive everything optimizem received, plus svec and vvec ($o16 and $o17, respectively, for data_out)
+				data_out($1, $2, $3, $4, $o5, $6, $7, $o8, $o9, $o10, $o11, $12, $13, $14, $15, svec, vvec)
+			}
+		}
+
+		// ------------------------------------------------------------------------------------------------------------------------------------
+		// if mode is not passive and no prior exit call, stop, save current quad and exit, due to current time considerations at the NSG.
+		if (!fitoff && $2) {
+
+			nefun = nefunvec.sum
+			print "Net total: nquad=", nquad, "nefun=", nefun, "time=", time, "e=", $o8.x[$o8.size-1]
+			print "Simulation ", $12, "of ", $13, "for ", iampsimstr, " completed in ", tsimstr, " hours"
+
+			// increase the size of errlog by 2 to cover the addition of tol and the exit code in the 2nd to and last positions, respectively.
+			$o8.resize($o8.size+2)
+			$o8.x[$o8.size-2] = $6
+			// increase the size of paramquad by 1 to cover the addition of the exit code in the last position.
+			$o9.resize($o9.size+1)
+
+			// exit codes
+			// the last position is occupied by the exit code.
+			// the exit code answers the question: how many steps back from the last position in a given solution vector do you need to take in order to retrieve
+			// the first position of the relevant solution set?
+			// exit codes are added to errlog, the quad error log, and paramquad, the parameter equivalent.
+			$o8.x[$o8.size-1] = -(nf+1)-1
+			// paramquadvec is resized to fit its own exit code, -getnp(), to step back to the ultimate quad's start.
+			$o9.x[$o9.size-1] = -getnp()
+
+			// allerrlog is resized to fit the environment vector allerrlogvec
+			tempnum = $o10.size
+			$o10.resize(tempnum + allerrlogvec.size)
+			// allerrlog does not get an exit code
+			// the log of errors following each run is now stored
+			for k = tempnum, $o10.size-1 $o10.x[k] = allerrlogvec.x[k-tempnum]
+			// paramlog is similarly resized to fit the environment vector paramlogvec
+			tempnum = $o11.size
+			$o11.resize(tempnum + paramlogvec.size)
+			// paramlog similarly does not get an exit code
+			// the log of parameters following each run is now stored
+			for k = tempnum, $o11.size-1 $o11.x[k] = paramlogvec.x[k-tempnum]
+			
+			// store optimized parameters
+			svec = new Vector()
+			for p = 0, getnp()-1 svec.append($o9.x[$o9.size-1+$o9.x[$o9.size-1]+p])
+			// print to sdout optimized parameters
+			for p = 0, getnp()-1 {
+				sprint(tempstr, "%g", svec.x[p]*plowvec.x[p])
+				print pnamelist.o(p).label, "= ", tempstr
+			}			
+			// store sim time
+			svec.append(time)
+			// store optimized v
+			vvec = new Vector()
+			for f = 0, nf-1 {
+
+				// if boundaries are different from default, output full trace v
+				if (RegionFitness[f].boundary.x[0] > RegionFitness[f].xdat.x[0] || RegionFitness[f].boundary.x[RegionFitness[f].boundary.size-1] < RegionFitness[f].xdat.x[RegionFitness[f].xdat.size-1] || RegionFitness[f].boundary.size > 2) {
+
+					// save previous boundaries
+					boundvec = new Vector()
+					boundvec.append(RegionFitness[f].boundary)
+
+					// set new (default) boundaries
+					RegionFitness[f].boundary = new Vector()
+					RegionFitness[f].boundary.append(RegionFitness[f].xdat.x[0], RegionFitness[f].xdat.x[RegionFitness[f].xdat.size-1])
+					
+					// make these new boundaries effective (must use different xdat vector)
+					tempxvec = new Vector()
+					tempxvec.append(RegionFitness[f].xdat)
+					RegionFitness[f].set_modelx(tempxvec)
+
+					// ensure yveclist vector of the fit generator is of the correct size, i.e. the default
+					// for a correct call to meansqerr by RegionFitness[f].ydat_, comparing FitnessGenerator[0].yveclist.o(f) to RegionFitness[f].dw_
+					// for that comparison to work, yveclist.o(f).size must equal that of RegionFitness[f].dw_ and RegionFitness[f].ydat_, both of which
+					// are now default, i.e. RegionFitness[f].xdat.size.
+					FitnessGenerator[0].yveclist.o(f).resize(RegionFitness[f].xdat.size)
+
+					// get default optimized voltage trace
+					FitnessGenerator[0].efun()
+					vvec.append(FitnessGenerator[0].yveclist.o(f))
+
+					// restore original bounds
+					RegionFitness[f].boundary = new Vector()
+					RegionFitness[f].boundary.append(boundvec)
+					RegionFitness[f].set_modelx(tempxvec)
+
+					// restore correct FitnessGenerator yveclist vector fit size
+					FitnessGenerator[0].yveclist.o(f).resize(RegionFitness[f].xdat_.size)
+				
+				} else {
+
+					vvec.append(FitnessGenerator[0].yveclist.o(f))
+				}
+			}
+
+			print "Reason for exit: unfinished non-passive (single quad performed)"
+			// exit optimization
+			fitoff = 1			
+			// output simulation data
+			// for simplicity, data_out will receive everything optimizem received, plus svec and vvec ($o16 and $o17, respectively, for data_out)
+			data_out($1, $2, $3, $4, $o5, $6, $7, $o8, $o9, $o10, $o11, $12, $13, $14, $15, svec, vvec)
+		}
+		
+		// ------------------------------------------------------------------------------------------------------------------------------------
+		if (!fitoff) {
+
+			nefun = nefunvec.sum
+			print "Net total: nquad=", nquad, "nefun=", nefun, "time=", time, "e=", $o8.x[$o8.size-1]
+			optimizem($1, $2, $3, $4, $o5, $6, $7, $o8, $o9, $o10, $o11, $12, $13, $14, $15)
+		}
+	}
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ------------------------------------data_out-------------------------------------------
+// post output data from each simulation, serial or parallel.
+// Serial is packaged by serpack, parallel by parac.pack(). Parallel jobs are then unpacked
+// by a variety of unpacking functions in parallex, which are then saved by saveopt.
+
+// $1 = iiamp
+// $2 = mode
+// $3 = para
+// $4 = uopt
+// $o5 = pvec from pmat
+// $6 = tol
+// $7 = maxstepsize
+// $o8 = errlogvec from errloglist
+// $o9 = paramquadvec from paramquadlist
+// $o10 = allerrlogvec from allerrloglist
+// $o11 = paramlogvec from paramloglist
+// $12 = sim
+// $13 = scount
+// $14 = istart
+// $15 = hoc_ac_ = id, which genopt sends on its own to optimizem
+// $o16 = svec
+// $o17 = vvec
+
+proc data_out() {
+
+	if (!$3) {
+
+		serpack($12, $14, $13, $o16, $o17, $o8)
+
+	} else {
+
+		parac.post($15, parac.pack($12, $14, $o16, $o17, $o8, $o9, $o10, $o11))
+	}
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ------------------------------------serpack--------------------------------------------
+// $1 = index, the sim number
+// $2 = relative iiamp
+// $3 = scount
+// $o4 = svec
+// $o5 = vvec
+// $o6 = errlogvec
+// not present: paramlogvec and allerrlogvec, because optimizem updates these.
+
+proc serpack() {local p, f, k, kstart, kend, indi, istart, scount, setind
+
+	indi = $1
+	istart = $2
+	scount = $3
+	// assign output parameters to pmat
+	// pmat is organized as follows:
+	// each iamp from rows 0-scount at (relative iiamp position)*(rows 0-scount)
+	// ind determines which row
+	setind = istart*(scount+1)+indi
+	// copy p from svec into pmat
+	for p = 0, getnp()-1 pmat.x[setind][p] = $o4.x[p]
+	// next from svec: tsim
+	tmat.x[setind][0] = $o4.x[getnp()]
+	// extract v from vvec into vmat, which already contains
+	// tdatvec at col 0.
+	for f = 0, nf-1 {
+
+		kstart = f*nrows
+		for k = 0, nrows-1 vmat.x[k][istart*nf*(scount+1)+nf*indi+f] = $o5.x[kstart+k]
+	}
+	// emat: individual errors in cols 0,nf-1
+	for f = 0, nf-1 emat.x[setind][f] = $o6.x[$o6.size-1+$o6.x[$o6.size-1]+f]
+	// add total error at col nf
+	emat.x[setind][nf] = $o6.x[$o6.size-1+$o6.x[$o6.size-1]+nf]
+	// add tol at col nf+1
+	emat.x[setind][nf+1] = $o6.x[$o6.size-1-1]
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// -----------------------------------spacegen--------------------------------------------
+// delimit the domains in parameter space, from which a randomly chosen base, 
+// or initial condition, will be mutated and expressed. Excludes the very weakly-constrained 
+// Cpip, which will still be optimized, but as a "silent" gene.
+// takes genvec
+proc spacegen() {local m, p
+
+	getphi()
+	getplow()
+	
+	pspacemat = new Matrix(nd+1, genvec.size)
+
+	for m = 0, pspacemat.nrow-1 {
+			
+		for p = 0, pspacemat.ncol-1 pspacemat.x[m][p] = 1 + m*(((phivec.x[genvec.x[p]]/plowvec.x[genvec.x[p]])-1)/nd)
+	}
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ---------------------------------getmutation-------------------------------------------
+// procedure for getting  mutation possibilities, which are really just
+// permutations of all possible pspace row indices (row = 0, row = nrow-2).
+// i.e. if nd = 2, there are 2 possible pspace rows indices, representing
+// the 2 states of the variable: (row = 0, row = 1) and (row = 1, row = 2).
+proc getmutation() {local k localobj tempvec
+
+	tempvec = new Vector(genvec.size, 0)
+	mutmat = new Matrix(ns, tempvec.size)
+
+	if (nd == 1) {
+		
+		for k = 0, mutmat.nrow-1 mutmat.setrow(k, tempvec)
+	
+	} else {
+
+		for k = 0, tempvec.size-1 {
+
+			sprint(mutstart, "%s%s%d%s", mutstart, "for p", k, " = 0, nd-1 {\n")
+			sprint(mutp, "%s%s%d%s", mutp, "p", k, ",")
+			sprint(mutend, "%s%s", mutend, "}\n")
+		}
+
+		strf.left(mutp, strf.len(mutp)-1)
+		sprint(mutcom, "%s%s%s", "permvec = new Vector()\npermvec.append(", mutp, ")\nmutmat.setrow(mutsim, permvec)\nmutsim+=1\n")
+		sprint(mutexec, "%s%s%s", mutstart, mutcom, mutend)
+
+		mutsim = 0
+		execute(mutexec)
+	}
+
+	mutstart = ""
+	mutp = ""
+	mutcom = ""
+	mutend = ""
+	mutexec = ""
+	mutsim = 0
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// --------------------------------------mutate-------------------------------------------
+// procedure for mutating initial conditions.
+// takes seed argument for rng and mode.
+proc mutate() {local p, sim localobj prand
+
+	prand = new Random($1)
+	rpmat = new Matrix(ns, genvec.size)
+
+	sim = 0
+	while (sim < rpmat.nrow) {
+
+		for p = 0, pspacemat.ncol-1 {
+
+			// if mutmat.x[row sim][col p] => start (and therefore end) rows from which to pick
+			// prand range.
+			prand.uniform(pspacemat.x[mutmat.x[sim][p]][p], pspacemat.x[mutmat.x[sim][p]+1][p])
+			rpmat.x[sim][p] = prand.repick()
+		}
+		
+		sim += 1
+	}
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// -----------------------------------adjust_rp-------------------------------------------
+// add the default simulation (def parameters) at row 0 and last column Cpip.
+// also ensure compatibility with computational efficiency of at most 1024 simulations 
+// per current injection
+proc adjust_rp() {local m, p, sim, reduction_factor localobj tempmat, tempvec
+
+	tempmat = new Matrix(rpmat.nrow+1, getnp())
+	getpnormdef()
+	for m = 0, tempmat.nrow-1 tempmat.setrow(m, pnormdefvec)
+	
+	if (solnvec.size) for m = 0, tempmat.nrow-1 for p = 0, solnvec.size-1 tempmat.x[m][p] = solnvec.x[p]
+	for m = 1, tempmat.nrow-1 for p = 0, genvec.size-1 tempmat.x[m][genvec.x[p]] = rpmat.x[m-1][p]
+
+	rpmat = new Matrix(tempmat.nrow, tempmat.ncol)
+	for m = 0, rpmat.nrow-1 rpmat.setrow(m, tempmat.getrow(m))
+
+	if (ns > simax) {
+
+		tempvec = new Vector()
+		tempvec.append(ns/simax)
+		tempvec.floor()
+		reduction_factor = tempvec.x[0]-1
+			
+		rpmat = new Matrix(simax+1, tempmat.ncol)
+		rpmat.setrow(0, tempmat.getrow(0))
+
+		for sim = 1, rpmat.nrow-1 {
+
+			rpmat.setrow(sim, tempmat.getrow(sim*(reduction_factor+1)))
+		}
+	}
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ------------------------------------setpmat--------------------------------------------
+// $1 = istart
+// $o2 = mat for setting pmat with
+// creates to be optimized parameter set list.
+
+proc setpmat() {local m
+	
+	for m = 0, $o2.nrow-1 {
+
+		pmat.setrow($1*$o2.nrow+m, $o2.getrow(m))
+	}
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ----------------------------------croutdir---------------------------------------------
+// create output directory if it does not already exist
+proc croutdir() {
+
+	if (!chkdir(root, "outdir")) {
+
+		chkin()
+		chdir(root)
+		system("mkdir outdir")
+		chkout()
+		
+		print "Output directory \"outdir\" created"
+	
+	} else {
+
+		print "Output directory \"outdir\" already exists..."
+	}
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// -----------------------------------croutmoddir-----------------------------------------
+proc croutmoddir() {
+
+	getmod()
+	
+	if (!chkdir(out, modstr)) {
+
+		sprint(tempdir, "%s%s", "mkdir ", modstr)
+		chkin()
+		chdir(out)
+		system(tempdir)
+		chkout()
+
+		print "Model directory \"", modstr, "\" created"
+	
+	} else {
+
+		print "Model directory \"", modstr, "\" already exists..."
+	}
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ----------------------------------croutiampdir-----------------------------------------
+// create output iamp directories, if they don't already exist
+proc croutiampdir() {	
+	
+	getiampdir($1, $s2, $s3)
+
+	if (!chkdir(moddir, $s2)) {
+
+		sprint(tempdir, "%s%s%s", "mkdir ", "./", $s2)		
+		chkin()
+		chdir(moddir)
+		system(tempdir)
+		chkout()
+		
+		print "Amplitude directory ", $s2, " created"
+	
+	} else {
+
+		print "Amplitude directory ", $s2, " already exists..."	
+	}
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// -----------------------------------croutmat--------------------------------------------
+// final, optimized parameters and their associated measures (tmat)
+// $1 = total_scount
+
+proc croutmat() {
+
+	// optimized parameters
+	pmat = new Matrix($1, getnp())	
+	// voltage. Only optimal voltage is stored.
+	vmat = new Matrix(nrows, nf*$1)
+	// error
+	emat = new Matrix($1, nf+2)
+	// sim time
+	tmat = new Matrix($1, 1)
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ----------------------------------crenvlist--------------------------------------------
+// environment vector variables in a list corresponding to the total number of simulations
+// $1 = total_scount
+
+proc crenvlist() {
+	
+	// errloglist: per quad
+	crveclist($1, errloglist)
+	// paramquadlist
+	crveclist($1, paramquadlist)
+	// allerrloglist
+	crveclist($1, allerrloglist)	
+	// paramloglist
+	crveclist($1, paramloglist)
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ---------------------------------loaduopt----------------------------------------------
+// load current unfinished solution for currently loaded model, i.e. mode-inj level, from 
+// corresponding folder in outdir (if it exists), if that optimization has not finished, 
+// i.e. does not have the unfinished exit code, then loadopt returns 0. If it loads, then 
+// it returns 1.
+
+// load the memory vectors, replacing any environment versions as needed (see getfit, ie.
+// nefunvec (no), errlogvec (yes), allerrlogvec (yes), paramquadvec (yes) and paramlogvec 
+// (yes).
+
+// The basic idea would be to load the necessary memory vectors. Some of these possess 
+// an exit code identifying unfinished optimizations, such as -(nf+1) [errlog], or 
+// -getnp() [paramquad] (vs completed optimization exit codes of -2*(nf+1) [errlog] 
+// and -2*getnp() [paramquad], respectively). The unfinished optimization exit codes
+ // will be used to ensure only an unfinished optimization's parameters are loaded.
+
+// $1 = k, iampvec pos
+// $2 = istart
+
+proc loaduopt() {local uoxchk, k, nrows, rowchk, ncols, q, p, exite, exitp localobj tempmat
+
+	// check if outdir exists
+	if (chkdir(root, "outdir")) {
+
+		// check if moddir exists
+		getmod()
+
+		if (chkdir(out, modstr)) {
+
+			// check if given iamp dir exists
+			getiampdir($1, pampstr, pampdir)
+			
+			if (chkdir(moddir, pampstr)) {
+
+				// check the relevant matrices for the appropriate exit codes
+				// first, check if the matrices exist
+				sprint(testdir, "%s%s", moddir, pampstr)
+
+				if (chkdir(testdir, "errlogmat.dat") && chkdir(testdir, "allerrlogmat.dat") && chkdir(testdir, "paramquadmat.dat") && chkdir(testdir, "paramlogmat.dat")) {
+
+					uoxchk = 0
+
+					// check errlogmat for uopt exit code -(nf+1)-1
+					exite = -(nf+1)-1
+					rowchk = 0
+					nrows = getmat(testdir, "errlogmat.dat", tempmat)
+					for k = 0, nrows-1 if (tempmat.getrow(k).contains(exite)) rowchk += 1
+					if (nrows == rowchk) uoxchk += 1
+
+					// check paramquadmat for uopt exit code -getnp()
+					rowchk = 0
+					exitp = -getnp()
+					nrows = getmat(testdir, "paramquadmat.dat", tempmat)
+					for k = 0, nrows-1 if (tempmat.getrow(k).contains(exitp)) rowchk += 1
+					if (nrows == rowchk) uoxchk += 1
+
+					if (uoxchk == 2) {					
+
+						// load errlogmat
+						nrows = getmat(testdir, "errlogmat.dat", tempmat)
+						// place errlogmat rows as vectors into errloglist, without tol or the exit code
+						for k = 0, nrows-1 {
+
+							errloglist.o($2*nrows+k).resize(tempmat.getrow(k).indwhere("==", exite)-1)
+							for q = 0, errloglist.o($2*nrows+k).size-1 errloglist.o($2*nrows+k).x[q] = tempmat.x[k][q]
+						}
+
+						// load allerrlogmat
+						nrows = getmat(testdir, "allerrlogmat.dat", tempmat)
+						// place allerrlogmat rows as vectors into allerrloglist
+						for k = 0, nrows-1 {
+
+							// allerrlogmat rows should not have any exit codes or values than nf and nf sum errors
+							if (tempmat.getrow(k).contains(0)) {
+
+								allerrloglist.o($2*nrows+k).resize(tempmat.getrow(k).indwhere("==", 0))
+
+							} else {
+
+								allerrloglist.o($2*nrows+k).resize(tempmat.getrow(k).size)
+							}
+							
+							for q = 0, allerrloglist.o($2*nrows+k).size-1 allerrloglist.o($2*nrows+k).x[q] = tempmat.x[k][q]
+						}
+
+						// load paramquadmat
+						nrows = getmat(testdir, "paramquadmat.dat", tempmat)
+						
+						// place paramquadmat rows as vectors into paramquadlist
+						for k = 0, nrows-1 {
+
+							paramquadlist.o($2*nrows+k).resize(tempmat.getrow(k).indwhere("==", exitp))
+							for q = 0, paramquadlist.o($2*nrows+k).size-1 paramquadlist.o($2*nrows+k).x[q] = tempmat.x[k][q]
+						}
+
+						// load paramlogmat
+						nrows = getmat(testdir, "paramlogmat.dat", tempmat)
+						
+						// place paramlogmat rows as vectors into paramloglist
+						for k = 0, nrows-1 {
+
+							// paramlogmat rows should have no exit codes or values other than biophysical parameters,
+							// but some may be longer than others, hence the zero check.
+							if (tempmat.getrow(k).contains(0)) {
+
+								paramloglist.o($2*nrows+k).resize(tempmat.getrow(k).indwhere("==", 0))
+							
+							} else {
+
+								paramloglist.o($2*nrows+k).resize(tempmat.getrow(k).size)	
+							}
+							
+							for q = 0, paramloglist.o($2*nrows+k).size-1 paramloglist.o($2*nrows+k).x[q] = tempmat.x[k][q]
+						}
+
+						// load most recent uopt params from pmat
+						getmat(testdir, "pmat.dat", tempmat)
+						// pmat rows have no exit codes or values other than biophysical parameters,
+						// and all rows are the same length, as pmat contains the last optimized parameter set only.
+						// hence no zero check.
+						setpmat($2, tempmat)
+
+						uopt = 1
+					}
+				}
+			}
+		}
+	}
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ------------------------------------saveopt--------------------------------------------
+// save the results from serial and parallel simulations. Only called by parallex.
+// in series:
+// $1 = scount
+// $o2 = rangemat
+// in parallel the following are added:
+// $o3 = current pmat, fed in from parallex (or serpack), containing the relevant 
+// current optimized quad parameters.
+// $o4 = emat, the final opt e
+// $o5 = tmat
+// $o6 = vmat
+// $o7 = errloglist -> errlogmat
+// $o8 = paramquadlist -> paramquadmat
+// $o9 = paramloglist -> paramlogmat
+// $o10 = allerrloglist -> allerrlogmat
+
+proc saveopt() {local f, k, r, q, sim, scount, istart, qstart localobj tempmat, tempvec
+
+	scount = $1
+	istart = -1
+
+	// header constructions
+	getpheader()
+	// construct emat header
+	// each col fitvar name, then col total, then tol
+	sprint(eheader, "%s", fitvarlist.o(0).label)
+	for f = 1, nf-1 sprint(eheader, "%s\t%s", eheader, fitvarlist.o(f).label)
+	sprint(eheader, "%s\t%s\t%s\n", eheader, "total", "tol")
+
+	// construct tmat header
+	// col0 = time, col1 = avg, col2 = sem
+	sprint(theader, "%s\t%s\t%s\n", "time", "avg", "sem")
+
+	// construct vmat header
+	// col0 = time, col1,...,col(nf*(scount+1)) fitvarname(f)
+	sprint(vheader, "%s", "time")
+	for sim = 0, scount {
+		for f = 0, nf-1 {
+
+			sprint(vheader, "%s\t%s", vheader, fitvarlist.o(f).label)
+		}
+	}
+	sprint(vheader, "%s\n", vheader)
+
+	// parallel
+	if (numarg() > 2) {
+
+		for r = 0, $o2.ncol-1 {
+
+			for k = $o2.x[0][r], $o2.x[1][r] {
+
+				istart += 1
+
+				getiampdir(k, pampstr, pampdir)
+
+				// break up aggregate matrices into iamp-based components, where each iamp
+				// will receive its own pmat (in norm).
+				// save as pmat
+				tempmat = new Matrix(scount+1, getnp())
+				for sim = 0, scount tempmat.setrow(sim, $o3.getrow(istart*(scount+1)+sim))
+				// 3d() information is overly-precise; set it to float epsilon
+				savemat(pampdir, "pmat.dat", tempmat, maxformvec, pheader)
+
+				// emat: organized iamp::0-scount
+				// save as emat
+				tempmat = new Matrix(scount+1, nf+2)
+				for sim = 0, scount tempmat.setrow(sim, $o4.getrow(istart*(scount+1)+sim))
+				savemat(pampdir, "emat.dat", tempmat, vformvec, eheader)
+
+				// tmat: organized iamp::0-scount
+				// save as tmat
+				// additonal time statistics also produced here and saved:
+				// col0 = time per simulation (hours)
+				// col1 = average
+				// col2 = sem = sigma/sqrt(n)
+				tempmat = new Matrix(scount+1, 3)
+				qstart = istart*(scount+1)
+				for q = 0, tempmat.nrow-1 tempmat.x[q][0] = $o5.x[qstart+q][0]
+				tempmat.x[0][1] = tempmat.getcol(0).mean
+				tempmat.x[0][2] = tempmat.getcol(0).stderr
+				savemat(pampdir, "tmat.dat", tempmat, tformvec, theader)
+
+				// vmat: organized f:nf::0-scount::iamp (in cols, first col tdat)
+				// save as vmat with first col tdat, cols 1-nf*(scount+1) as before: f:nf.
+				tempmat = new Matrix(nrows, nf*(scount+1)+1)
+				tempmat.setcol(0, tdatvec)
+				for sim = 0, scount {
+					for f = 0, nf-1 {
+
+						tempmat.setcol(nf*sim+f+1, $o6.getcol(istart*nf*(scount+1)+nf*sim+f))
+					}
+				}
+				savemat(pampdir, "vmat.dat", tempmat, vformvec, vheader)
+
+				// errlogmat: organized as iamp::0-scount (but of differing sizes)
+				// save as errlogmat
+				// first get max size of vectors iamp::0-scount
+				tempvec = new Vector()
+				for sim = 0, scount tempvec.append($o7.o(istart*(scount+1)+sim).size)
+				
+				if (tempvec.max) {
+
+					tempmat = new Matrix(scount+1, tempvec.max)
+					for sim = 0, scount {
+
+						for q =  0, $o7.o(istart*(scount+1)+sim).size-1 {
+
+							tempmat.x[sim][q] = $o7.o(istart*(scount+1)+sim).x[q]
+						}
+					}
+
+					savemat(pampdir, "errlogmat.dat", tempmat, vformvec)
+				}
+
+				// allerrloglist: organized as for each iamp::0-scount
+				// save as allerrlogmat
+				// first get max size of vectors iamp::0-scount
+				tempvec = new Vector()
+				for sim = 0, scount tempvec.append($o10.o(istart*(scount+1)+sim).size)
+				
+				if (tempvec.max) {
+
+					tempmat = new Matrix(scount+1, tempvec.max)
+					for sim = 0, scount {
+						for q = 0, $o10.o(istart*(scount+1)+sim).size-1 {
+
+							tempmat.x[sim][q] = $o10.o(istart*(scount+1)+sim).x[q]
+						}
+					}
+					
+					savemat(pampdir, "allerrlogmat.dat", tempmat, vformvec)
+				}
+
+				// paramquadlist: organized as iamp::0-scount
+				// save as paramquadmat
+				// first get max size of vectors iamp::0-scount
+				tempvec = new Vector()
+				for sim = 0, scount tempvec.append($o8.o(istart*(scount+1)+sim).size)
+				
+				if (tempvec.max) {
+
+					tempmat = new Matrix(scount+1, tempvec.max)
+					for sim = 0, scount {
+						for q =  0, $o8.o(istart*(scount+1)+sim).size-1 {
+
+							tempmat.x[sim][q] = $o8.o(istart*(scount+1)+sim).x[q]
+						}
+					}
+					
+					savemat(pampdir, "paramquadmat.dat", tempmat, maxformvec)
+				}
+
+				// paramloglist: organized as for each iamp::0-scount
+				// save as paramlogmat
+				// first get max size of vectors iamp::0-scount
+				tempvec = new Vector()
+				for sim = 0, scount tempvec.append($o9.o(istart*(scount+1)+sim).size)
+				
+				if (tempvec.max) {
+
+					tempmat = new Matrix(scount+1, tempvec.max)
+					for sim = 0, scount {
+						for q = 0, $o9.o(istart*(scount+1)+sim).size-1 {
+
+							tempmat.x[sim][q] = $o9.o(istart*(scount+1)+sim).x[q]
+						}
+					}
+					
+					savemat(pampdir, "paramlogmat.dat", tempmat, maxformvec)
+				}
+			}
+		}
+
+	// serial
+	} else {
+
+		for r = 0, $o2.ncol-1 {
+	
+			for k = $o2.x[0][r], $o2.x[1][r] {
+
+				istart += 1
+
+				getiampdir(k, iampstr, iampdir)
+				
+				// break up aggregate matrices into iamp-based components
+				// pmat: organized per iamp::0-scount
+				// save as pmat.dat
+				tempmat = new Matrix($1+1, getnp())
+				for sim = 0, $1 tempmat.setrow(sim, pmat.getrow(istart*(scount+1)+sim))
+				// 3d() information is overly-precise; set it to float epsilon
+				savemat(iampdir, "pmat.dat", tempmat, maxformvec, pheader)
+
+				// emat: organized per iamp::0-scount
+				// emat contains whatever the last set of error results were + tol.
+				// serpack already created emat, therefore emat can be saved directly.
+				// save as emat.dat
+				tempmat = new Matrix(scount+1, nf+2)
+				for sim = 0, scount tempmat.setrow(sim, emat.getrow(istart*(scount+1)+sim))
+				savemat(iampdir, "emat.dat", tempmat, vformvec, eheader)
+
+				// tmat: organized per iamp::0-scount
+				// save as tmat
+				// additonal time statistics also produced here and saved:
+				// col0 = time per simulation (hours)
+				// col1 = average
+				// col2 = sem = sigma/sqrt(n)
+				tempmat = new Matrix(scount+1, 3)
+				qstart = istart*(scount+1)
+				for q = 0, tempmat.nrow-1 tempmat.x[q][0] = tmat.x[qstart+q][0]
+				tempmat.x[0][1] = tempmat.getcol(0).mean
+				tempmat.x[0][2] = tempmat.getcol(0).stderr
+				savemat(iampdir, "tmat.dat", tempmat, tformvec, theader)
+
+				// vmat: organized per f:nf::0-scount::iamp (in cols, first col tdat)
+				// save as vmat.dat with first col tdat, cols 1-nf*(scount+1) as before: f:nf.
+				tempmat = new Matrix(nrows, nf*(scount+1)+1)
+				tempmat.setcol(0, tdatvec)
+				for sim = 0, $1 {
+					for f = 0, nf-1 {
+						
+						tempmat.setcol(nf*sim+f+1, vmat.getcol(istart*nf*(scount+1)+nf*sim+f))
+					}
+				}
+				savemat(iampdir, "vmat.dat", tempmat, vformvec, vheader)
+
+				// errlogmat: organized as per iamp::0-scount (but of differing sizes)
+				// save as errlogmat.dat
+				// first get max size of vectors per iamp::0-scount
+				tempvec = new Vector()
+				for sim = 0, scount tempvec.append(errloglist.o(istart*(scount+1)+sim).size)
+				
+				if (tempvec.max) {
+				
+					tempmat = new Matrix(scount+1, tempvec.max)
+					for sim = 0, scount {
+
+						for q =  0, errloglist.o(istart*(scount+1)+sim).size-1 {
+
+							tempmat.x[sim][q] = errloglist.o(istart*(scount+1)+sim).x[q]
+						}
+					}
+					
+					savemat(iampdir, "errlogmat.dat", tempmat, vformvec)
+				}
+
+				// allerrloglist: organized as per iamp::0-scount
+				// save as allerrlogmat
+				// first get max size of vectors iamp::0-scount
+				tempvec = new Vector()
+				for sim = 0, scount tempvec.append(allerrloglist.o(istart*(scount+1)+sim).size)
+				
+				if (tempvec.max) {
+
+					tempmat = new Matrix(scount+1, tempvec.max)
+					for sim = 0, scount {
+						for q = 0, allerrloglist.o(istart*(scount+1)+sim).size-1 {
+
+							tempmat.x[sim][q] = allerrloglist.o(istart*(scount+1)+sim).x[q]
+						}
+					}
+
+					savemat(iampdir, "allerrlogmat.dat", tempmat, vformvec)
+				}
+
+				// paramquadlist: organized as iamp::0-scount
+				// save as paramquadmat
+				// first get max size of vectors iamp::0-scount
+				tempvec = new Vector()
+				for sim = 0, scount tempvec.append(paramquadlist.o(istart*(scount+1)+sim).size)
+				
+				if (tempvec.max) {
+
+					tempmat = new Matrix(scount+1, tempvec.max)
+					for sim = 0, scount {
+						for q =  0, paramquadlist.o(istart*(scount+1)+sim).size-1 {
+
+							tempmat.x[sim][q] = paramquadlist.o(istart*(scount+1)+sim).x[q]
+						}
+					}
+					
+					savemat(iampdir, "paramquadmat.dat", tempmat, maxformvec)					
+				}
+
+				// paramloglist: organized as per iamp::0-scount
+				// save as paramlogmat
+				// first get max size of vectors iamp::0-scount
+				tempvec = new Vector()
+				for sim = 0, scount tempvec.append(paramloglist.o(istart*(scount+1)+sim).size)
+				
+				if (tempvec.max) {
+
+					tempmat = new Matrix(scount+1, tempvec.max)
+					for sim = 0, scount {
+						for q = 0, paramloglist.o(istart*(scount+1)+sim).size-1 {
+
+							tempmat.x[sim][q] = paramloglist.o(istart*(scount+1)+sim).x[q]
+						}
+					}
+
+					savemat(iampdir, "paramlogmat.dat", tempmat, maxformvec)
+				}
+			}
+		}
+	}
+
+	print "Simulation results saved"
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ------------------------------------parallex-------------------------------------------
+// execute genopt over one or many processors.
+// takes arguments setting iiamp start and iiamp end.
+// no argument for default (all iiamp) or range (below)
+// range mode: will solve based on range of indices provided
+// from iampvec. Number of indiced must be even, i.e. (0,0), 
+// (0,1), or (0,1,3,5), or (0, 3, 6, 6, 9, 12), etc.
+
+// Definitions:
+// ns = nd^(getnp()-1)
+// scount = ns if ns < simax, else scount = simax.
+
+proc parallex() {local k, sim, p, q, f, istart, upstart, qstart, qend, scount, scounter, total_scount, jobi, indi, setind, r, seed, tolopt, maxstepsizeopt localobj vvec, svec, errlogvecout, paramquadvecout, paramlogvecout, allerrlogvecout, rangemat
+
+	print "NU/evolutionary algorithm"
+	getmod()
+	print getnp(), "parameters found for NU optimization (model type: ", modstr, ")"
+	print genvec.size, "parameters selected for genetic evolution"
+
+	if (ns > simax) {
+
+		scount = simax
+
+	} else {
+
+		scount = ns
+	}
+
+	if (!numarg()) {
+
+		rangemat = new Matrix(2, 1)
+
+		rangemat.x[0][0] = 0
+		rangemat.x[1][0] = iampvec.size-1
+
+		total_scount = (scount+1) * (iampvec.size)
+	
+	} else if (numarg()/2 == 1) {
+
+		rangemat = new Matrix(2, 1)
+
+		rangemat.x[0][0] = $1
+		rangemat.x[1][0] = $2
+
+		total_scount = (scount+1) * ($2-$1+1)
+
+		getiamp($1, rampstr1)
+		getiamp($2, rampstr2)
+
+		print "Simulations will be performed from ", rampstr1, " to ", rampstr2
+	
+	} else if (numarg()/2 == 2) {
+
+		rangemat = new Matrix(2, 2)
+
+		rangemat.x[0][0] = $1 
+		rangemat.x[1][0] = $2
+
+		rangemat.x[0][1] = $3
+		rangemat.x[1][1] = $4
+
+		total_scount = (scount+1) * (($2-$1+1) + ($4-$3+1))
+
+		getiamp($1, rampstr1)
+		getiamp($2, rampstr2)
+		getiamp($3, rampstr3)
+		getiamp($4, rampstr4)
+
+		print "Simulations will be performed from ", rampstr1, " to ", rampstr2, " and ", rampstr3, " to ", rampstr4
+	
+	} else if (numarg()/2 == 3) {
+
+		rangemat = new Matrix(2, 3)
+
+		rangemat.x[0][0] = $1
+		rangemat.x[1][0] = $2
+
+		rangemat.x[0][1] = $3
+		rangemat.x[1][1] = $4
+		
+		rangemat.x[0][2] = $5
+		rangemat.x[1][2] = $6
+
+		total_scount = (scount+1) * (($2-$1+1) + ($4-$3+1) + ($6-$5+1))
+
+		getiamp($1, rampstr1)
+		getiamp($2, rampstr2)
+		getiamp($3, rampstr3)
+		getiamp($4, rampstr4)
+		getiamp($5, rampstr5)
+		getiamp($6, rampstr6)
+
+		print "Simulations will be performed from ", rampstr1, " to ", rampstr2, " and ", rampstr3, " to ", rampstr4, " and ", rampstr5, " to ", rampstr6
+	}
+
+	scounter = 0
+	istart = -1
+
+	print "Total simulations = ", total_scount
+
+	croutdir()
+	croutmoddir()
+	croutmat(total_scount)
+	crenvlist(total_scount)
+	seed = 0
+
+	if (parac.nhost == 1) {
+
+		para = 0
+		print "Simulations will run in series..."
+
+		for r = 0, rangemat.ncol-1 {
+
+			for k = rangemat.x[0][r], rangemat.x[1][r] {
+
+				istart += 1
+
+				croutiampdir(k, iampstr, iampdir)
+				loaduopt(k, istart)
+				
+				if (!uopt) {
+					
+					print "No previous optimization found for model ", modstr, "/", iampstr
+					setgen()
+					spacegen()
+					getmutation()
+					mutate(seed)
+					// mutate(k)
+					adjust_rp()					
+					getiampdir(k, iampstr, iampdir)
+					getpheader()
+					savemat(iampdir, "rpmat.dat", rpmat, maxformvec, pheader)
+					setpmat(istart, rpmat)
+				
+				} else {
+
+					// setpmat is called by loaduopt
+					getiamp(k, iampstr)
+					getmod()
+					print "Previous optimization loaded for model ", modstr, "/", iampstr
+				}
+				
+				tolopt = settol(k)
+				maxstepsizeopt = setmaxstepsize(tolopt)
+
+				for sim = 0, scount {
+
+					print "Running simulation ", sim, "of ", scount
+					scounter += orgopt(k, mode, para, uopt, pmat.getrow(istart*(scount+1)+sim), tolopt, maxstepsizeopt, errloglist.o(istart*(scount+1)+sim), paramquadlist.o(istart*(scount+1)+sim), allerrloglist.o(istart*(scount+1)+sim), paramloglist.o(istart*(scount+1)+sim), sim, scount, istart)
+				}
+			}
+		}
+
+		// save ser results
+		if (scounter == total_scount) {
+
+			print "\ntotal: ", scounter, "of ", total_scount, "simulations returned"
+
+			saveopt(scount, rangemat)
+			
+		} else {
+
+			print total_scount-scounter, "of ", total_scount, "simulations did not return"
+		}
+	
+	} else {		
+
+		para = 1
+
+		print "Simulations will run in parallel..."
+
+		for r = 0, rangemat.ncol-1 {
+
+			for k = rangemat.x[0][r], rangemat.x[1][r] {
+
+				istart += 1
+
+				croutiampdir(k, pampstr, pampdir)
+				loaduopt(k, istart)
+				
+				if (!uopt) {
+
+					print "No previous optimization found for model ", modstr, "/", pampstr
+					setgen()
+					spacegen()
+					getmutation()					
+					mutate(seed)
+					// mutate(k)
+					adjust_rp()
+					getiampdir(k, pampstr, pampdir)
+					getpheader()
+					savemat(pampdir, "rpmat.dat", rpmat, maxformvec, pheader)
+					setpmat(istart, rpmat)
+				
+				} else {
+
+					// setpmat is called by loaduopt
+					getiamp(k, pampstr)
+					getmod()
+					print "Previous optimization loaded for model ", modstr, "/", pampstr
+				}
+
+				tolopt = settol(k)
+				maxstepsizeopt = setmaxstepsize(tolopt)				
+
+				for sim = 0, scount {
+
+					print "Running simulation ", sim, "of ", scount
+					parac.submit("orgopt", k, mode, para, uopt, pmat.getrow(istart*(scount+1)+sim), tolopt, maxstepsizeopt, errloglist.o(istart*(scount+1)+sim), paramquadlist.o(istart*(scount+1)+sim), allerrloglist.o(istart*(scount+1)+sim), paramloglist.o(istart*(scount+1)+sim), sim, scount, istart)
+				}
+		   	}
+		}
+
+		while ((jobi = parac.working) != 0) {
+
+			// what emerges from each call to func genopt, i.e. +1 for each call.
+			scounter += parac.retval
+			// this is the hoc_ac_ sent by genopt
+			parac.take(jobi)
+			// ind AKA sim
+			indi = parac.upkscalar()
+			// upstart AKA istart
+			upstart = parac.upkscalar()
+			
+			svec = parac.upkvec()
+			vvec = parac.upkvec()
+			errlogvecout = parac.upkvec()
+			paramquadvecout = parac.upkvec()
+			paramlogvecout = parac.upkvec()
+			allerrlogvecout = parac.upkvec()
+			
+			setind = upstart*(scount+1)+indi
+			for p = 0, getnp()-1 pmat.x[setind][p] = svec.x[p]
+			// next from svec: tsim
+			tmat.x[setind][0] = svec.x[getnp()]
+			// extract v from vvec into vmat
+			for f = 0, nf-1 {
+
+				qstart = f*nrows
+				for q = 0, nrows-1 vmat.x[q][upstart*nf*(scount+1)+nf*indi+f] = vvec.x[qstart+q]
+			}
+			// errloglist
+			errloglist.o(setind).resize(errlogvecout.size)
+			for q = 0, errlogvecout.size-1 errloglist.o(setind).x[q] = errlogvecout.x[q]
+			// emat: individual errors in cols 0,nf-1
+			for f = 0, nf-1 emat.x[setind][f] = errlogvecout.x[errlogvecout.size+errlogvecout.x[errlogvecout.size-1]-nf+f]
+			// add total error at col nf
+			emat.x[setind][nf] = errlogvecout.x[errlogvecout.size+errlogvecout.x[errlogvecout.size-1]]
+			// add tol at col nf+1
+			emat.x[setind][nf+1] = errlogvecout.x[errlogvecout.size-1-1]
+			// paramquadlist
+			paramquadlist.o(setind).resize(paramquadvecout.size)
+			for q = 0, paramquadvecout.size-1 paramquadlist.o(setind).x[q] = paramquadvecout.x[q]
+			// paramloglist
+			paramloglist.o(setind).resize(paramlogvecout.size)
+			for q = 0, paramlogvecout.size-1 paramloglist.o(setind).x[q] = paramlogvecout.x[q]
+			// allerrloglist
+			allerrloglist.o(setind).resize(allerrlogvecout.size)
+			for q = 0, allerrlogvecout.size-1 allerrloglist.o(setind).x[q] = allerrlogvecout.x[q]				
+		}
+		
+		// this is where parallel jobs end
+		parac.done()
+
+		// check returned simulations and save
+		if (scounter == total_scount) {
+
+			print "\ntotal: ", scounter, "of ", total_scount, "simulations returned"
+			
+			saveopt(scount, rangemat, pmat, emat, tmat, vmat, errloglist, paramquadlist, paramloglist, allerrloglist)
+				
+		} else {
+
+			print total_scount-scounter, "simulations of ", total_scount, "did not return. Interim results not saved."
+		}
+	}
+}
+// ---------------------------------------------------------------------------------------

@@ -1,0 +1,224 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+// -------------------------------Variables----------------------------------------
+objref stim, stimbox, stimvec
+
+strdef tokstim, locstim, sublocstim, strstimc, secstim
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------seticlamp----------------------------------------
+// takes either four arguments: (1) locstim, i.e. loc[arraynum](subloc); (2) iamp; 
+// (3) idel; (4) idur, or one argument: stimvec (see getstimvec). 
+// creates iclamp at locstim with given parameters.
+proc seticlamp() {local k, iamp, idel, idur, initbit
+
+	if (!numarg()) {
+
+		// last setup
+		// only one file at a time...
+		k = 0		
+		while (k < 4) {
+
+			if (!getfile.isopen) {
+
+				if (k == 0) {
+
+					getstring(ses, locstimfilestr, locstim)
+					k += 1
+				
+				} else if (k == 1) {
+					
+					initbit = getvarp(ses, initbitfilestr)
+
+					if (initbit) { 
+						
+						iamp = getvarp(ses, iampfilestr)
+
+					} else {
+
+						iamp = iampvec.x[0]
+					}
+					
+					k += 1
+				
+				} else if (k == 2) {
+
+					idel = getvarp(ses, idelfilestr)
+					k += 1
+				
+				} else if (k == 3) {
+
+					idur = getvarp(ses, idurfilestr)					
+					k += 1
+				}
+			}
+		}
+	
+	} else if (numarg() == 4) {
+
+		// must provide all four arguments
+		sprint(locstim, $s1)
+		iamp = $2
+		idel = $3
+		idur = $4
+	}
+
+	sprint(strstimc, "%s%s%s%g%s", "access ", locstim, " stim = new IClamp(", getsubloc(locstim), ")")
+	execute(strstimc)
+	
+	{stim.amp = iamp stim.del = idel stim.dur = idur}
+
+	if (numarg() != 1) printclamp()
+
+	strf.head(locstim, "[(]", secstim)
+	
+	// deprecated, only used for window replacement system
+	// writebit(ses, "resetbit.dat", 0)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------printclamp---------------------------------------
+proc printclamp() {
+
+	print "IClamp set at ", locstim
+	print "Amplitude: ", stim.amp*1000, "pA"
+	print "Duration: ", stim.dur, "ms"
+	print "Delay: ", stim.del, "ms"
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ------------------------------changeiclamp--------------------------------------
+// For GUI-based changes
+proc changeiclamp() {local k, newiamp, newidur, newidel
+
+	mode = getvar(ses, "mode.dat")
+	setfilestr(mode, has_data)
+
+	getstring(ses, locstimfilestr, locstim)
+	sprint(stimstr, locstim)
+	k = string_dialog("Please enter stimulus section. Example: axon[0](0.5)", stimstr)
+	if (k) sprint(stimstr, stimstr)
+
+	sprint(iampstr, "%g", newiamp = getvarp(ses, iampfilestr))
+	k = string_dialog("Please enter stimulus amplitude (nA)", iampstr)
+	if (k) {
+
+		sprint(iampstr, iampstr)
+		sscanf(iampstr, "%lf", &newiamp)
+	}
+
+	sprint(durstr, "%g", newidur = getvarp(ses, idurfilestr))
+	k = string_dialog("Please enter stimulus duration (ms)", durstr)
+	if (k) {
+
+		sprint(durstr, durstr)
+		sscanf(durstr, "%lf", &newidur)
+	}
+
+	sprint(delstr, "%g", newidel = getvarp(ses, idelfilestr))
+	k = string_dialog("Please enter delay to stimulus start (ms)", delstr)
+	if (k) {
+
+		sprint(delstr, delstr)
+		sscanf(delstr, "%lf", &newidel)
+	}
+
+	seticlamp(stimstr, newiamp, newidel, newidur)
+	saveiclamp(mode)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ------------------------------saveiclamp----------------------------------------
+proc saveiclamp() {local tempnum
+	
+	setfilestr($1, has_data)
+
+	writestring(ses, locstimfilestr, locstim)
+	writenum(ses, iampfilestr, stim.amp)
+	writenum(ses, idelfilestr, stim.del)
+	writenum(ses, idurfilestr, stim.dur)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------setstimpanel-------------------------------------
+proc setstimpanel() {local k
+
+	stimbox = new VBox(3)
+	stimbox.intercept(1)
+	xpanel("")
+	
+	xlabel("starting IClamp:")
+	
+	sprint(tempstr, "%s%s", "Location: ", locstim)
+	xlabel(tempstr)
+	if (stim.amp >= 0) {
+		sprint(tempstr, "%s%g%s", "+", setnsig(stim.amp, 5)*1000, " pA")
+	} else {
+		sprint(tempstr, "%g%s", setnsig(stim.amp, 5)*1000, " pA")
+	}
+	sprint(tempstr, "%s%s", "Amplitude: ", tempstr)
+	xlabel(tempstr)
+	sprint(tempstr, "%s%g%s", "Duration: ", setnsig(stim.dur, 5), " ms")
+	xlabel(tempstr)
+	sprint(tempstr, "%s%g%s", "Delay to injection: ", setnsig(stim.del, 5), " ms")
+	xlabel(tempstr)
+	xpanel()
+	
+	xpanel("")
+
+	if (has_data) {
+	
+		xlabel("Change injection amplitude to:")
+		for k = 0, iampvec.size-1 {
+			
+			if (iampvec.x[k] > float_epsilon) {
+				sprint(tempstr, "%s%g%s", "+", setnsig(iampvec.x[k], 3)*1000, " pA")
+			} else if (iampvec.x[k] < -float_epsilon) {
+				sprint(tempstr, "%g%s", setnsig(iampvec.x[k], 3)*1000, " pA")
+			} else {
+				sprint(tempstr, "%g%s", setnsig(iampvec.x[k], 3)*1000, " pA")
+			}
+
+			sprint(stimstr, "%s%g%s%g%s%g%s", "reseticlamp(", k, ", ", mode, ", ", 1, ")")
+
+			xradiobutton(tempstr, stimstr)
+		}
+	}
+
+	xpanel()
+	xpanel("")
+	xbutton("change stim location, amp, dur or del", "changeiclamp()")
+	xpanel()
+	
+	xpanel("")
+	xpanel()
+
+	stimbox.intercept(0)
+
+	// x, y, w, h
+	// x = 54
+	// y = 512
+	// w = 269.76
+	// h = variable: 
+	// minimum h: 206.4
+	// afterwards, for each current injection amplitude, add 15.36
+	
+	stimbox.map("Set IClamp", 54, 512, 269.76, 206.4+iampvec.size*15.36)
+}
+// --------------------------------------------------------------------------------

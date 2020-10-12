@@ -1,0 +1,126 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+// -------------------------------Variables----------------------------------------
+// scale factor for myelin, accounting for the difference in surface area between
+// the myelin sheath and axon core. Based on g and ratio entered at setup.
+smy = 1/(gr = getvarp(ses, "gr.dat"))
+// to spread nav and kv7 channels into the paranodes (Hamada et al. 2015)
+// nomy_nav_kv7 = 0
+demy = 1
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------setmy-------------------------------------------
+// set myelin parameters, including the myelin scale (smy)
+// to account for myelin dimensions in simulations involving myelin.
+proc setmy() {local k, m
+
+	forsec internodal {
+
+		if (DC || DCPARA) {
+
+			xg[0] *= smy
+			xc[0] *= smy
+		}
+		
+		if (SC) {
+
+			g_pas = 1/((Rm_norm * Rm_low) + ((Rmy_norm * Rmy_low)/smy))
+			cm = (Cm_norm * Cm_low * Cmy_norm * Cmy_low * smy)/((Cm_norm * Cm_low) + (Cmy_norm * Cmy_low * smy))
+
+			if (per_int_doarg) {
+			
+				for k = 0, intlist.count-1 {
+
+					for m = 0, intlist.o(k).size-1 {
+
+						axon[intlist.o(k).x[m]] {
+
+							sprint(tempstr, "%s%d%s%d%s", "~g_pas = 1/((Rm_norm * Rm_low) + ((Rmy_", k+1, "_norm * Rmy_", k+1, "_low)/smy))")
+							execute(tempstr)
+
+							sprint(tempstr, "%s%d%s%d%s%d%s%d%s", "~cm = (Cm_norm * Cm_low * Cmy_", k+1, "_norm * Cmy_", k+1, "_low * smy)/((Cm_norm * Cm_low) + (Cmy_", k+1, "_norm * Cmy_", k+1, "_low * smy))")
+							execute(tempstr)
+						}
+					}
+				}
+			}
+		}
+
+		if (RmA_doarg) {
+
+			if (SC) {
+
+				g_pas = 1/((RmA_norm * RmA_low) + ((Rmy_norm * Rmy_low)/smy))
+			}
+		}
+
+		if (RmI_doarg) {
+
+			if (SC) {
+
+				g_pas = 1/((RmI_norm * RmI_low) + ((Rmy_norm * Rmy_low)/smy))
+			}
+		}		
+
+		if (exp_doarg) {
+
+			if (SC) {
+
+				g_pas = 1/((Rm_norm * Rm_low) + (Rm_norm * 20 * Rmy_low)/smy)
+				cm = (Cm_norm * Cm_low * (Cm_norm/20) * Cm_low * smy)/((Cm_norm * Cm_low) + ((Cm_norm/20) * Cm_low * smy))
+			}
+		}
+
+		if (mode == 1) {
+
+			if (DCPARA) {
+
+				ifsec interparanodal {
+					
+					gbar_nax *= smy
+					gbar_nap *= smy
+					gbar_kv1ax *= smy
+					gbar_kv7 *= smy
+					gbar_kca *= smy
+					gbar_ca *= smy
+					gbar_it2 *= smy
+					gbar_ih *= smy
+				}
+			
+			} else {
+
+				if (!NOMY) {
+
+					gbar_nax *= smy
+					gbar_nap *= smy
+					gbar_kv1ax *= smy
+					gbar_kv7 *= smy
+					gbar_kca *= smy
+					gbar_ca *= smy
+					gbar_it2 *= smy
+					gbar_ih *= smy
+				
+				} else {
+
+					if (demy) {
+
+						ifsec paranodal {
+
+							gbar_nax = Na_nod_norm * Na_nod_low
+							gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
+						}
+					}
+				}
+			}
+		}
+	}
+}
+// --------------------------------------------------------------------------------

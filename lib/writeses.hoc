@@ -1,0 +1,1013 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+// -------------------------------Variables----------------------------------------
+objref recsecxvec, recsecyvec
+// --------------------------------------------------------------------------------
+
+
+
+// -----------------------------writecontrol---------------------------------------
+proc writecontrol() {local chk
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "writes default runcontrol panel in given mode to runcontrol-*mode*.ses"
+			stop
+		}
+	}	
+
+	chk = chkcwd(cwd)
+	if (chk) cwd = getcwd()
+	
+	chdir(ses)
+	writefile.wopen(runcontrolfilestr)
+
+	writefile.printf("%s", "objectvar save_window_, rvp_\nobjectvar scene_vector_[5]\nobjectvar ocbox_, ocbox_list_, scene_, scene_list_\n{ocbox_list_ = new List()  scene_list_ = new List()}")
+	writefile.printf("%s", "\n{\nxpanel(\"RunControl\", 0)\nv_init = ")
+	v_init = getRMP()
+	writefile.printf(vform, v_init)
+	writefile.printf("%s", "\nxvalue(\"Init\", \"v_init\", 1,\"stdinit()\", 1, 1)\nxbutton(\"Init & Run\",\"run()\")")
+	writefile.printf("%s", "\nxbutton(\"Stop\",\"stoprun=1\")\nrunStopAt = ")
+	writefile.printf(tform, gettstop())
+	writefile.printf("%s", "\nxvalue(\"Continue til\",\"runStopAt\", 1,\"{continuerun(runStopAt) stoprun=1}\", 1, 1 )\nrunStopIn = 0.1")
+	writefile.printf("%s", "\nxvalue(\"Continue for\",\"runStopIn\", 1,\"{continuerun(t + runStopIn) stoprun=1}\", 1, 1 )\nxbutton(\"Single Step\",\"steprun()\")\nt = 0")
+	writefile.printf("%s",	"\nxvalue(\"t\",\"t\", 2 )\ntstop = ")
+	writefile.printf(tform, gettstop())
+	writefile.printf("%s", "\nxvalue(\"Tstop\",\"tstop\", 1,\"tstop_changed()\", 0, 1 )\ndt = ")
+	setdt()
+	dt = setnsig(dt, nsigt)
+	writefile.printf(tform, dt)
+	writefile.printf("%s", "\nxvalue(\"dt\",\"dt\", 1,\"setdt()\", 0, 1 )\nsteps_per_ms = ")
+	writefile.printf(vform, getsteps())
+	writefile.printf("%s", "\nxvalue(\"Points plotted/ms\",\"steps_per_ms\", 1,\"setdt()\", 0, 1 )\nscreen_update_invl = 0.05\nxvalue(\"Scrn update invl\",\"screen_update_invl\", 1,\"\", 0, 1 )\nrealtime = 0")
+	writefile.printf("%s", "\nxvalue(\"Real Time\",\"realtime\", 0,\"\", 0, 1 )\nxpanel(54,110)\n}")
+	writefile.close()
+
+	chdir(cwd)
+	if (chk) cwd = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc writevtplot() {local chk, ev, rec, iamp
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) optional: iamp associated with desired vtplot. Default: current iamp"
+			print "output: default vtplot according to given mode and iiamp saved in vtplot-*mode*.ses"
+			stop
+		}
+	}	
+
+	chk = chkcwd(cwd)
+	if (chk) cwd = getcwd()
+
+	if (numarg() == 1 && argtype(1) == 0) {
+	
+		iamp = $1
+	
+	} else {
+		
+		iamp = getvarp(ses, iampfilestr)
+	}
+
+	chdir(ses)
+	writefile.wopen(vtplotfilestr)
+	writefile.printf("%s", "objectvar save_window_, rvp_\nobjectvar scene_vector_[5]\nobjectvar ocbox_, ocbox_list_, scene_, scene_list_\n{ocbox_list_ = new List()  scene_list_ = new List()}")	
+	tstop = gettstop()
+	crvvarlist(recloclist, vvarlist)
+
+	for rec = 0, nrec-1 {
+	
+		writefile.printf("%s", "\n{")
+		writefile.printf("%s", "\nsave_window_ = new Graph(0)\nsave_window_.size(-2, ")
+		writefile.printf(tform, tstop)
+		writefile.printf("%s", ", ")
+		
+		if (mode == 0) {
+			
+			ev = getev(iamp, recseclist.o(rec).label, getsubloc(recloclist.o(rec).label))
+
+			if (ev < 0) {
+
+				ev -= 1
+				writefile.printf(vform, ev)
+				writefile.printf("%s", ", -0.15")
+
+			} else {
+
+				ev += 1
+				writefile.printf("%s", "-0.15, ")
+				writefile.printf(vform, ev)
+			}
+
+		} else if (mode == 1) {
+			
+			writefile.printf("%s", "-80, 40")
+		}
+		
+		writefile.printf("%s", ")")
+		writefile.printf("%s", "\nscene_vector_[")
+		writefile.printf("%d", 2+rec)
+		writefile.printf("%s", "] = save_window_")
+		writefile.printf("%s", "\n{save_window_.view(-2, ")
+		
+		if (mode == 0) {
+
+			if (ev < 0) {
+
+				writefile.printf(vform, ev)
+				writefile.printf("%s", ", ")
+				writefile.printf(tform, tstop+2)
+				writefile.printf("%s", ",")
+				writefile.printf(vform, abs(ev-0.05))
+			
+			} else {
+
+				writefile.printf("%s", "-0.15, ")
+				writefile.printf(tform, tstop+2)
+				writefile.printf("%s", ", ")
+				writefile.printf(vform, ev)
+			}
+
+		} else if (mode == 1) {
+
+			writefile.printf("%s", "-80, ")
+			writefile.printf(tform, tstop+2)
+			writefile.printf("%s", ", ")
+			writefile.printf("%s", "120")
+		}
+
+		writefile.printf("%s", ", 341, ")
+		writefile.printf("%g", 110+rec*(374-115))
+		writefile.printf("%s", ", 302.4, 193.6)}")
+		writefile.printf("%s", "\ngraphList[0].append(save_window_)\nsave_window_.save_name(\"graphList[0].\")\nsave_window_.addexpr(\"")		
+		writefile.printf("%s", vvarlist.o(rec).label)
+		writefile.printf("%s", "\", 1, 1, 0.660318, ")
+
+		if (mode == 0) {
+	
+			if (ev < 0) {
+
+				writefile.printf("%s", "0.141322")
+
+			} else {
+
+				writefile.printf("%s", "0.966103")
+			}
+
+		} else if (mode == 1) {
+
+			writefile.printf("%s", "0.141322")
+		}
+		
+		writefile.printf("%s", ", 2)\n}")
+	}
+
+	writefile.printf("%s", "\nobjectvar scene_vector_[1]\n{doNotify()}\n")
+	writefile.close()
+
+	chdir(cwd)
+	if (chk) cwd = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ------------------------------writevxplot---------------------------------------
+proc writevxplot() {local chk, ev, dist, distsoma, ystart, ext
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) optional: if passive, enter the amplitude of choice (nA), to help set the voltage axis."
+			print "output: default vxplot according to mode (vxplot-*mode*.ses)"
+			stop
+		}
+	}
+
+	chk = chkcwd(cwd)
+	if (chk) cwd = getcwd()
+	
+	if (mode == 0) {
+
+		if (numarg() == 1 && argtype(1) == 0) {
+
+			ev = getmaxev($1)
+		
+		} else {
+
+			ev = getmaxev(getvarp(ses, iampfilestr))
+		}
+
+	} else if (mode == 1) {
+
+		ev = 40
+	}
+
+	chdir(ses)
+	writefile.wopen(vxplotfilestr)
+	writefile.printf("%s", "objectvar save_window_, rvp_")
+	writefile.printf("%s", "\nobjectvar scene_vector_[5]")
+	writefile.printf("%s", "\nobjectvar ocbox_, ocbox_list_, scene_, scene_list_")
+	writefile.printf("%s", "\n{ocbox_list_ = new List()  scene_list_ = new List()}")
+	writefile.printf("%s", "\n{")
+	writefile.printf("%s", "\nsave_window_ = new Graph(0)")
+	writefile.printf("%s", "\nsave_window_.size(")
+	
+	dist = getdist(recseclist.o(0).label, 0.5, recseclist.o(recseclist.count-1).label, 0.5) + 20
+	distsoma = getdist("soma", 0.5, recseclist.o(0).label, getsubloc(recloclist.o(0).label))
+	
+	setmaxform()
+
+	writefile.printf(maxform, distsoma)
+	writefile.printf("%s", ", ")
+	writefile.printf(maxform, dist)
+	writefile.printf("%s", ", ")
+
+	if (mode == 0) {
+
+		if (ev < 0) {
+
+			ev -= 1
+			writefile.printf(maxform, ev)
+			writefile.printf("%s", ", ")
+			ystart = 1
+			writefile.printf("%g", ystart)
+		
+		} else {
+
+			ystart = -1
+			writefile.printf("%g", ystart)
+			writefile.printf("%s", ", ")
+			ev += 1
+			writefile.printf(maxform, ev)
+		}
+
+	} else if (mode == 1) {
+
+		ystart = -80
+		writefile.printf("%g", ystart)
+		writefile.printf("%s", ", ")
+		writefile.printf(maxform, ev)
+	}
+	
+	writefile.printf("%s", ")")
+	writefile.printf("%s", "\nscene_vector_[4] = save_window_")
+	writefile.printf("%s", "\n{save_window_.view(")
+	writefile.printf(maxform, distsoma)
+	writefile.printf("%s", ", ")
+
+	if (ev < 0) {
+
+		writefile.printf(maxform, ev)
+	
+	} else {
+
+		writefile.printf("%g", ystart)
+	}
+
+	writefile.printf("%s", ", ")
+	writefile.printf(maxform, dist)
+	writefile.printf("%s", ", ")
+	writefile.printf(maxform, abs(ev) + abs(ystart))
+	writefile.printf("%s", ", 667.9, 110, 532.84, 233.92)}")
+	writefile.printf("%s", "\nflush_list.append(save_window_)")
+	writefile.printf("%s", "\nsave_window_.save_name(\"flush_list.\")")
+	writefile.printf("%s", "\nobjectvar rvp_")
+	writefile.printf("%s", "\nrvp_ = new RangeVarPlot(\"v\")")
+	writefile.printf("\n%s", recseclist.o(0).label)
+	writefile.printf("%s", " rvp_.begin(0.5)")
+	writefile.printf("\n%s", recseclist.o(recseclist.count-1).label)
+	writefile.printf("%s", " rvp_.end(0.5)")
+	writefile.printf("%s", "\nrvp_.origin(0)")
+	writefile.printf("%s", "\nsave_window_.addobject(rvp_, 2, 1, 0.146864, 0.629207)")
+
+	ext = getaxontype(0)
+
+	if (ext > 2) {
+
+		writefile.printf("%s", "\nobjectvar rvp_")
+		writefile.printf("%s", "\nrvp_ = new RangeVarPlot(\"vext\")")
+		writefile.printf("\n%s", recseclist.o(0).label)
+		writefile.printf("%s", " rvp_.begin(0.5)")
+		writefile.printf("\n%s", recseclist.o(recseclist.count-1).label)
+		writefile.printf("%s", " rvp_.end(0.5)")
+		writefile.printf("%s", "\nrvp_.origin(0)")
+		writefile.printf("%s", "\nsave_window_.addobject(rvp_, 3, 1, 0.146864, 0.594483)")
+		writefile.printf("%s", "\nobjectvar rvp_")
+		writefile.printf("%s", "\nrvp_ = new RangeVarPlot(\"v($1)+vext($1)\")")
+		writefile.printf("\n%s", recseclist.o(0).label)
+		writefile.printf("%s", " rvp_.begin(0.5)")
+		writefile.printf("\n%s", recseclist.o(recseclist.count-1).label)
+		writefile.printf("%s", " rvp_.end(0.5)")
+		writefile.printf("%s", "\nrvp_.origin(0)")
+		writefile.printf("%s", "\nsave_window_.addobject(rvp_, 9, 1, 0.146864, 0.553377)")
+	}
+
+	writefile.printf("%s", "\n}")
+	writefile.printf("%s", "\nobjectvar scene_vector_[1]")
+	writefile.printf("%s", "\n{doNotify()}")
+	writefile.close()
+
+	chdir(cwd)
+	if (chk) cwd = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc writeshape() {local chk, k, mleft, mright, mbottom, mtop, sleft, screentop, swidth, sheight, maxx, minx, maxy, miny, minmax
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) optional: if passive, enter the amplitude of choice (nA), to help set voltage colour range."
+			print "output: default shapeplot for Vm saved (shapeplot-*mode*.ses)"
+			stop
+		}
+	}
+
+	chk = chkcwd(cwd)
+	if (chk) cwd = getcwd()
+	
+	chdir(ses)
+
+	writefile.wopen(shapeplotfilestr)
+	writefile.printf("%s", "\nobjectvar save_window_, rvp_")
+	writefile.printf("%s", "\nobjectvar scene_vector_[7]")
+	writefile.printf("%s", "\nobjectvar ocbox_, ocbox_list_, scene_, scene_list_")
+	writefile.printf("%s", "\n{ocbox_list_ = new List()  scene_list_ = new List()}")
+	writefile.printf("%s", "\n{")
+	writefile.printf("%s", "\nsave_window_ = new PlotShape(0)")
+	writefile.printf("%s", "\nsave_window_.size(")
+
+	recsecxvec = new Vector()
+	for k = 0, recseclist.count-1 recsecxvec.append(getsecx(recseclist.o(k).label))
+	recsecyvec = new Vector()
+	for k = 0, recseclist.count-1 recsecyvec.append(getsecy(recseclist.o(k).label))
+
+	maxx = recsecxvec.max
+	minx = recsecxvec.min
+	maxy = recsecyvec.max
+	miny = recsecyvec.min
+	minmax = abs(maxx) + abs(minx) + abs(maxy) + abs(miny)
+
+	sleft = 667.9
+	screentop = 413
+	swidth = 532.84
+	sheight = 235.84
+
+	if (minmax > 300) {
+
+		if ((abs(maxy) + abs(miny)) > (abs(maxx) + abs(minx))) {
+
+			mwidth = (swidth/sheight) * (abs(maxy)+abs(miny))
+			mleft = -0.5*mwidth
+			mright = 0.5*mwidth
+			mheight = (sheight/swidth)*mwidth
+			if (miny < 0 && maxy >= 0) {
+				mtop = ((maxy/(abs(miny)+maxy))+0.05)*mheight
+				mbottom = -((abs(miny)/(abs(miny)+maxy))-0.05)*mheight			
+			} else if (miny >= 0 && maxy > 0) {
+				mtop = ((maxy/(abs(miny)+maxy))+0.05)*mheight
+				mbottom = ((abs(miny)/(abs(miny)+maxy))-0.05)*mheight
+			} else if (miny < 0 && maxy < 0) {
+				mtop = ((maxy/(abs(miny)+maxy))+0.05)*mheight
+				mbottom = -((abs(miny)/(abs(miny)+maxy))-0.05)*mheight
+			}
+		
+		} else {
+		
+			mwidth = (swidth/sheight) * (abs(maxx)+abs(minx))
+			mheight = (sheight/swidth)*mwidth
+			mtop = 0.5*mheight
+			mbottom = -0.5*mheight
+			if (minx < 0 && maxx >= 0) {
+				mright = ((maxx/(abs(minx)+maxx))+0.05)*mheight
+				mleft = -((abs(minx)/(abs(minx)+maxx))-0.05)*mheight			
+			} else if (minx >= 0 && maxx > 0) {
+				mright = ((maxx/(abs(minx)+maxx))+0.05)*mheight
+				mleft = ((abs(minx)/(abs(minx)+maxx))-0.05)*mheight
+			} else if (minx < 0 && maxx < 0) {
+				mright = ((maxx/(abs(minx)+maxx))+0.05)*mheight
+				mleft = -((abs(minx)/(abs(minx)+maxx))-0.05)*mheight
+			}
+		}
+
+	} else {
+
+		mleft = -100
+		mright = 100
+		mbottom = -75
+		mtop = 25
+		mwidth = 200
+		mheight = 100
+	}
+	
+	writefile.printf(maxform, mleft)
+	writefile.printf("%s", ", ")
+	writefile.printf(maxform, mright)
+	writefile.printf("%s", ", ")
+	writefile.printf(maxform, mbottom)
+	writefile.printf("%s", ", ")
+	writefile.printf(maxform, mtop)
+	writefile.printf("%s", ")")
+	writefile.printf("%s", "\nsave_window_.variable(\"v\")")
+	writefile.printf("%s", "\nscene_vector_[6] = save_window_")
+	writefile.printf("%s", "\n{save_window_.view(")
+	writefile.printf(maxform, mleft)
+	writefile.printf("%s", ", ")
+	writefile.printf(maxform, mbottom)
+	writefile.printf("%s", ", ")
+	writefile.printf(maxform, mwidth)
+	writefile.printf("%s", ", ")
+	writefile.printf(maxform, mheight)
+	writefile.printf("%s", ", ")
+	writefile.printf(maxform, sleft)
+	writefile.printf("%s", ", ")
+	writefile.printf(maxform, screentop)
+	writefile.printf("%s", ", ")
+	writefile.printf(maxform, swidth)
+	writefile.printf("%s", ", ")
+	writefile.printf(maxform, sheight)
+	writefile.printf("%s", ")}")
+	// writefile.printf("%s", "\nsave_window_.exec_menu(\"View = plot\")")
+	writefile.printf("%s", "\nfast_flush_list.append(save_window_)")
+	writefile.printf("%s", "\nsave_window_.save_name(\"fast_flush_list.\")")
+	writefile.printf("%s", "\nsave_window_.exec_menu(\"Show Diam\")")
+		
+	
+	if (mode == 0) {
+
+		ev = getmaxev($1)
+	
+	} else if (mode == 1) {
+
+		ev = 40
+	}
+	
+	if (ev < 0) {
+		
+		// 25 point colour map (purple-yellow)		
+		// writefile.printf("%s", "\nsave_window_.colormap(25, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(0, 255, 255, 255)")
+		// writefile.printf("%s", "\nsave_window_.colormap(1, 255, 255, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(2, 255, 247, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(3, 255, 239, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(4, 255, 223, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(5, 255, 207, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(6, 255, 191, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(7, 255, 175, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(8, 255, 159, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(9, 255, 143, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(10, 255, 127, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(11, 255, 111, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(12, 255, 95, 7)")
+		// writefile.printf("%s", "\nsave_window_.colormap(13, 255, 79, 15)")
+		// writefile.printf("%s", "\nsave_window_.colormap(14, 239, 63, 31)")
+		// writefile.printf("%s", "\nsave_window_.colormap(15, 223, 47, 47)")
+		// writefile.printf("%s", "\nsave_window_.colormap(16, 207, 31, 47)")
+		// writefile.printf("%s", "\nsave_window_.colormap(17, 207, 0, 63)")
+		// writefile.printf("%s", "\nsave_window_.colormap(18, 191, 0, 79)")
+		// writefile.printf("%s", "\nsave_window_.colormap(19, 175, 0, 95)")
+		// writefile.printf("%s", "\nsave_window_.colormap(20, 159, 0, 111)")
+		// writefile.printf("%s", "\nsave_window_.colormap(21, 143, 0, 127)")
+		// writefile.printf("%s", "\nsave_window_.colormap(22, 127, 0, 143)")
+		// writefile.printf("%s", "\nsave_window_.colormap(23, 111, 0, 111)")
+		// writefile.printf("%s", "\nsave_window_.colormap(24, 95, 0, 95)")
+			
+		// 13 point colour map
+		// writefile.printf("%s", "\nsave_window_.colormap(13, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(0, 255, 255, 200)")
+		// writefile.printf("%s", "\nsave_window_.colormap(1, 255, 255, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(2, 255, 239, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(3, 255, 207, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(4, 255, 175, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(5, 255, 143, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(6, 255, 111, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(7, 255, 79, 15)")
+		// writefile.printf("%s", "\nsave_window_.colormap(8, 223, 47, 47)")
+		// writefile.printf("%s", "\nsave_window_.colormap(9, 207, 0, 63)")
+		// writefile.printf("%s", "\nsave_window_.colormap(10, 175, 0, 95)")
+		// writefile.printf("%s", "\nsave_window_.colormap(11, 143, 0, 127)")
+		// writefile.printf("%s", "\nsave_window_.colormap(12, 111, 0, 111)")
+			
+		// 7 point colour map (purple-yellow)
+		// writefile.printf("%s", "\nsave_window_.colormap(7, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(0, 255, 255, 200)")
+		// writefile.printf("%s", "\nsave_window_.colormap(1, 255, 239, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(2, 255, 175, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(3, 255, 111, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(4, 223, 47, 47)")
+		// writefile.printf("%s", "\nsave_window_.colormap(5, 175, 0, 95)")
+		// writefile.printf("%s", "\nsave_window_.colormap(6, 111, 0, 111)")
+
+		if (mode == 0) {
+			
+			// 7 point colour map (blue-red)
+			writefile.printf("%s", "\nsave_window_.colormap(7, 0)")
+			writefile.printf("%s", "\nsave_window_.colormap(0, 233, 34, 16)")
+			writefile.printf("%s", "\nsave_window_.colormap(1, 225, 157, 18)")
+			writefile.printf("%s", "\nsave_window_.colormap(2, 174, 219, 20)")
+			writefile.printf("%s", "\nsave_window_.colormap(3, 23, 208, 44)")
+			writefile.printf("%s", "\nsave_window_.colormap(4, 25, 198, 195)")
+			writefile.printf("%s", "\nsave_window_.colormap(5, 23, 88, 188)")
+			writefile.printf("%s", "\nsave_window_.colormap(6, 7, 0, 149)")
+
+		} else if (mode == 1) {
+
+			// 13 point colour map (blue-red)
+			writefile.printf("%s", "\nsave_window_.colormap(13, 0)")
+			writefile.printf("%s", "\nsave_window_.colormap(0, 233, 34, 16)")
+			writefile.printf("%s", "\nsave_window_.colormap(1, 229, 97, 17)")
+			writefile.printf("%s", "\nsave_window_.colormap(2, 225, 157, 18)")
+			writefile.printf("%s", "\nsave_window_.colormap(3, 222, 214, 19)")
+			writefile.printf("%s", "\nsave_window_.colormap(4, 174, 219, 20)")
+			writefile.printf("%s", "\nsave_window_.colormap(5, 101, 215, 21)")
+			writefile.printf("%s", "\nsave_window_.colormap(6, 23, 208, 44)")
+			writefile.printf("%s", "\nsave_window_.colormap(7, 24, 202, 138)")
+			writefile.printf("%s", "\nsave_window_.colormap(8, 25, 198, 195)")
+			writefile.printf("%s", "\nsave_window_.colormap(9, 26, 143, 194)")
+			writefile.printf("%s", "\nsave_window_.colormap(10, 23, 88, 188)")
+			writefile.printf("%s", "\nsave_window_.colormap(11, 6, 36, 169)")
+			writefile.printf("%s", "\nsave_window_.colormap(12, 7, 0, 149)")
+		}
+		
+		writefile.printf("%s", "\nsave_window_.scale(")
+		writefile.printf(vform, ev)
+		writefile.printf("%s", ", ")		
+		writefile.printf("%d", 0)
+	
+	} else {
+			
+		// 25 point colour map (purple-yellow)
+		// writefile.printf("%s", "\nsave_window_.colormap(25, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(0, 95, 0, 95)")
+		// writefile.printf("%s", "\nsave_window_.colormap(1, 111, 0, 111)")
+		// writefile.printf("%s", "\nsave_window_.colormap(2, 127, 0, 143)")
+		// writefile.printf("%s", "\nsave_window_.colormap(3, 143, 0, 127)")
+		// writefile.printf("%s", "\nsave_window_.colormap(4, 159, 0, 111)")
+		// writefile.printf("%s", "\nsave_window_.colormap(5, 175, 0, 95)")
+		// writefile.printf("%s", "\nsave_window_.colormap(6, 191, 0, 79)")
+		// writefile.printf("%s", "\nsave_window_.colormap(7, 207, 0, 63)")
+		// writefile.printf("%s", "\nsave_window_.colormap(8, 207, 31, 47)")
+		// writefile.printf("%s", "\nsave_window_.colormap(9, 223, 47, 47)")
+		// writefile.printf("%s", "\nsave_window_.colormap(10, 239, 63, 31)")
+		// writefile.printf("%s", "\nsave_window_.colormap(11, 255, 79, 15)")
+		// writefile.printf("%s", "\nsave_window_.colormap(12, 255, 95, 7)")
+		// writefile.printf("%s", "\nsave_window_.colormap(13, 255, 111, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(14, 255, 127, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(15, 255, 143, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(16, 255, 159, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(17, 255, 175, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(18, 255, 191, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(19, 255, 207, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(20, 255, 223, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(21, 255, 239, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(22, 255, 247, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(23, 255, 255, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(24, 255, 255, 255)")
+
+		// 13 point colour map (purple-yellow)
+		// writefile.printf("%s", "\nsave_window_.colormap(13, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(0, 111, 0, 111)")
+		// writefile.printf("%s", "\nsave_window_.colormap(1, 143, 0, 127)")
+		// writefile.printf("%s", "\nsave_window_.colormap(2, 175, 0, 95)")
+		// writefile.printf("%s", "\nsave_window_.colormap(3, 207, 0, 63)")
+		// writefile.printf("%s", "\nsave_window_.colormap(4, 223, 47, 47)")
+		// writefile.printf("%s", "\nsave_window_.colormap(5, 255, 79, 15)")
+		// writefile.printf("%s", "\nsave_window_.colormap(6, 255, 111, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(7, 255, 143, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(8, 255, 175, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(9, 255, 207, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(10, 255, 239, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(11, 255, 255, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(12, 255, 255, 200)")
+
+		// 7 point colour map (purple-yellow)
+		// writefile.printf("%s", "\nsave_window_.colormap(7, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(0, 111, 0, 111)")
+		// writefile.printf("%s", "\nsave_window_.colormap(1, 175, 0, 95)")
+		// writefile.printf("%s", "\nsave_window_.colormap(2, 223, 47, 47)")
+		// writefile.printf("%s", "\nsave_window_.colormap(3, 255, 111, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(4, 255, 175, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(5, 255, 239, 0)")
+		// writefile.printf("%s", "\nsave_window_.colormap(6, 255, 255, 200)")
+
+		if (mode == 0) {
+		
+			// 7 point colour map (blue-red)
+			writefile.printf("%s", "\nsave_window_.colormap(7, 0)")
+			writefile.printf("%s", "\nsave_window_.colormap(0, 7, 0, 149)")
+			writefile.printf("%s", "\nsave_window_.colormap(1, 23, 88, 188)")
+			writefile.printf("%s", "\nsave_window_.colormap(2, 25, 198, 195)")
+			writefile.printf("%s", "\nsave_window_.colormap(3, 23, 208, 44)")
+			writefile.printf("%s", "\nsave_window_.colormap(4, 174, 219, 20)")
+			writefile.printf("%s", "\nsave_window_.colormap(5, 225, 157, 18)")
+			writefile.printf("%s", "\nsave_window_.colormap(6, 233, 34, 16)")
+
+		} else if (mode == 1) {
+
+			// 13 point colour map (blue-red)
+			writefile.printf("%s", "\nsave_window_.colormap(13, 0)")
+			writefile.printf("%s", "\nsave_window_.colormap(0, 7, 0, 149)")
+			writefile.printf("%s", "\nsave_window_.colormap(1, 6, 36, 169)")
+			writefile.printf("%s", "\nsave_window_.colormap(2, 23, 88, 188)")
+			writefile.printf("%s", "\nsave_window_.colormap(3, 26, 143, 194)")
+			writefile.printf("%s", "\nsave_window_.colormap(4, 25, 198, 195)")
+			writefile.printf("%s", "\nsave_window_.colormap(5, 24, 202, 138)")
+			writefile.printf("%s", "\nsave_window_.colormap(6, 23, 208, 44)")
+			writefile.printf("%s", "\nsave_window_.colormap(7, 101, 215, 21)")
+			writefile.printf("%s", "\nsave_window_.colormap(8, 174, 219, 20)")
+			writefile.printf("%s", "\nsave_window_.colormap(9, 222, 214, 19)")
+			writefile.printf("%s", "\nsave_window_.colormap(10, 225, 157, 18)")
+			writefile.printf("%s", "\nsave_window_.colormap(11, 229, 97, 17)")
+			writefile.printf("%s", "\nsave_window_.colormap(12, 233, 34, 16)")
+		}
+		
+		writefile.printf("%s", "\nsave_window_.scale(")
+		
+		if (mode == 0) {
+
+			writefile.printf("%d", 0)
+
+		} else if (mode == 1) {
+
+			writefile.printf("%d", -80)			
+		}
+		
+		writefile.printf("%s", ", ")
+		writefile.printf(vform, ev)
+	}
+
+	writefile.printf("%s", ")")
+	writefile.printf("%s", "\nsave_window_.exec_menu(\"Shape Plot\")")
+	writefile.printf("%s", "\n}")
+	writefile.printf("%s", "\nobjectvar scene_vector_[1]")
+	writefile.printf("%s", "\n{doNotify()}")
+	writefile.close()
+
+	chdir(cwd)
+	if (chk) cwd = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc writemulfit() {local chk
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "takes no arguments. to initialize mulrunfitter. used wih writefitdata and writefitparam"
+			stop
+		}
+	}
+
+	chk = chkcwd(cwd)
+	if (chk) cwd = getcwd()
+
+	chdir(ses)
+	writefile.wopen(savedatafilestr)
+	writefile.printf("%s", "objectvar save_window_, rvp_")
+	writefile.printf("%s", "\nobjectvar scene_vector_[8]")
+	writefile.printf("%s", "\nobjectvar ocbox_, ocbox_list_, scene_, scene_list_")
+	writefile.printf("%s", "\n{ocbox_list_ = new List()  scene_list_ = new List()}")
+	writefile.printf("%s", "\n\n//Begin MulRunFitter[0]")
+	writefile.printf("%s", "\n{")
+	writefile.printf("%s", "\nload_file(\"mulfit.hoc\", \"MulRunFitter\")")
+	writefile.printf("%s", "\n}")
+	writefile.printf("%s", "\n{")
+	writefile.printf("%s", "\nocbox_ = new MulRunFitter(1)")
+	writefile.printf("%s", "\n}")
+	writefile.printf("%s", "\n{object_push(ocbox_)}")
+	writefile.printf("%s", "\n{")
+	writefile.printf("%s", "\nversion(6)")
+	writefile.printf("%s", "\nranfac = 2")
+	writefile.printf("%s", "\nfspec = new File(\"")
+	writefile.printf("%s", savedataparamfilestr)
+	writefile.printf("%s", "\")")
+	writefile.printf("%s", "\nfdat = new File(\"")
+	writefile.printf("%s", savedatadatafilestr)
+	writefile.printf("%s", "\")")
+	writefile.printf("%s", "\nread_data()")
+	writefile.printf("%s", "\nbuild()")
+	writefile.printf("%s", "\n}")
+	writefile.printf("%s", "\nopt.set_optimizer(\"MulfitPraxWrap\")")
+	writefile.printf("%s", "\n{object_push(opt.optimizer)}")
+	writefile.printf("%s", "\n{")
+	writefile.printf("%s", "\nnstep = 0")
+	writefile.printf("%s", "\n}")
+	writefile.printf("%s", "\n{object_pop()}")
+	writefile.printf("%s", "\n{p.gengui(0, 1234, 110, 608.64, 553.92)}")
+	// writefile.printf("%s", "\n{p.showargs(1328, 729, 269.76, 257.28)}")
+	// writefile.printf("%s", "\n{p.showdomain(1581, 729, 272.64, 213.12)}")
+	// writefile.printf("%s", "\n{optrestore(1050.9, 724, 312.96, 338.88)}")
+	writefile.printf("%s", "\n{object_pop()}")
+	writefile.printf("%s", "\n{")
+	// writefile.printf("%s", "\nocbox_.map(\"MulRunFitter[0]\", 667.9, 724, 360.96, 199.68)")
+	writefile.printf("%s", "\nocbox_.map(\"MulRunFitter[0]\", 998, 724, 360.96, 199.68)")
+	writefile.printf("%s", "\n}")
+	writefile.printf("%s", "\nobjref ocbox_")
+	writefile.printf("%s", "\n//End MulRunFitter[0]")
+	writefile.printf("%s", "\nobjectvar scene_vector_[1]")
+	writefile.printf("%s", "\n{doNotify()}")
+	writefile.close()
+	
+	chdir(cwd)
+	if (chk) cwd = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc writefitdata() {local chk, iiamp, lines, f, row
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) optional: iiamp index within iampvec. Default: current iiamp (saved in iiamp-*mode*.dat)"
+			print "output: saved vdat associated with current or given iiamp in given mode (savedata-*mode*.ses.fd1)"
+			stop
+		}
+	}
+
+	chk = chkcwd(cwd)
+	if (chk) cwd = getcwd()	
+
+	if (numarg() == 1) {
+		
+		iiamp = $1
+	
+	} else {
+		
+		iiamp = 0
+	}
+	
+	chdir(ses)
+	
+	writefile.wopen(savedatadatafilestr)
+
+	lines = 2*nrows + 8
+	
+	f = 0
+	while (f < nf) {
+
+		writefile.printf("\n%s%d%s", "RegionFitness xdat ydat boundary weight (lines=", lines, ") 1")
+		writefile.printf("\n%s", "||")
+		writefile.printf("\n%d", nrows)
+		sprint(tempstr, "%s%s", "\n", tform)
+		for row = 0, nrows-1 writefile.printf(tempstr, vdatmat.x[row][0])
+		sprint(tempstr, "%s%s", "\n", vform)
+		for row = 0, nrows-1 writefile.printf(tempstr, vdatmat.x[row][iiamp*nf+f+1])
+		sprint(tempstr, "%s%s%s%s%s", "\n\n%d\n", tform, "\n", tform, "\n\n%d\n%d\n")
+		writefile.printf(tempstr, 2, vdatmat.x[0][0], vdatmat.x[nrows-1][0], 0, 1)
+		
+		f += 1
+	}
+	
+	writefile.printf("\n%g\n", 1)
+	writefile.close()
+
+	tempstr = ""
+	
+	chdir(cwd)
+	if (chk) cwd = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc writefitparam() {local chk, k, f
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "saves default parameters associated with given mode (savedata-*mode*.ses.ft1)"
+			stop
+		}
+	}
+
+	chk = chkcwd(cwd)
+	if (chk) cwd = getcwd()
+	
+	chdir(ses)
+	
+	writefile.wopen(savedataparamfilestr)
+
+	writefile.printf("%s", "ParmFitness: nFit")
+
+	if (mode == 0) {
+		writefile.printf("%s", "\n\tFitnessGenerator: nFit Passive")
+	} else if (mode == 1) {
+		writefile.printf("%s", "\n\tFitnessGenerator: nFit Active")
+	}
+
+	for f = 0, nf-1 {
+
+		writefile.printf("%s", "\n\t\tRegionFitness:\t")
+		writefile.printf("%s", fitvarlist.o(f).label)
+	}
+	
+	writefile.printf("%s", "\n\n\tParameters:")
+	
+	for k = 0, pnamelist.count-1 {
+
+		sprint(tempstr, "%s%s%s%s", "\"", pnamelist.o(k).label, "_norm", "\"")
+		writefile.printf("\n\t\t%s", tempstr)
+		writefile.printf("%s", ", ")
+		writefile.printf(maxform, pdefvec.x[k]/plowvec.x[k])
+		writefile.printf("%s", ", ")
+		writefile.printf("%d", 1)
+		writefile.printf("%s", ", ")
+		writefile.printf(maxform, phivec.x[k]/plowvec.x[k])
+		writefile.printf("%s", ", ")
+		writefile.printf("%d", doargvec.x[k])
+		writefile.printf("%s", ", ")
+		writefile.printf("%d", uselogvec.x[k])
+	}
+
+	writefile.printf("%s", "\nEnd ParmFitness")
+	writefile.close()
+
+	tempstr = ""
+	
+	chdir(cwd)
+	if (chk) cwd = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc writenagating() {local chk
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "No arguments required."
+			print "output: saves default Na gating parameters to session file (na_gating.ses)"
+			stop
+		}
+	}
+
+	chk = chkcwd(cwd)
+	if (chk) cwd = getcwd()
+	
+	chdir(ses)
+
+	writefile.wopen("na_gating.ses")
+	writefile.printf("%s", "objectvar save_window_, rvp_")
+	writefile.printf("%s", "\nobjectvar scene_vector_[8]")
+	writefile.printf("%s", "\nobjectvar ocbox_, ocbox_list_, scene_, scene_list_")
+	writefile.printf("%s", "\n{ocbox_list_ = new List()  scene_list_ = new List()}")
+	writefile.printf("%s", "\n{")
+	writefile.printf("%s", "\nxpanel(\"nais (Globals)\", 0)")
+	writefile.printf("%s", "\nvShift_nais = ")
+	writefile.printf("%g", vShift_nais)
+	writefile.printf("%s", "\nxvalue(\"vShift_nais\",\"vShift_nais\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\nvShift_inact_nais = ")
+	writefile.printf("%g", vShift_inact_nais)
+	writefile.printf("%s", "\nxvalue(\"vShift_inact_nais\",\"vShift_inact_nais\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\nmaxrate_nais = ")
+	writefile.printf("%g", maxrate_nais)
+	writefile.printf("%s", "\nxvalue(\"maxrate_nais\",\"maxrate_nais\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\ntemp_nais = ")
+	writefile.printf("%g", temp_nais)
+	writefile.printf("%s", "\nxvalue(\"temp_nais\",\"temp_nais\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\nq10_nais = ")
+	writefile.printf("%g", q10_nais)
+	writefile.printf("%s", "\nxvalue(\"q10_nais\",\"q10_nais\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\nq10h_nais = ")
+	writefile.printf("%g", q10h_nais)
+	writefile.printf("%s", "\nxvalue(\"q10h_nais\",\"q10h_nais\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\nxpanel(341,636)")
+	writefile.printf("%s", "\n}")
+	writefile.printf("%s", "\n{")
+	writefile.printf("%s", "\nxpanel(\"nax (Globals)\", 0)")
+	writefile.printf("%s", "\nvShift_nax = ")
+	writefile.printf("%g", vShift_nax)
+	writefile.printf("%s", "\nxvalue(\"vShift_nax\",\"vShift_nax\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\nvShift_inact_nax = ")
+	writefile.printf("%g", vShift_inact_nax)
+	writefile.printf("%s", "\nxvalue(\"vShift_inact_nax\",\"vShift_inact_nax\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\nmaxrate_nax = ")
+	writefile.printf("%g", maxrate_nax)
+	writefile.printf("%s", "\nxvalue(\"maxrate_nax\",\"maxrate_nax\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\ntemp_nax = ")
+	writefile.printf("%g", temp_nax)
+	writefile.printf("%s", "\nxvalue(\"temp_nax\",\"temp_nax\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\nq10_nax = ")
+	writefile.printf("%g", q10_nax)
+	writefile.printf("%s", "\nxvalue(\"q10_nax\",\"q10_nax\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\nq10h_nax = ")
+	writefile.printf("%g", q10h_nax)
+	writefile.printf("%s", "\nxvalue(\"q10h_nax\",\"q10h_nax\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\nxpanel(341,866)")
+	writefile.printf("%s", "\n}")
+	writefile.printf("%s", "\n{")
+	writefile.printf("%s", "\nxpanel(\"na (Globals)\", 0)")
+	writefile.printf("%s", "\nvShift_na = ")
+	writefile.printf("%g", vShift_na)
+	writefile.printf("%s", "\nxvalue(\"vShift_na\",\"vShift_na\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\nvShift_inact_na = ")
+	writefile.printf("%g", vShift_inact_na)
+	writefile.printf("%s", "\nxvalue(\"vShift_inact_na\",\"vShift_inact_na\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\nmaxrate_na = ")
+	writefile.printf("%g", maxrate_na)
+	writefile.printf("%s", "\nxvalue(\"maxrate_na\",\"maxrate_na\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\ntemp_na = ")
+	writefile.printf("%g", temp_na)
+	writefile.printf("%s", "\nxvalue(\"temp_na\",\"temp_na\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\nq10_na = ")
+	writefile.printf("%g", q10_na)
+	writefile.printf("%s", "\nxvalue(\"q10_na\",\"q10_na\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\nq10h_na = ")
+	writefile.printf("%g", q10h_na)
+	writefile.printf("%s", "\nxvalue(\"q10h_na\",\"q10h_na\", 1,\"\", 0, 0 )")
+	writefile.printf("%s", "\nxpanel(54,976)")
+	writefile.printf("%s", "\n}")
+	writefile.printf("%s", "\nobjectvar scene_vector_[1]")
+	writefile.printf("%s", "\n{doNotify()}")
+
+	writefile.close()
+
+	chdir(cwd)
+	if (chk) cwd = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ----------------------------writemiscparam--------------------------------------
+proc writemiscparam() {local chk
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "No arguments required."
+			print "output: save new default misc param panel window in session file (miscparam.ses)"
+			stop
+		}
+	}
+
+	chk = chkcwd(cwd)
+	if (chk) cwd = getcwd()
+	
+	chdir(ses)
+	writefile.wopen("miscparam.ses")	
+	
+	writefile.printf("%s", "objectvar save_window_, rvp_")
+	writefile.printf("%s", "\nobjectvar scene_vector_[8]")
+	writefile.printf("%s", "\nobjectvar ocbox_, ocbox_list_, scene_, scene_list_")
+	writefile.printf("%s", "\n{ocbox_list_ = new List()  scene_list_ = new List()}")
+	writefile.printf("%s", "\n{")
+	writefile.printf("%s", "\nxpanel(\"Misc Parameters\", 0)")
+	writefile.printf("%s", "\ntauh = ")
+	writefile.printf("%g", tauh)
+	writefile.printf("%s", "\nxvalue(\"tauh\",\"tauh\", 1,\"\", 0, 1 )")
+	writefile.printf("%s", "\nlc_Na_de = ")
+	writefile.printf("%g", lc_Na_de)
+	writefile.printf("%s", "\nxvalue(\"lc_Na_de\",\"lc_Na_de\", 1,\"\", 0, 1 )")
+	writefile.printf("%s", "\nlc_Kv_Kv1_de = ")
+	writefile.printf("%g", lc_Kv_Kv1_de)
+	writefile.printf("%s", "\nxvalue(\"lc_Kv_Kv1_de\",\"lc_Kv_Kv1_de\", 1,\"\", 0, 1 )")
+	writefile.printf("%s", "\nxpanel(54,773)")
+	writefile.printf("%s", "\n}")
+	writefile.printf("%s", "\nobjectvar scene_vector_[1]")
+	writefile.printf("%s", "\n{doNotify()}")
+
+	writefile.close()
+
+	chdir(cwd)
+	if (chk) cwd = ""
+}
+// --------------------------------------------------------------------------------

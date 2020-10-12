@@ -1,0 +1,814 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+//---------------------Parameter definitions and initial values---------------------
+// Define and set initial (expected) values for each parameter, as well as upper and 
+// lower bounds.
+// ---------------------------------------------------------------------------------
+
+
+// ---------------------------Passive Parameters------------------------------------
+
+// ----------------------------Axial resistance-------------------------------------
+// Intracellular axial resistivity, or Ri. Unit = ohm cm.
+Ri_def = 200
+// The initial value is set to the default
+Ri = Ri_def
+// from estimated resistivity of mammalian cerebrospinal fluid at 35 C
+// (Fenstermacher et al. 1970).
+Ri_low = 50
+// based on highest measured intracellular resistivity (Major et al. 1994).
+Ri_high = 400
+// norm values; only for optimized variables
+Ri_norm_def = Ri_def/Ri_low
+Ri_norm = Ri/Ri_low
+Ri_low_norm = Ri_low/Ri_low
+Ri_high_norm = Ri_high/Ri_low
+// ---------------------------------------------------------------------------------
+// Periaxonal axial resistance, or rpa. This refers to the submyelin, extra-
+// axonal resistance. Unit = Mega ohm / cm.
+rpa_def = 1e5
+// initial value
+rpa = rpa_def
+// rpa_low
+// rpa_low = 5e3
+rpa_low = 6e4
+// rpa_high
+rpa_high = 2.5e7
+// rpa_high = 9e6
+// norm values
+rpa_norm_def = rpa_def/rpa_low
+rpa_norm = rpa/rpa_low
+rpa_low_norm = rpa_low/rpa_low
+rpa_high_norm = rpa_high/rpa_low
+// ---------------------------------------------------------------------------------
+// Extracellular space axial resistance (rext). Unit = Mega ohm / cm. Fixed.
+// Based on Ri_low and the cross-sectional area of the extracellular bath space 
+// (sphere 4 cm in diameter).
+rext = 1e-6
+// ---------------------------------------------------------------------------------
+// Intra-pipette axial resistivity, calculated as bridge balance of the electrode 
+// factored by the ratio between the total cross-sectional area to length of the
+// modellled pipette tip. Since bridge balance may vary between electrodes, this is
+// determined individually for each cell based on the bridge balance entered at setup.
+// ---------------------------------------------------------------------------------
+
+
+// ---------------------------Membrane resistance-----------------------------------
+// Cellular membrane specific resistance, Rm. Refers to the ions flowing through 
+// passive membrane leak channels. Unit = ohm cm^2.
+Rm_def = 25000
+// initial value
+Rm = Rm_def
+// Lowest estimated Rm (Tasaki 1955). 
+// Rm_low = 100
+// Based on lowest estimated Rm for oligodendrocytes (Bakiri et al. 2011, Chan et al. 2013)
+Rm_low = 2e3
+// Based on Rm highest reported by Major et al. 1994.
+// Rm_high = 2e5
+// Based on Alle and Geiger 2006.
+Rm_high = 6e4
+// norm values
+Rm_norm_def = Rm_def/Rm_low
+Rm_norm = Rm/Rm_low
+Rm_low_norm = Rm_low/Rm_low
+Rm_high_norm = Rm_high/Rm_low
+// ---------------------------------------------------------------------------------
+// Myelin sheath specific resistance. Unit = ohm cm^2
+Rmy_def = 1e5
+// initial value
+Rmy = Rmy_def
+// Based on a minimum of 10 myelin membranes at 2 kOhm cm2, the lowest reported
+// membrane resistance in precursor and mature oligos (Chan et al. 2013 and Bakiri
+// et al. 2011)
+Rmy_low = 20000
+// Based on a maximum of 100 myelin membranes at highest estimated Rmm (Bakiri et al. 2011).
+Rmy_high = 1.6e6
+// Rmy_high = 2.4e6
+// norm values
+Rmy_norm_def = Rmy_def/Rmy_low
+Rmy_norm = Rmy/Rmy_low
+Rmy_low_norm = Rmy_low/Rmy_low
+Rmy_high_norm = Rmy_high/Rmy_low
+// ---------------------------------------------------------------------------------
+// Specific surface resistance of extracellular space, Rext (unit = ohm cm^2). Based 
+// on Ri_low converted to surface units. Dependent upon local surface area 
+// enveloping neuronal processes (~10^-6 cm^2) and length (10^-2 cm).
+Rext = 1e-8
+// ---------------------------------------------------------------------------------
+// Pipette surface specific resistance. Based on the resistive properties of 
+// the borosilicate glass used (see methods and Ehrt 2009). Fixed.
+Rpip = 5e10
+// ---------------------------------------------------------------------------------
+
+
+// ---------------------------Membrane capacitance----------------------------------
+// Neural membrane specific capacitance. Unit = uF / cm^2.
+Cm_def = 1
+// initial value
+Cm = Cm_def
+// Based on some of the lowest estimated values for Cm 
+// (Major et al. 1994 or Eyal et al. 2016)
+Cm_low = 0.5
+// Refers to one of the highest estimated values for Cm (Rapp et al. 1994)
+Cm_high = 2
+// norm values
+Cm_norm_def = Cm_def/Cm_low
+Cm_norm = Cm/Cm_low
+Cm_low_norm = Cm_low/Cm_low
+Cm_high_norm = Cm_high/Cm_low
+// ---------------------------------------------------------------------------------
+// Myelin sheath specific capacitance. Unit = uF / cm^2.
+Cmy_def = 0.05
+// initial value
+Cmy = Cmy_def
+// Based on a maximum of 100 myelin membranes at Cm_low.
+Cmy_low = 0.005
+// Based on minimum of 1 myelin membrane at Cm_high
+Cmy_high = 0.2
+// norm values
+Cmy_norm_def = Cmy_def/Cmy_low
+Cmy_norm = Cmy/Cmy_low
+Cmy_low_norm = Cmy_low/Cmy_low
+Cmy_high_norm = Cmy_high/Cmy_low
+// ---------------------------------------------------------------------------------
+// Specific surface capacitance of extracellular space, Cext (unit = ohm cm^2).
+// Counterpart to Rext. Fixed.
+Cext = 0
+// ---------------------------------------------------------------------------------
+// Specific surface capacitance of borosilicate glass patch pipettes. Pipettes will
+// be modelled directly, like cellular compartments, to account for their
+// electrotonic contribution in passive, subthreshold recordings (Roth and Hausser 
+// 2001). Even in well-compensated settings, pipette capacitance can have a small
+// effect on the cellular response (Major et al. 1994). Therefore, in addition 
+// to creating morphologically and biophysically accurate pipette tips (see methods), 
+// leftover pipette capacitance will be optimized out, to parse it from cellular 
+// capacitances. Moreover, pipette capacitance may be on the order of myelin sheath 
+// capacitance (See Methods). Since pipette artifacts are primarily from the injecting
+// recording electrode, only that pipette's capacitance will be optimized out.
+// Unit = uF / cm^2.
+Cpip_def = 1.29e-6
+// initial value
+Cpip = Cpip_def
+Cpip_low = 1.29e-8
+Cpip_high = 1.29e-4
+// norm values
+Cpip_norm_def = Cpip_def/Cpip_low
+Cpip_norm = Cpip/Cpip_low
+Cpip_low_norm = Cpip_low/Cpip_low
+Cpip_high_norm = Cpip_high/Cpip_low
+// ---------------------------------------------------------------------------------
+
+
+// ----------------------------Paranodal factors------------------------------------
+// average paranodal delta estimated from Rosenbluth et al 2013 (nm)
+paradelta = 2.6
+// consequent rpafact, or factor for rpa at paranodes given paradelta (eq. 5)
+parafact_def = 4.7
+parafact = parafact_def
+parafact_low = 1
+parafact_high = 100
+// norm values
+parafact_norm_def = parafact_def/parafact_low
+parafact_norm = parafact/parafact_low
+parafact_low_norm = parafact_low/parafact_low
+parafact_high_norm = parafact_high/parafact_low
+// ---------------------------------------------------------------------------------
+
+
+// ------------------------------Alternatives---------------------------------------
+// Alternative implementations of some axonal parameters to robustly test the single
+// cable. Available options include:
+// RmNode: a separate nodal membrane resistance parameter, to account for possibly
+// very low nodal membrane resistance (Tasaki 1955), or membrane channel blockers
+// possibly not fully blocking nodal membranes.
+// RmAxon: a separate axonal membrane resistance (no expected basis)
+// RmInt: a separate internodal axon membrane resistance, to account for bath-applied
+// membrane channel blockers possibly not reaching under the myelin.
+// RiAxon: a separate intra-axonal resistivity parameter (no biophysical basis)
+RmN_def = Rm_def
+RmN = Rm
+RmN_low = Rm_low
+RmN_high = Rm_high
+RmN_norm_def = RmN_def/RmN_low
+RmN_norm = RmN/RmN_low
+RmN_low_norm = RmN_low/RmN_low
+RmN_high_norm = RmN_high/RmN_low
+
+RmA_def = Rm_def
+RmA = Rm
+RmA_low = Rm_low
+RmA_high = Rm_high
+RmA_norm_def = RmA_def/RmA_low
+RmA_norm = RmA/RmA_low
+RmA_low_norm = RmA_low/RmA_low
+RmA_high_norm = RmA_high/RmA_low
+
+RmI_def = Rm_def
+RmI = Rm
+RmI_low = Rm_low
+RmI_high = Rm_high
+RmI_norm_def = RmI_def/RmI_low
+RmI_norm = RmI/RmI_low
+RmI_low_norm = RmI_low/RmI_low
+RmI_high_norm = RmI_high/RmI_low
+
+RiA_def = Ri_def
+RiA = Ri
+RiA_low = Ri_low
+RiA_high = Ri_high
+RiA_norm_def = RiA_def/RiA_low
+RiA_norm = RiA/RiA_low
+RiA_low_norm = RiA_low/RiA_low
+RiA_high_norm = RiA_high/RiA_low
+// ---------------------------------------------------------------------------------
+
+
+// -------------------------------Batteries-----------------------------------------
+// Intracellular voltage gradient powering bioelectric cells. With respect to 
+// extracellular space (= 0). Units = mV.
+v_init = getRMP()
+// The extracellular battery. eext is fixed.
+eext = 0
+// ---------------------------------------------------------------------------------
+
+
+// ------------------------------uselogs---------------------------------------------
+// uselog refers to whether a parameter will be optimized in logspace.
+Ri_uselog = 1
+rpa_uselog = 1
+parafact_uselog = 1
+Rm_uselog = 1
+Rmy_uselog = 1
+Cm_uselog = 1
+Cmy_uselog = 1
+RmN_uselog = 1
+RmA_uselog = 1
+RmI_uselog = 1
+RiA_uselog = 1
+Cpip_uselog = 1
+// ---------------------------------------------------------------------------------
+
+
+// ------------------------------doargs---------------------------------------------
+// Decide whether a parameter should be a fit variable (in a given simulation type)
+Ri_doarg = 1
+rpa_doarg = 1
+parafact_doarg = 1
+Rm_doarg = 1
+Rmy_doarg = 1
+Cm_doarg = 1
+Cmy_doarg = 1
+Cpip_doarg = 1
+RmN_doarg = 0
+RmA_doarg = 0
+RmI_doarg = 0
+RiA_doarg = 0
+per_int_doarg = 0
+exp_doarg = 0
+// ---------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------
+
+
+// -------------------------Active Parameters---------------------------------------
+
+// --------------------------Sodium channels----------------------------------------
+// Na channel expression. Units pS/cm2.
+Na_so_low = 0.001
+Na_so_high = 2000
+Na_so_def = 600
+Na_so = Na_so_def
+Na_so_norm_def = Na_so_def/Na_so_low
+Na_so_norm = Na_so/Na_so_low
+Na_so_low_norm = Na_so_low/Na_so_low
+Na_so_high_norm = Na_so_high/Na_so_low
+
+Na_prox_low = 0.001
+Na_prox_high = 25000
+Na_prox_def = 1000
+Na_prox = Na_prox_def
+Na_prox_norm_def = Na_prox_def/Na_prox_low
+Na_prox_norm = Na_prox/Na_prox_low
+Na_prox_low_norm = Na_prox/Na_prox_low
+Na_prox_high_norm = Na_prox_high/Na_prox_low
+
+Na_ais_low = 0.001
+Na_ais_high = 50000
+Na_ais_def = 10000
+Na_ais = Na_ais_def
+Na_ais_norm_def = Na_ais_def/Na_ais_low
+Na_ais_norm = Na_ais/Na_ais_low
+Na_ais_low_norm = Na_ais_low/Na_ais_low
+Na_ais_high_norm = Na_ais_high/Na_ais_low
+
+Na_int_low = 0.001
+Na_int_high = 1000
+Na_int_def = 100
+Na_int = Na_int_def
+Na_int_norm_def = Na_int_def/Na_int_low
+Na_int_norm = Na_int/Na_int_low
+Na_int_low_norm = Na_int_low/Na_int_low
+Na_int_high_norm = Na_int_high/Na_int_low
+
+Na_nod_low = Na_ais_low
+Na_nod_high = Na_ais_high
+Na_nod_def = Na_ais_def
+Na_nod = Na_ais
+Na_nod_norm_def = Na_nod_def/Na_nod_low
+Na_nod_norm = Na_nod/Na_nod_low
+Na_nod_low_norm = Na_nod_low/Na_nod_low
+Na_nod_high_norm = Na_nod_high/Na_nod_low
+
+Na_end_low = 0.001
+Na_end_high = 50000
+Na_end_def = 400
+Na_end = Na_end_def
+Na_end_norm_def = Na_end_def/Na_end_low
+Na_end_norm = Na_end/Na_end_low
+Na_end_low_norm = Na_end_low/Na_end_low
+Na_end_high_norm = Na_end_high/Na_end_low
+
+Na_col_low = 0.001
+Na_col_high = 1000
+Na_col_def = 200
+Na_col = Na_col_def
+Na_col_norm_def = Na_col_def/Na_col_low
+Na_col_norm = Na_col/Na_col_low
+Na_col_low_norm = Na_col_low/Na_col_low
+Na_col_high_norm = Na_col_high/Na_col_low
+
+Nap_ais_low = 1e-6
+Nap_ais_high = 100
+Nap_ais_def = 1
+Nap_ais = Nap_ais_def
+Nap_ais_norm_def = Nap_ais_def/Nap_ais_low
+Nap_ais_norm = Nap_ais/Nap_ais_low
+Nap_ais_low_norm = Nap_ais_low/Nap_ais_low
+Nap_ais_high_norm = Nap_ais_high/Nap_ais_low
+
+Nap_int_low = 1e-6
+Nap_int_high = 10
+Nap_int_def = 1e-2
+Nap_int = Nap_int_def
+Nap_int_norm_def = Nap_int_def/Nap_int_low
+Nap_int_norm = Nap_int/Nap_int_low
+Nap_int_low_norm = Nap_int_low/Nap_int_low
+Nap_int_high_norm = Nap_int_high/Nap_int_low
+
+Nap_nod_low = Nap_ais_low
+Nap_nod_high = Nap_ais_high
+Nap_nod_def = Nap_ais_def
+Nap_nod = Nap_nod_def
+Nap_nod_norm_def = Nap_nod_def/Nap_nod_low
+Nap_nod_norm = Nap_nod/Nap_nod_low
+Nap_nod_low_norm = Nap_nod_low/Nap_nod_low
+Nap_nod_high_norm = Nap_nod_high/Nap_nod_low
+
+Nap_end_low = 1e-6
+Nap_end_high = 100
+Nap_end_def = 1e-1
+Nap_end = Nap_end_def
+Nap_end_norm_def = Nap_end_def/Nap_end_low
+Nap_end_norm = Nap_end/Nap_end_low
+Nap_end_low_norm = Nap_end_low/Nap_end_low
+Nap_end_high_norm = Nap_end_high/Nap_end_low
+// ---------------------------------------------------------------------------------
+
+
+// -------------------------Potassium channels--------------------------------------
+// Potassium channel expression. Units pS/cm2.
+Kv1_so_low = 0.001
+Kv1_so_high = 1000
+Kv1_so_def = 100
+Kv1_so = Kv1_so_def
+Kv1_so_norm_def = Kv1_so_def/Kv1_so_low
+Kv1_so_norm = Kv1_so/Kv1_so_low
+Kv1_so_low_norm = Kv1_so_low/Kv1_so_low
+Kv1_so_high_norm = Kv1_so_high/Kv1_so_low
+
+Kv1_prox_low = 0.001
+Kv1_prox_high = 5000
+Kv1_prox_def = 200
+Kv1_prox = Kv1_prox_def
+Kv1_prox_norm_def = Kv1_prox_def/Kv1_prox_low
+Kv1_prox_norm = Kv1_prox/Kv1_prox_low
+Kv1_prox_low_norm = Kv1_prox_low/Kv1_prox_low
+Kv1_prox_high_norm = Kv1_prox_high/Kv1_prox_low
+
+Kv1_ais_low = 0.001
+Kv1_ais_high = 10000
+Kv1_ais_def = 3000
+Kv1_ais = Kv1_ais_def
+Kv1_ais_norm_def = Kv1_ais_def/Kv1_ais_low
+Kv1_ais_norm = Kv1_ais/Kv1_ais_low
+Kv1_ais_low_norm = Kv1_ais_low/Kv1_ais_low
+Kv1_ais_high_norm = Kv1_ais_high/Kv1_ais_low
+
+Kv1_int_low = 0.001
+Kv1_int_high = 10000
+Kv1_int_def = 2000
+Kv1_int = Kv1_int_def
+Kv1_int_norm_def = Kv1_int_def/Kv1_int_low
+Kv1_int_norm = Kv1_int/Kv1_int_low
+Kv1_int_low_norm = Kv1_int_low/Kv1_int_low
+Kv1_int_high_norm = Kv1_int_high/Kv1_int_low
+
+Kv1_nod_low = Kv1_ais_low
+Kv1_nod_high = Kv1_ais_high
+Kv1_nod_def = 400
+Kv1_nod = Kv1_nod_def
+Kv1_nod_norm_def = Kv1_nod_def/Kv1_nod_low
+Kv1_nod_norm = Kv1_nod/Kv1_nod_low
+Kv1_nod_norm_low = Kv1_nod_low/Kv1_nod_low
+Kv1_nod_norm_high = Kv1_nod_high/Kv1_nod_low
+
+Kv1_end_low = 0.001
+Kv1_end_high = Kv1_nod_high
+Kv1_end_def = 600
+Kv1_end = Kv1_end_def
+Kv1_end_norm_def = Kv1_end_def/Kv1_end_low
+Kv1_end_norm = Kv1_end/Kv1_end_low
+Kv1_end_norm_low = Kv1_end_low/Kv1_end_low
+Kv1_end_norm_high = Kv1_end_high/Kv1_end_low
+
+Kv1_col_low = 0.001
+Kv1_col_high = 2000
+Kv1_col_def = 300
+Kv1_col = Kv1_col_def
+Kv1_col_norm_def = Kv1_col_def/Kv1_col_low
+Kv1_col_norm = Kv1_col/Kv1_col_low
+Kv1_col_norm_low = Kv1_col_low/Kv1_col_low
+Kv1_col_norm_high = Kv1_col_high/Kv1_col_low
+
+// also known as Kv_slow
+Kv_so_low = 0.001
+Kv_so_high = 1000
+Kv_so_def = 25
+Kv_so = Kv_so_def
+Kv_so_norm_def = Kv_so_def/Kv_so_low
+Kv_so_norm = Kv_so/Kv_so_low
+Kv_so_norm_low = Kv_so_low/Kv_so_low
+Kv_so_norm_high = Kv_so_high/Kv_so_low
+
+Kv7_de_low = 0.001
+Kv7_de_high = 100
+Kv7_de_def = 15
+Kv7_de = Kv7_de_def
+Kv7_de_norm_def = Kv7_de_def/Kv7_de_low
+Kv7_de_norm = Kv7_de/Kv7_de_low
+Kv7_de_norm_low = Kv7_de_low/Kv7_de_low
+Kv7_de_norm_high = Kv7_de_high/Kv7_de_low
+
+Kv7_so_low = 0.001
+Kv7_so_high = 100
+Kv7_so_def = 25
+Kv7_so = Kv7_so_def
+Kv7_so_norm_def = Kv7_so_def/Kv7_so_low
+Kv7_so_norm = Kv7_so/Kv7_so_low
+Kv7_so_norm_low = Kv7_so_low/Kv7_so_low
+Kv7_so_norm_high = Kv7_so_high/Kv7_so_low
+
+Kv7_prox_low = 0.001
+Kv7_prox_high = 500
+Kv7_prox_def = 120
+Kv7_prox = Kv7_prox_def
+Kv7_prox_norm_def = Kv7_prox_def/Kv7_prox_low
+Kv7_prox_norm = Kv7_prox/Kv7_prox_low
+Kv7_prox_norm_low = Kv7_prox_low/Kv7_prox_low
+Kv7_prox_norm_high = Kv7_prox_high/Kv7_prox_low
+
+Kv7_ais_low = 0.001
+Kv7_ais_high = 1000
+Kv7_ais_def = 160
+Kv7_ais = Kv7_ais_def
+Kv7_ais_norm_def = Kv7_ais_def/Kv7_ais_low
+Kv7_ais_norm = Kv7_ais/Kv7_ais_low
+Kv7_ais_norm_low = Kv7_ais_low/Kv7_ais_low
+Kv7_ais_norm_high = Kv7_ais_high/Kv7_ais_low
+
+Kv7_int_low = 0.001
+Kv7_int_high = 100
+Kv7_int_def = 5
+Kv7_int = Kv7_int_def
+Kv7_int_norm_def = Kv7_int_def/Kv7_int_low
+Kv7_int_norm = Kv7_int/Kv7_int_low
+Kv7_int_norm_low = Kv7_int_low/Kv7_int_low
+Kv7_int_norm_high = Kv7_int_high/Kv7_int_low
+
+Kv7_nod_low = Kv7_ais_low
+Kv7_nod_high = Kv7_ais_high
+Kv7_nod_def = 160
+Kv7_nod = Kv7_nod_def
+Kv7_nod_low = Kv7_ais_low
+Kv7_nod_norm_def = Kv7_nod_def/Kv7_nod_low
+Kv7_nod_norm = Kv7_nod/Kv7_nod_low
+Kv7_nod_norm_low = Kv7_nod_low/Kv7_nod_low
+Kv7_nod_norm_high = Kv7_nod_high/Kv7_nod_low
+
+Kv7_end_low = 0.001
+Kv7_end_high = 1000
+Kv7_end_def = 5
+Kv7_end = Kv7_end_def
+Kv7_end_norm_def = Kv7_end_def/Kv7_end_low
+Kv7_end_norm = Kv7_end/Kv7_end_low
+Kv7_end_norm_low = Kv7_end_low/Kv7_end_low
+Kv7_end_norm_high = Kv7_end_high/Kv7_end_low
+
+Kv7_col_low = 0.001
+Kv7_col_high = 100
+Kv7_col_def = 5
+Kv7_col = Kv7_col_def
+Kv7_col_norm_def = Kv7_col_def/Kv7_col_low
+Kv7_col_norm = Kv7_col/Kv7_col_low
+Kv7_col_norm_low = Kv7_col_low/Kv7_col_low
+Kv7_col_norm_high = Kv7_col_high/Kv7_col_low
+
+KCa_low = 0.001
+KCa_high = 100
+KCa_def = 2
+KCa = KCa_def
+KCa_norm_def = KCa_def/KCa_low
+KCa_norm = KCa/KCa_low
+KCa_norm_low = KCa_low/KCa_low
+KCa_norm_high = KCa_high/KCa_low
+// ---------------------------------------------------------------------------------
+
+
+// ---------------------------Calcium channels--------------------------------------
+// Calcium channel expression. Units pS/cm2.
+Ca_low = 0.001
+Ca_high = 100
+Ca_def = 3
+Ca = Ca_def
+Ca_norm_def = Ca_def/Ca_low
+Ca_norm = Ca/Ca_low
+Ca_norm_low = Ca_low/Ca_low
+Ca_norm_high = Ca_high/Ca_low
+
+It2_low = Ca_low
+It2_high = Ca_high
+It2_def = Ca_def
+It2 = It2_def
+It2_norm_def = It2_def/It2_low
+It2_norm = It2/It2_low
+It2_norm_low = It2_low/It2_low
+It2_norm_high = It2_high/It2_low
+// ---------------------------------------------------------------------------------
+
+
+// ------------------------------H channels-----------------------------------------
+H_so_def = 1e-4
+H_so = H_so_def
+H_so_low = 1e-6
+H_so_high = 1e-2
+H_so_norm_def = H_so_def/H_so_low
+H_so_norm = H_so/H_so_low
+H_so_norm_low = H_so_low/H_so_low
+H_so_norm_high = H_so_high/H_so_low
+
+H_ax_def = 1e-4
+H_ax = H_ax_def
+H_ax_low = H_so_low
+H_ax_high = H_so_high
+H_ax_norm_def = H_ax_def/H_ax_low
+H_ax_norm = H_so/H_ax_low
+H_ax_norm_low = H_ax_low/H_ax_low
+H_ax_norm_high = H_ax_high/H_ax_low
+// ---------------------------------------------------------------------------------
+
+
+// ---------------------------Misc constants----------------------------------------
+// Constants for linear distribution of dendritic Na and exponential distribution 
+// of Kv and Kv1 (Keren et al 2009, JPhysiol, 587:1413-37), and exponential 
+// distribution of H (Kole et al 2006).
+tauh = 3e-3
+lc_Na_de = 200
+lc_Kv_Kv1_de = 200
+
+vShift_na = 12
+vShift_nais = 12
+vShift_nax = 12
+
+vShift_inact_na = 10
+vShift_inact_nais = 10
+vShift_inact_nax_def = 10
+vShift_kv1ax_def = 10
+vShift_inact_kv1ax_def = -15
+
+maxrate_na = 8000
+maxrate_nais = 8000
+maxrate_nax = 8000
+
+// fixed to 23, but adjusted for to temprec = celsius in relevant mod files
+temp_na = 23
+temp_nais = 23
+temp_nax = 23
+
+q10_na = 2.3
+q10_nais = 2.3
+q10_nax = 2.3
+
+q10h_na = 2.3
+q10h_nais = 2.3
+q10h_nax = 2.3
+
+// preAIS_border_percentage (prior to large rise in Na and K channel expression) determined according to
+// Battefeld et al. (2014), Hamada and Kole (2015), and Hamada et al. (2016). Midpoint percentage 
+// (midpoint of sigmoid) for AIS distributions of Na based on Battefeld et al. (2014),
+// similar to Hallerman et al. (2012). Kv1 according to Kole and Stuart (2012), similar to Hallerman et al.
+// (2012). Kv7, Battefeld et al. (2014).
+preAIS_border_percentage = 0.1
+Nais_midpoint_percentage = 0.3
+Kv1_ais_midpoint_percentage = 0.4
+Kv7_ais_midpoint_percentage = 0.5
+
+// For AIS sigmoidal distributions (see setparam distions())
+proc defAISpts() {
+
+	total_ais_length = 0
+	forsec AIS total_ais_length += getdist(secname(), 0, secname(), 1)
+	
+	preAIS_border = preAIS_border_percentage * total_ais_length
+	Nais_midpoint = Nais_midpoint_percentage * total_ais_length
+	Kv1_ais_midpoint = Kv1_ais_midpoint_percentage * total_ais_length
+	Kv7_ais_midpoint = Kv7_ais_midpoint_percentage * total_ais_length
+}
+defAISpts()
+
+// ---------------------------------------------------------------------------------
+
+
+// ------------------------------doargs---------------------------------------------
+// Decide whether a parameter should be a fit variable (in a given simulation type)
+if (mode == 1) {
+	
+	Ri_doarg = 0
+	rpa_doarg = 0
+	parafact_doarg = 0
+	Rm_doarg = 0
+	Rmy_doarg = 0
+	Cm_doarg = 0
+	Cmy_doarg = 0
+	Cpip_doarg = 0
+	RmN_doarg = 0
+	RmA_doarg = 0
+	RmI_doarg = 0
+	RiA_doarg = 0
+	per_int_doarg = 0
+	exp_doarg = 0
+}
+
+Na_so_doarg = 1
+Na_prox_doarg = 1
+Na_ais_doarg = 1
+Na_int_doarg = 1
+Na_nod_doarg = 1
+Na_end_doarg = 1
+Na_col_doarg = 1
+
+Nap_ais_doarg = 1
+Nap_int_doarg = 1
+Nap_nod_doarg = 1
+Nap_end_doarg = 1
+
+Kv1_so_doarg = 1
+Kv1_prox_doarg = 1
+Kv1_ais_doarg = 1
+Kv1_int_doarg = 1
+Kv1_nod_doarg = 1
+Kv1_end_doarg = 1
+Kv1_col_doarg = 1
+
+Kv_so_doarg = 1
+
+Kv7_de_doarg = 1
+Kv7_so_doarg = 1
+Kv7_prox_doarg = 1
+Kv7_ais_doarg = 1
+Kv7_int_doarg = 1
+Kv7_nod_doarg = 1
+Kv7_end_doarg = 1
+Kv7_col_doarg = 1
+
+KCa_doarg = 1
+
+Ca_doarg = 1
+It2_doarg = 1
+
+H_so_doarg = 1
+H_ax_doarg = 1
+// ---------------------------------------------------------------------------------
+
+
+// ------------------------------uselogs---------------------------------------------
+// uselog refers to whether a parameter will be optimized in logspace.
+Na_so_uselog = 1
+Na_prox_uselog = 1
+Na_ais_uselog = 1
+Na_int_uselog = 1
+Na_nod_uselog = 1
+Na_end_uselog = 1
+Na_col_uselog = 1
+
+Nap_ais_uselog = 1
+Nap_int_uselog = 1
+Nap_nod_uselog = 1
+Nap_end_uselog = 1
+
+Kv1_so_uselog = 1
+Kv1_prox_uselog = 1
+Kv1_ais_uselog = 1
+Kv1_int_uselog = 1
+Kv1_nod_uselog = 1
+Kv1_end_uselog = 1
+Kv1_col_uselog = 1
+
+Kv_so_uselog = 1
+
+Kv7_de_uselog = 1
+Kv7_so_uselog = 1
+Kv7_prox_uselog = 1
+Kv7_ais_uselog = 1
+Kv7_int_uselog = 1
+Kv7_nod_uselog = 1
+Kv7_end_uselog = 1
+Kv7_col_uselog = 1
+
+KCa_uselog = 1
+
+Ca_uselog = 1
+It2_uselog = 1
+
+H_so_uselog = 1
+H_ax_uselog = 1
+// ---------------------------------------------------------------------------------
+
+
+// --------------------------Simulation order---------------------------------------
+// For determining integration method. default is 0. 1 and 2 also available.
+// Check NEURON documentation for details.
+order = 0
+// ---------------------------------------------------------------------------------
+
+
+// ----------------------------initperint-------------------------------------------
+proc initperint() {local nint, k
+
+	nint = crintlist()
+
+	for k = 1, nint {
+		
+		sprint(tempstr, "%s%d%s", "Rmy_", k, "_def = Rmy_def")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Rmy_", k, " = Rmy")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Rmy_", k, "_low = Rmy_low")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Rmy_", k, "_high = Rmy_high")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Rmy_", k, "_norm_def = Rmy_norm_def")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Rmy_", k, "_norm = Rmy_norm")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Rmy_", k, "_low_norm = Rmy_low_norm")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Rmy_", k, "_high_norm = Rmy_high_norm")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Rmy_", k, "_doarg = 1")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Rmy_", k, "_uselog = 1")
+		execute(tempstr)
+
+		sprint(tempstr, "%s%d%s", "Cmy_", k, "_def = Cmy_def")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Cmy_", k, " = Cmy")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Cmy_", k, "_low = Cmy_low")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Cmy_", k, "_high = Cmy_high")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Cmy_", k, "_norm_def = Cmy_norm_def")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Cmy_", k, "_norm = Cmy_norm")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Cmy_", k, "_low_norm = Cmy_low_norm")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Cmy_", k, "_high_norm = Cmy_high_norm")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Cmy_", k, "_doarg = 1")
+		execute(tempstr)
+		sprint(tempstr, "%s%d%s", "Cmy_", k, "_uselog = 1")
+		execute(tempstr)
+	}
+
+	tempstr = ""
+}
+// ---------------------------------------------------------------------------------
+
+if (per_int_doarg) initperint()
+// ---------------------------------------------------------------------------------

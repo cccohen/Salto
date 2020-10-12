@@ -1,0 +1,102 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+// apply sps defined in defsps
+proc setsps() {local iNseg, seg, l, pos
+
+	// get number of spines
+	nsp = (lbas_sp + lapic_sp)*dens_sp
+
+	// get total sp area
+	asp_tot = nsp*asp
+
+	// Define sps = spinescale
+	sps = (abas_sp + aapic_sp + asp_tot)/(abas_sp + aapic_sp)
+	
+	forsec basal {
+
+		iNseg = nseg
+		for seg = 1,iNseg {
+			soma distance(0, 0.5)
+			l = distance((2*seg-1)/(2*iNseg))
+			if (l > distbas_sp) {
+				
+				g_pas((2*seg-1)/(2*iNseg)) *= sps
+				cm((2*seg-1)/(2*iNseg)) *= sps
+
+				if (mode == 1) {
+
+					gbar_na((2*seg-1)/(2*iNseg)) *= sps
+					gbar_kv1((2*seg-1)/(2*iNseg)) *= sps
+					gbar_kv7((2*seg-1)/(2*iNseg)) *= sps
+					gbar_kv((2*seg-1)/(2*iNseg)) *= sps
+					gbar_ca((2*seg-1)/(2*iNseg)) *= sps
+					gbar_it2((2*seg-1)/(2*iNseg)) *= sps
+					gbar_ih((2*seg-1)/(2*iNseg)) *= sps
+				}
+			}
+		}
+	}
+
+	forsec apical {
+
+		ifsec aptrunk {
+
+			iNseg = nseg
+			for seg = 1,iNseg {
+				
+				soma distance(0, 0.5)
+				l = distance((2*seg-1)/(2*iNseg))
+				
+				if (l > distaptrunk_sp) {
+				
+					g_pas((2*seg-1)/(2*iNseg)) *= sps
+					cm((2*seg-1)/(2*iNseg)) *= sps
+
+					if (mode == 1) {
+
+						gbar_na((2*seg-1)/(2*iNseg)) *= sps
+						gbar_kv1((2*seg-1)/(2*iNseg)) *= sps
+						gbar_kv7((2*seg-1)/(2*iNseg)) *= sps
+						gbar_kv((2*seg-1)/(2*iNseg)) *= sps
+						gbar_ca((2*seg-1)/(2*iNseg)) *= sps
+						gbar_it2((2*seg-1)/(2*iNseg)) *= sps
+						gbar_ih((2*seg-1)/(2*iNseg)) *= sps
+					}
+				}
+			}
+		}
+
+		ifsec xaptrunk {
+
+			iNseg = nseg
+			for seg = 1,iNseg {
+				
+				soma distance(0, 0.5)
+				l = distance((2*seg-1)/(2*iNseg))
+				
+				if (l > distapic_sp) {
+				
+					g_pas((2*seg-1)/(2*iNseg)) *= sps
+					cm((2*seg-1)/(2*iNseg)) *= sps
+
+					if (mode == 1) {
+
+						gbar_na((2*seg-1)/(2*iNseg)) *= sps
+						gbar_kv1((2*seg-1)/(2*iNseg)) *= sps
+						gbar_kv7((2*seg-1)/(2*iNseg)) *= sps
+						gbar_kv((2*seg-1)/(2*iNseg)) *= sps
+						gbar_ca((2*seg-1)/(2*iNseg)) *= sps
+						gbar_it2((2*seg-1)/(2*iNseg)) *= sps
+						gbar_ih((2*seg-1)/(2*iNseg)) *= sps
+					}					
+				}
+			}
+		}
+	}
+}

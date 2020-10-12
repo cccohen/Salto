@@ -1,0 +1,154 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+// average spine density in apical and basal compartments.
+// may depende on species and cell type or location.
+// L5tt, mouse, S1, dens_sp = 0.45 (Knott et al. 2006)
+// L5tt, rat, V1, dens_sp = 1.65 (Larkman 1991)	
+// L5tt, rat, S1, dens_sp = 0.5 (age-adjusted, Romand et al. 2011)
+dens_sp = 0.5
+
+// avg surface area of avg spine. 
+// L2/3, mouse, S1, asp = 0.99 (Knott et al. 2006)
+// L2/3, human, TeAC, asp = 3.9 (Eyal et al 2016)
+// L5tt, mouse, S1, asp = 1.44 (Knott et al. 2006)
+asp = 2
+
+// dependence of spine location from soma
+// L2/3, rat, V1, basal/oblique 20um, apical trunk 75um (Larkman 1991)
+// L2/3, human, TeAC, basal/oblique 60um, apical trunk 100 um (Benavides-Piccione et al. 2013)
+// L5tt, rat, V1, basal/oblique 20um, apical trunk 100um (Larkman 1991)
+distbas_sp = 20
+distapic_sp = 20
+distaptrunk_sp = 100
+	
+// Get basal and apical length and area to which spinescaling applies.
+lbas_sp = 0
+lapic_sp = 0
+
+abas_sp = 0
+aapic_sp = 0
+
+// for the remainder of apical after removal of trunk
+objref xaptrunk
+
+proc defsps() {local iNseg, seg, l, lsec
+	
+	// get applicable abas
+	forsec basal {
+		
+		iNseg = nseg
+		for seg = 1, iNseg {
+			soma distance(0, 0.5)
+			l = distance((2*seg-1)/(2*iNseg))
+			if (l > distbas_sp) {
+				abas_sp += area((2*seg-1)/(2*iNseg))
+			}
+		}
+	}
+
+	// get applicable lbas
+	forsec basal {
+		
+		iNseg = nseg
+		for seg = 1,iNseg {
+			soma distance(0, 0.5)
+			l = distance((2*seg-1)/(2*iNseg))
+			if (l > distbas_sp) {
+				seg = iNseg
+				lsec = distance((2*seg-1)/(2*iNseg))
+				lbas_sp += lsec - l
+			}
+		}
+	}
+
+	// ensure aptrunk is at least 100 um
+	ltrunk = 0
+	forsec aptrunk ltrunk += L
+	if (ltrunk < distaptrunk_sp) print "apical trunk SectionList too short. Consider reducing distaptrunk_sp."
+
+	// create sectionlist ex-aptrunk
+	xaptrunk = new SectionList()
+	forsec apical xaptrunk.append()
+	forsec aptrunk xaptrunk.remove()
+
+	if (ltrunk >= distaptrunk_sp) {
+
+		// get applicable abas
+		forsec apical {
+				
+			ifsec aptrunk {
+
+				iNseg = nseg
+				for seg = 1,iNseg {
+				
+					soma distance(0, 0.5)
+					l = distance((2*seg-1)/(2*iNseg))
+				
+					if (l > distaptrunk_sp) {
+						aapic_sp += area((2*seg-1)/(2*iNseg))
+					}
+				}
+			}
+
+				
+			ifsec xaptrunk {
+
+				iNseg = nseg
+				for seg = 1,iNseg {
+					
+					soma distance(0, 0.5)
+					l = distance((2*seg-1)/(2*iNseg))				
+					
+					if (l > distapic_sp) {
+						aapic_sp += area((2*seg-1)/(2*iNseg))
+					}
+				}
+			}
+		}
+
+
+		// get applicable lapic
+		forsec apical {
+
+			ifsec aptrunk {
+
+				iNseg = nseg
+				for seg = 1,iNseg {
+				
+					soma distance(0, 0.5)
+					l = distance((2*seg-1)/(2*iNseg))
+				
+					if (l > distaptrunk_sp) {
+				
+						seg = iNseg
+						lsec = distance((2*seg-1)/(2*iNseg))
+						lapic_sp += lsec - l
+					}
+				}
+			}
+
+			
+			ifsec xaptrunk {
+
+				iNseg = nseg
+				for seg = 1,iNseg {
+				
+					soma distance(0, 0.5)
+					l = distance((2*seg-1)/(2*iNseg))
+				
+					if (l > distapic_sp) {
+						seg = iNseg
+						lsec = distance((2*seg-1)/(2*iNseg))
+						lapic_sp += lsec - l
+					}
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,693 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+// -------------------------------Variables----------------------------------------
+objref parambox, miscbox
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------setparam----------------------------------------
+// initial parameter distribution. see setmy() and setsps()
+proc setparam() {local BB, k, m
+
+	forall {
+
+		secondorder = order
+		celsius = temprec
+		insert pas e_pas = v_init
+	}
+
+	forsec cellular {
+
+		Ra = Ri_norm * Ri_low
+		g_pas = 1/(Rm_norm * Rm_low)
+		cm = Cm_norm * Cm_low
+	}
+
+	forsec praxonal {
+
+		if (DC || DCPARA) {
+
+			if (!issection("internodal")) {
+
+	 			insert extracellular
+
+					xraxial[0] = rext
+					xg[0] = 1/Rext
+					xc[0] = Cext
+
+					e_extracellular = eext
+			}
+		}
+	}
+
+	forsec internodal {
+			
+		if (DC || DCPARA) {
+
+			insert extracellular
+			
+				xraxial[0] = rpa_norm * rpa_low
+				xg[0] = 1/(Rmy_norm * Rmy_low)
+				xc[0] = Cmy_norm * Cmy_low
+
+				if (DCPARA) ifsec paranodal xraxial[0] *= parafact_norm * parafact_low
+		}
+
+		if (SC) {
+		
+			g_pas = 1/((Rm_norm * Rm_low) + (Rmy_norm * Rmy_low))
+			cm = (Cm_norm * Cm_low * Cmy_norm * Cmy_low)/((Cm_norm * Cm_low) + (Cmy_norm * Cmy_low))
+		}
+
+		if (exp_doarg) {
+
+			if (SC) {
+
+				g_pas = 1/((Rm_norm * Rm_low) + (Rm_norm * 20 * Rmy_low))
+				cm = (Cm_norm * Cm_low * (Cm_norm/20) * Cm_low)/((Cm_norm * Cm_low) + ((Cm_norm/20) * Cm_low))
+			}
+		}
+	}
+
+	if (RmN_doarg) {
+
+		forsec nodal g_pas = 1/(RmN_norm * RmN_low)
+	}
+
+	if (RmA_doarg) {
+
+		forsec praxonal g_pas = 1/(RmA_norm * RmA_low)
+
+		if (SC) forsec internodal g_pas = 1/((RmA_norm * RmA_low) + (Rmy_norm * Rmy_low))
+	}
+
+	if (RmI_doarg) {
+
+		if (SC) {
+
+			forsec internodal g_pas = 1/((RmI_norm * RmI_low) + (Rmy_norm * Rmy_low))
+		}
+	}
+
+	if (RiA_doarg) {
+
+		forsec praxonal Ra = RiA_norm * RiA_low
+	}
+
+	if (per_int_doarg) {
+
+		if (SC) {
+
+			for k = 0, intlist.count-1 {
+
+				for m = 0, intlist.o(k).size-1 {
+
+					axon[intlist.o(k).x[m]] {
+
+						sprint(tempstr, "%s%d%s%d%s", "~g_pas = 1/((Rm_norm * Rm_low) + (Rmy_", k+1, "_norm * Rmy_", k+1, "_low))")
+						execute(tempstr)
+
+						sprint(tempstr, "%s%d%s%d%s%d%s%d%s", "~cm = (Cm_norm * Cm_low * Cmy_", k+1, "_norm * Cmy_", k+1, "_low)/((Cm_norm * Cm_low) + (Cmy_", k+1, "_norm * Cmy_", k+1, "_low))")
+						execute(tempstr)
+					}
+				}
+			}
+		}
+
+		tempstr = ""
+	}
+
+	if (has_data) {
+
+		for BB = 0, BBvec.size-1 {
+
+			forsec piplist.o(BB) {
+
+				Ra = BBvec.x[BB]/(sum_Aj/pipL)
+				g_pas = 1/Rpip
+				cm = Cpip
+			}
+		}
+
+		forsec piplist.o(0) cm = Cpip_norm * Cpip_low
+	}
+
+	if (mode == 1) setions()		
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ---------------------------------setnp------------------------------------------
+// takes mode
+// sets number of to-be-optimized parameters for given simulation setup
+func setnp() {local np
+
+	np = 0
+
+	if ($1 == 0) {
+	
+		// start with Ri, Rm and Cm
+		np = 3
+		// add Rmy and Cmy if axon is myelinated
+		if (axontype > 1 && !per_int_doarg) {
+
+			np += 2
+
+		} else if (axontype > 1 && per_int_doarg) {
+
+			np += 2*intlist.count
+		}
+		// add rpa if extracellular
+		if (axontype > 2) np += 1
+		// add Cpip for injecting pipette (1), if has_data
+		if (has_data) np += 1
+		// add parafact, if applicable
+		if (axontype == 4) np += 1
+		// add RmN, if applicable
+		np += RmN_doarg	
+		// add RmA, if applicable
+		np += RmA_doarg
+		// add RmI, if applicable
+		np += RmI_doarg		
+		// add RiA, if applicable
+		np += RiA_doarg		
+
+	} else if ($1 == 1) {
+
+		np = setnp(0) + 32
+	}
+
+	return np
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------setpname-----------------------------------------
+proc setpname() {local k, tempnum
+
+	crveclist(setnp(mode), pnamelist)
+		
+	pnamelist.o(0).label("Ri")
+	pnamelist.o(1).label("Rm")
+	pnamelist.o(2).label("Cm")
+
+	getaxontype(0)
+
+	if (axontype > 1) {
+
+		if (!per_int_doarg) {
+
+			pnamelist.o(3).label("Rmy")
+			pnamelist.o(4).label("Cmy")
+
+		} else {
+
+			for k = 0, intlist.count-1 {
+
+				sprint(tempstr, "%s%d", "Rmy_", k+1)
+				pnamelist.o(3+2*k).label(tempstr)
+				
+				sprint(tempstr, "%s%d", "Cmy_", k+1)
+				pnamelist.o(3+2*k+1).label(tempstr)
+			}
+		}
+	}
+
+	if (axontype > 2 && !per_int_doarg) {
+
+		pnamelist.o(5).label("rpa")
+		if (axontype == 4) pnamelist.o(6).label("parafact")
+	
+	} else if (axontype > 2 && per_int_doarg) {
+
+		pnamelist.o(6+intlist.count-1).label("rpa")
+		if (axontype == 4) pnamelist.o(6+intlist.count).label("parafact")
+	}
+
+	tempnum = setnp(0)
+	setnp(mode)
+	if (RmN_doarg) pnamelist.o(tempnum-2).label("RmN")
+	if (RmA_doarg) pnamelist.o(tempnum-2).label("RmA")
+	if (RmI_doarg) pnamelist.o(tempnum-2).label("RmI")
+	if (RmI_doarg && RmN_doarg) {
+		pnamelist.o(tempnum-3).label("RmI")
+		pnamelist.o(tempnum-2).label("RmN")
+	}
+	if (RiA_doarg) pnamelist.o(tempnum-2).label("RiA")
+	if (has_data) pnamelist.o(tempnum-1).label("Cpip")
+
+	if ($1 == 1) {
+
+		// selected for SOAX and axbleb_exists
+		pnamelist.o(0+tempnum).label("Na_so")
+		pnamelist.o(1+tempnum).label("Na_prox")
+		// selected for SOAX and axbleb_exists
+		pnamelist.o(2+tempnum).label("Na_ais")
+		// selected for SOAX and axbleb_exists
+		pnamelist.o(3+tempnum).label("Na_int")
+		// selected for SOAX and axbleb_exists
+		pnamelist.o(4+tempnum).label("Na_nod")
+		// selected for SOAX and axbleb_exists
+		pnamelist.o(5+tempnum).label("Na_end")
+		pnamelist.o(6+tempnum).label("Na_col")
+		
+		pnamelist.o(7+tempnum).label("Nap_ais")
+		pnamelist.o(8+tempnum).label("Nap_int")
+		pnamelist.o(9+tempnum).label("Nap_nod")
+		pnamelist.o(10+tempnum).label("Nap_end")
+		
+		// selected for SOAX and axbleb_exists
+		pnamelist.o(11+tempnum).label("Kv1_so")
+		pnamelist.o(12+tempnum).label("Kv1_prox")
+		// selected for SOAX and axbleb_exists
+		pnamelist.o(13+tempnum).label("Kv1_ais")
+		// selected for SOAX and axbleb_exists
+		pnamelist.o(14+tempnum).label("Kv1_int")
+		// selected for SOAX and axbleb_exists
+		pnamelist.o(15+tempnum).label("Kv1_nod")
+		// selected for SOAX and axbleb_exists
+		pnamelist.o(16+tempnum).label("Kv1_end")
+		pnamelist.o(17+tempnum).label("Kv1_col")
+		
+		pnamelist.o(18+tempnum).label("Kv_so")
+		
+		pnamelist.o(19+tempnum).label("Kv7_de")
+		pnamelist.o(20+tempnum).label("Kv7_so")
+		pnamelist.o(21+tempnum).label("Kv7_prox")
+		pnamelist.o(22+tempnum).label("Kv7_ais")
+		pnamelist.o(23+tempnum).label("Kv7_int")
+		pnamelist.o(24+tempnum).label("Kv7_nod")
+		pnamelist.o(25+tempnum).label("Kv7_end")
+		pnamelist.o(26+tempnum).label("Kv7_col")
+
+		pnamelist.o(27+tempnum).label("KCa")
+		
+		pnamelist.o(28+tempnum).label("Ca")
+		pnamelist.o(29+tempnum).label("It2")
+
+		pnamelist.o(30+tempnum).label("H_so")
+		pnamelist.o(31+tempnum).label("H_ax")
+	}
+
+	tempstr = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------setpnorm-----------------------------------------
+proc setpnorm() {
+	
+	sprint(format, "%s%s", "%s%s%s", maxform)
+	sprint(tempstr, format, "~", pnamelist.o($1).label, "_norm=", $2)
+	execute(tempstr)
+	tempstr = ""
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ------------------------------setparampanel-------------------------------------
+proc setparampanel() {local k, height
+
+	if (has_data) {
+	
+		parambox = new VBox(3,1)
+		parambox.intercept(1)
+		xpanel("", 1)
+		xlabel("Non-normalized (display only)")
+		xpanel()
+
+		for k = 0, pnamelist.count-1 {
+			
+			xpanel("", 1)
+			xpvalue(pnamelist.o(k).label, &pvec.x[k], 1, "", 0, 1)
+			xpanel()
+		}
+		
+		parambox.intercept(0)
+		parambox.map("Parameters", 1384.9, 724, 234.24, 288)
+
+	} else {
+
+		parambox = new VBox(3,1)
+		parambox.intercept(1)
+		xpanel("", 1)
+		xlabel("Parameters")
+		xpanel()
+
+		for k = 0, pnamelist.count-1 {
+			
+			xpanel("", 1)
+			sprint(commstr, "%s%d%s%d%s%d%s", "updpnorm(pvec.x[", k, "]/plowvec.x[", k, "], ", k, ")")
+			xpvalue(pnamelist.o(k).label, &pvec.x[k], 1, commstr, 0, 1)
+			xpanel()
+		}
+		
+		parambox.intercept(0)
+
+		if (mode == 0) {
+			height = 288
+		} else {
+			height = 553.92
+		}
+
+		parambox.map("Parameters", 1288, 110, 234.24, height)
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc updpnorm() {local p, i
+
+	// if feeding pnorm'vec
+	if (argtype(1) == 1) {
+
+		// if feeding a pnorm'vec with known range to update pnormvec with
+		// looks like: pnorm'vec, range_low, range_high
+		if (numarg() == 3) {
+
+			for p = $2, $3 setpnorm(p, $o1.x[p])
+
+		// update all pnormvec with pnorm'vec
+		} else {
+
+			for p = 0, $o1.size-1 setpnorm(p, $o1.x[p])
+		}
+	
+	// feeding a number, or a comma separated list of numbers, that are pnorm's, that must
+	// start from the beginning of pnormvec, because that order will be updated.
+	} else if (argtype(1) == 0) {
+
+		// the first number corresponds to one pnorm', and the second to the address within pnorm'vec to update
+		if (numarg() == 2) {
+
+			setpnorm($2, $1)
+
+		} else {
+
+			for i = 1, numarg() setpnorm(i-1, $i)
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// update non-normalized params p with any pnorm vector
+proc updp() {local p
+
+	if (argtype(1) == 1) {
+
+		if (numarg() == 1) {
+
+			for p = 0, $o1.size-1 pvec.x[p] = $o1.x[p] * plowvec.x[p]
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// inserts all ions and sets uniformly distributed ones
+// non-uniformly distributed ones are set up in distions
+proc setions() {
+
+	forsec apical {
+
+		// non-uniformly distributed
+		insert na
+		insert kv1
+		insert kv
+		insert ih
+		
+		// uniformly distributed
+		insert kv7 gbar_kv7 = Kv7_de_norm * Kv7_de_low
+		insert kca gbar_kca = KCa_norm * KCa_low
+		insert ca gbar_ca = Ca_norm * Ca_low
+		insert it2 gbar_it2 = It2_norm * It2_low
+	}
+
+	forsec basal {
+
+		// non-uniformly distributed
+		insert na
+		insert kv1
+		insert kv
+		insert ih
+
+		// uniformly distributed
+		insert kv7 gbar_kv7 = Kv7_de_norm * Kv7_de_low
+		insert kca gbar_kca = KCa_norm * KCa_low
+		insert ca gbar_ca = Ca_norm * Ca_low
+		insert it2 gbar_it2 = It2_norm * It2_low
+	}
+
+	forsec somatic {
+
+		insert na gbar_na = Na_so_norm * Na_so_low
+		insert kv1 gbar_kv1 = Kv1_so_norm * Kv1_so_low
+		insert kv gbar_kv = Kv_so_norm * Kv_so_low
+		insert kv7 gbar_kv7 = Kv7_so_norm * Kv7_so_low
+		insert kca gbar_kca = KCa_norm * KCa_low
+		insert ca gbar_ca = Ca_norm * Ca_low
+		insert it2 gbar_it2 = It2_norm * It2_low
+		insert ih gbar_ih = H_so_norm * H_so_low
+	}
+
+	forsec AIS {
+
+		// sigmoidally distributed
+		insert nais
+		insert kv1ax
+		insert kv7
+		
+		// uniformly distributed (within each subcompartment)
+		insert na
+		insert nap
+		insert kv1
+		insert kv
+		insert kca gbar_kca = KCa_norm * KCa_low
+		insert ca gbar_ca = Ca_norm * Ca_low				
+		insert it2 gbar_it2 = It2_norm * It2_low
+		insert ih		
+	}
+
+	forsec internodal {
+
+		if (DCPARA) {
+
+			ifsec paranodal {
+
+				insert nax gbar_nax = 0
+				insert nap gbar_nap = 0
+				insert kv1ax gbar_kv1ax = 0
+				insert kv7 gbar_kv7 = 0
+				insert kca gbar_kca = 0
+				insert ca gbar_ca = 0
+				insert it2 gbar_it2 = 0
+				insert ih gbar_ih = 0
+			}
+
+			ifsec interparanodal {
+
+				insert nax gbar_nax = Na_int_norm * Na_int_low
+				insert nap gbar_nap = Nap_int_norm * Nap_int_low
+				insert kv1ax gbar_kv1ax = Kv1_int_norm * Kv1_int_low
+				insert kv7 gbar_kv7 = Kv7_int_norm * Kv7_int_low
+				insert kca gbar_kca = KCa_norm * KCa_low
+				insert ca gbar_ca = Ca_norm * Ca_low
+				insert it2 gbar_it2 = It2_norm * It2_low
+				insert ih gbar_ih = H_ax_norm * H_ax_low
+			}
+		
+		} else {
+
+			insert nax gbar_nax = Na_int_norm * Na_int_low
+			insert nap gbar_nap = Nap_int_norm * Nap_int_low
+			insert kv1ax gbar_kv1ax = Kv1_int_norm * Kv1_int_low
+			insert kv7 gbar_kv7 = Kv7_int_norm * Kv7_int_low
+			insert kca gbar_kca = KCa_norm * KCa_low
+			insert ca gbar_ca = Ca_norm * Ca_low
+			insert it2 gbar_it2 = It2_norm * It2_low
+			insert ih gbar_ih = H_ax_norm * H_ax_low
+		}
+	}
+
+	forsec nodal {
+
+		insert nax gbar_nax = Na_nod_norm * Na_nod_low
+		insert nap gbar_nap = Nap_nod_norm * Nap_nod_low
+		insert kv1ax gbar_kv1ax = Kv1_nod_norm * Kv1_nod_low
+		insert kv7 gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
+		insert kca gbar_kca = KCa_norm * KCa_low
+		insert ca gbar_ca = Ca_norm * Ca_low
+		insert it2 gbar_it2 = It2_norm * It2_low
+		insert ih gbar_ih = H_ax_norm * H_ax_low
+	}
+
+	if (axbleb_exists) {
+
+		forsec axbleb {
+
+			insert nax gbar_nax = Na_end_norm * Na_end_low
+			insert nap gbar_nap = Nap_end_norm * Nap_end_low
+			insert kv1ax gbar_kv1ax = Kv1_end_norm * Kv1_end_low
+			insert kv7 gbar_kv7 = Kv7_end_norm * Kv7_end_low
+			insert kca gbar_kca = KCa_norm * KCa_low
+			insert ca gbar_ca = Ca_norm * Ca_low
+			insert it2 gbar_it2 = It2_norm * It2_low
+			insert ih gbar_ih = H_ax_norm * H_ax_low
+		}
+	}
+
+	forsec collateral {
+
+		insert nax gbar_nax = Na_col_norm * Na_col_low
+		insert kv1ax gbar_kv1ax = Kv1_col_norm * Kv1_col_low
+		insert kv7 gbar_kv7 = Kv7_col_norm * Kv7_col_low
+		insert kca gbar_kca = KCa_norm * KCa_low
+		insert ca gbar_ca = Ca_norm * Ca_low
+		insert it2 gbar_it2 = It2_norm * It2_low
+		insert ih gbar_ih = H_ax_norm * H_ax_low
+	}
+
+	// cell-wide ionic mechanisms and constants
+	forsec cellular {
+
+		ena = 55
+		ek = -85
+		eh = -45
+		eca = 140
+		ion_style("ca_ion",0,1,0,0,0)
+
+		// Layer 5 LVA Ca constants
+		vh1_it2 = 56
+		vh2_it2 = 415
+		ah_it2 = 30
+		v12m_it2 = 45
+		v12h_it2 = 65
+		am_it2 = 3
+		vm1_it2 = 50
+		vm2_it2 = 125
+
+		// Ca-sensitivity of KCa channel
+		caix_kca = 0.7
+		// activation rate KCa
+		Ra_kca = 1
+		// inactivation rate KCa
+		Rb_kca = 2.5
+		// calcium extrusion rate, in ms
+		taur_cad = 80
+	}
+	
+	distions()
+}
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------distions-----------------------------------------
+// Distance-dependent distributions for dendritic Ih (Kole et al 2006), Na, Kv 
+// and Kv1 (Keren et al., 2009, JPhysiol and Stuart, Schiller and Sakmann, 1997).
+// built with section numbers that (roughly) increase from the soma out.
+proc distions() {local seg, pos, dist localobj tempvec
+
+	forsec apical {
+
+		for seg = 1, nseg {
+
+			pos = (2*seg-1)/(2*nseg)
+			dist = getdist("soma", 0.5, secname(), pos)
+
+			gbar_na(pos) = (Na_so_norm * Na_so_low) * exp(-dist/lc_Na_de)
+			
+			gbar_kv1(pos) = (Kv1_so_norm * Kv1_so_low) * exp(-dist/lc_Kv_Kv1_de)
+			gbar_kv(pos) = (Kv_so_norm * Kv_so_low) * exp(-dist/lc_Kv_Kv1_de)
+			
+			gbar_ih(pos) = H_so_norm * H_so_low * exp(tauh * dist)
+		}
+	}
+
+	forsec basal {
+		
+		for seg = 1, nseg {
+
+			pos = (2*seg-1)/(2*nseg)
+			dist = getdist("soma", 0.5, secname(), pos)
+
+			gbar_na(pos) = (Na_so_norm * Na_so_low) * exp(-dist/lc_Na_de)
+			
+			gbar_kv1(pos) = (Kv1_so_norm * Kv1_so_low) * exp(-dist/lc_Kv_Kv1_de)
+			gbar_kv(pos) = (Kv_so_norm * Kv_so_low) * exp(-dist/lc_Kv_Kv1_de)
+			
+			gbar_ih(pos) = H_so_norm * H_so_low * exp(tauh * dist)
+		}
+	}
+
+	forsec AIS {
+	// Assumes at most two AIS subsections, the preAIS and AIS proper.
+
+		for seg = 1, nseg {
+
+			pos = (2*seg-1)/(2*nseg)
+			dist = getdist("soma", 0.5, secname(), pos)
+
+			// preAIS, border dependent, dependent upon preAIS border percentage (defparam)
+			if (dist < preAIS_border) {
+
+				gbar_nais(pos) = 0
+				gbar_nap(pos) = 0
+				gbar_kv1ax(pos) = 0
+					
+				gbar_na(pos) = (Na_so_norm * Na_so_low) * exp(-dist/lc_Na_de)
+				
+				gbar_kv1(pos) = (Kv1_so_norm * Kv1_so_low) * exp(-dist/lc_Kv_Kv1_de)
+				gbar_kv(pos) = (Kv_so_norm * Kv_so_low) * exp(-dist/lc_Kv_Kv1_de)
+			
+				gbar_ih(pos) = H_so_norm * H_so_low * exp(tauh * dist)
+
+				gbar_kv7(pos) = Kv7_de_norm * Kv7_de_low
+
+			} else {
+
+				gbar_na(pos) = 0
+				gbar_kv1(pos) = 0
+				gbar_kv(pos) = 0
+				gbar_ih(pos) = H_ax_norm * H_ax_low
+				gbar_nap(pos) = Nap_ais_norm * Nap_ais_low
+
+				gbar_nais(pos) = Na_prox_norm * Na_prox_low + (Na_ais_norm * Na_ais_low - Na_prox_norm * Na_prox_low)/(1 + exp(-dist + Nais_midpoint))
+				gbar_kv1ax(pos) = Kv1_prox_norm * Kv1_prox_low + (Kv1_ais_norm * Kv1_ais_low - Kv1_prox_norm * Kv1_prox_low)/(1 + exp(-0.6 * (dist - Kv1_ais_midpoint)))
+				gbar_kv7(pos) = Kv7_prox_norm * Kv7_prox_low + (Kv7_ais_norm * Kv7_ais_low - Kv7_prox_norm * Kv7_prox_low)/(1 + exp(-dist + Kv7_ais_midpoint)^(1/5))
+			}
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ------------------------------setmiscpanel--------------------------------------
+proc setmiscpanel() {
+
+	xpanel("Misc Parameters", 0)
+	xpvalue("tauh", &tauh, 1, "", 0, 1)
+	xpvalue("lc_Na_de", &lc_Na_de, 1, "", 0, 1)
+	xpvalue("lc_Kv_Kv1_de", &lc_Kv_Kv1_de, 1, "", 0, 1)
+	xpanel(54, 773)
+}
+// --------------------------------------------------------------------------------

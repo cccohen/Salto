@@ -1,0 +1,181 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+// -------------------------------------Variables-----------------------------------------
+objref playbox, playvec, playmat, templaymat
+
+strdef playstr
+
+playvec = new Vector(iampvec.size)
+// ---------------------------------------------------------------------------------------
+
+
+
+// -------------------------------------playopt-------------------------------------------
+proc playopt() {local m localobj tempmat
+
+	while ($o2.x[$1]) {
+
+		if (!$o2.x[$1]) {
+
+			break
+
+		} else {
+
+			getiampdir($1, iampdir)
+			if (iampvec.x[$1] < float_epsilon || iampvec.x[$1] > float_epsilon) {
+				getmat(iampdir, "pmatr.dat", tempmat)
+			} else {
+				getmat(iampdir, "pmatr-all.dat", tempmat)
+			}
+			reseticlamp(iampvec.x[$1])
+
+			print "Playing simulation results from ", moddir
+			
+			for m = 0, tempmat.nrow-1 {
+
+				print "playing simulation ", m, "of ", tempmat.nrow-1, "..."
+				updfitparam(tempmat.getrow(m))
+				
+				FitnessGenerator[0].efun()
+				
+				if (!$o2.x[$1]) {
+
+					break
+				}
+			}
+
+			if (m == tempmat.nrow) $o2.x[$1] = 0
+		}
+	}
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// -------------------------------------playpmat------------------------------------------
+proc playpmat() {local m, playon
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) pmat obj"
+			print "2) iamp ind. to reset iclamp delay and duration, use seticlamp() prior to using this function."
+			print "output: plays out the given parameters with given iclamp"
+			stop
+		}
+	}
+
+	reseticlamp(iampvec.x[$2])
+
+	print "Simulation play begins:"
+
+	FitnessGenerator[0].efun()
+
+	playon = 0
+
+	while (!playon) {
+
+		for m = 0, $o1.nrow-1 {
+
+			print "playing simulation ", m, "of ", $o1.nrow-1, "..."
+			updfitparam($o1.getrow(m))
+			FitnessGenerator[0].efun()
+		}
+
+		playon = 1
+	}
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// -------------------------------------playnsave-----------------------------------------
+proc playnsave() {local m, p, pstart, pend localobj tempmat, playmat, templaymat
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) pmat file name of interest (must be normalized)."
+			print "2) iamp ind. must correspond to existing pmat saved in outdir/mod/iamp. to reset iclamp delay and duration, use seticlamp()."
+			print "3) pmat row of interest."
+			stop
+		}
+	}
+
+	getiampdir($2, iampdir)
+	getmat(iampdir, $s1, tempmat)
+
+	templaymat = new Matrix(tempmat.getrow($3).size, 1)
+	templaymat.setcol(0, tempmat.getrow($3))
+	templaymat = delzeromat(templaymat)
+
+	playmat = new Matrix(templaymat.nrow/getnp(), getnp())
+	
+	pstart = 0
+	pend = playmat.ncol-1
+
+	for m = 0, playmat.nrow-1 {
+
+		playmat.setrow(m, templaymat.getcol(0).c(pstart, pend))
+
+		pstart = pend+1
+		pend += playmat.ncol
+	}
+
+	playpmat(playmat, $2)
+	saveallerrlogmat()
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// -----------------------------------setplaypanel----------------------------------------
+proc setplaypanel() {local k
+
+	playbox = new VBox(3)
+	playbox.intercept(1)
+	
+	xpanel("")
+	xlabel("Play simulation results")
+	xpanel()
+
+	xpanel("")
+	xlabel("Select simulation amplitude:")
+
+	getmod()
+
+	for k = 0, iampvec.size-1 {
+	
+		num = setnsig(iampvec.x[k], 3)
+		
+		if (iampvec.x[k] > float_epsilon) {
+			sprint(tempstr, "%s%g%s", "+", num*1000, " pA")
+		} else if (iampvec.x[k] < -float_epsilon) {
+			sprint(tempstr, "%g%s", num*1000, " pA")
+		} else {
+			sprint(tempstr, "%g%s", num*1000, " pA")
+		}
+
+		sprint(playstr, "%s%d%s", "playopt(", k, ", playvec)")
+		xcheckbox(tempstr, &playvec.x[k], playstr)
+	}
+
+	xpanel()
+
+	xpanel("")
+	xpanel()
+
+	playbox.intercept(0)
+	playbox.map("Play Opt", 285, 634, 305.28, 331.2)
+}
+// ---------------------------------------------------------------------------------------

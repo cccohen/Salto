@@ -1,0 +1,23 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+proc setnseg() {
+
+	if (numarg() == 1 && argtype(1) == 0) {
+
+		freqm = 1/(2*PI*$1)
+
+	} else {
+
+		freqm = 1/(2*PI*mintau0)		
+	}
+
+	// maximize cellular nseg as a function of max(Ra) = Ri_high
+	forsec cellular Ra = 400
+	forall nseg = int((L/(0.1*lambda_f(5*freqm))+.9)/2)*2 + 1
+}
