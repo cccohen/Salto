@@ -1,5 +1,7 @@
 nFit v1.0
 ------------------------------------------------------------------------------------------------------------------------------
+Automated generation and optimization of neuron models
+------------------------------------------------------------------------------------------------------------------------------
 To run a model for the first time:
 	- Download and install NEURON.
 	- Import cellular morphology via getmorph.hoc.
