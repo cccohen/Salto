@@ -1,0 +1,175 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+// ------------------------------Directories---------------------------------------
+strdef root, lib, ses, out
+
+root = getcwd()
+sprint(lib, "%s%s", root, "lib/")
+sprint(ses, "%s%s", root, "ses/")
+sprint(out, "%s%s", root, "outdir/")
+// --------------------------------------------------------------------------------
+
+
+load_file("stdgui.hoc")
+chdir(lib)
+load_file("startlib.hoc")
+loadfile(ses, "morph.hoc")
+mode = getvarp(ses, "mode.dat")
+setmaxform()
+setmaxformvec()
+has_data = getvarp(ses, "has_data.dat")
+setfilestr(mode, has_data)
+loaddll()
+
+if (has_data) {
+
+	getvec(ses, iampvecfilestr, iampvec)
+	nrows = getmat(ses, vdatfilestr, vdatmat)
+	tdatvec = new Vector()
+	tdatvec.append(vdatmat.getcol(0))
+	nsigt = getnsig(tdatvec)
+	settform()
+	settformvec()
+	temprec = getvarp(ses, "temprec.dat")
+	mintau0 = getvarp(ses, "mintau0.dat")
+	getvec(ses, "BBvec.dat", BBvec)
+	createpip(nrec = getstrlist(ses, recloclistfilestr, recloclist))
+	conpip(recloclist)
+	getvec(ses, "injlist.dat", injvec)
+
+} else {
+
+	getvec(ses, iampvecfilestr, iampvec)
+	nsigt = 6
+	settform()
+	settformvec()	
+	temprec = getvarp(ses, "temprec-def.dat")
+	mintau0 = getvarp(ses, "mintau0-def.dat")
+	nrec = getstrlist(ses, recloclistfilestr, recloclist)
+}
+
+loclist2sec(recloclist, recseclist)
+load_file("defsec.hoc")
+bigsecl()
+lilsecl()
+load_file("setnseg.hoc")
+setnseg(mintau0)
+load_file("defparam.hoc")
+load_file("setparam.hoc")
+axontype = getaxontype(0)
+setparam()
+load_file("defsps.hoc")
+defsps()
+load_file("setsps.hoc")
+setsps()
+load_file("setmy.hoc")
+setmy()
+load_file("setstim.hoc")
+seticlamp()
+load_file("getparam.hoc")
+load_file("writeses.hoc")
+
+setpname(mode)
+getpdef()
+getp()
+getpnormdef()
+getpnorm()
+getplow()
+getphi()
+getdoarg()
+getuselog()
+
+steps_per_ms = getsteps()
+setdt()
+
+if (has_data) {
+
+	dt = setnsig(dt, nsigt)
+	bess = getvarp(ses, "bessfil.dat")
+	nsigv = getnsig(vdatmat.getcol(1))
+	setvform()
+	setvformvec()
+	nf = getstrlist(ses, "fitvarlist.dat", fitvarlist)
+	tstop = gettstop()
+	if ((num = iampvec.indwhere("==", stim.amp)) != -1) {
+		tol = settol(num)
+	} else {
+		tol = settol(0)
+	}
+	maxstepsize = setmaxstepsize(tol)
+
+} else {
+
+	dt = 0.01
+	bess = 100
+	nsigv = 6
+	setvform()
+	setvformvec()
+	tstop = gettstop()
+}
+
+if (!getvarp(ses, initbitfilestr)) {
+
+	writecontrol()
+	writevtplot(stim.amp)
+	writevxplot(stim.amp)
+	writeshape(stim.amp)
+	if (has_data) {
+		writemulfit()
+		if ((num = iampvec.indwhere("==", stim.amp)) != -1) writefitdata(num)
+		writefitparam()
+		// if (mode == 1) {
+		// 	writenagating()
+		// 	writemiscparam()
+		// }
+	}
+
+	writebit(ses, initbitfilestr, 1)
+}
+
+loadfile(ses, runcontrolfilestr)
+loadfile(ses, vtplotfilestr)
+loadfile(ses, vxplotfilestr)
+loadfile(ses, shapeplotfilestr)
+
+if (has_data) {
+	loadfile(ses, savedatafilestr)
+	// if (mode == 1) {
+	// 	loadfile(ses, "na_gating.ses")
+	// 	loadfile(ses, "miscparam.ses")
+	// }
+}
+
+finitialize(v_init)
+initPlot()
+setstimpanel()
+setparampanel()
+
+load_file("getfit.hoc")
+adj_injbound(mode)
+getmodeltype(mode)
+getaxontype()
+writemodeltype()
+setoptpanel()
+load_file("initp.hoc")
+initfit()
+updrfp()
+getoptsoln(solnvec)
+if (solnvec.size) {
+	if (has_data) {
+		updfitparam(solnvec)
+		getpnorm()
+	} else {
+		updpnorm(solnvec)
+		getpnorm()
+		updp(solnvec)
+	}
+}
+showdom()
+init()

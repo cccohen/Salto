@@ -1,0 +1,49 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+// ------------------------------Directories---------------------------------------
+strdef root
+root = getcwd()
+
+strdef lib, ses
+strdef cwd
+sprint(lib, "%s%s", root, "lib/")
+sprint(ses, "%s%s", root, "ses/")
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------Libraries----------------------------------------
+load_file("stdgui.hoc")
+chdir(lib)
+load_file("startlib.hoc")
+// --------------------------------------------------------------------------------
+
+
+
+strdef modqstr
+modqstr = "Compile mod files for this system?\t[y/n]\n(Mod files are required for running active and passive models, even though active mechanisms are not implemented in passive models)"
+
+ans = sred(modqstr, "y", "ny")
+
+if (ans) {
+
+	if (unix_mac_pc() == 4 || unix_mac_pc() == 1 || unix_mac_pc() == 2) {
+
+		print "\nUNIX/LINUX detected...\n"
+
+		system("ls", tempstr)
+		if ((strf.substr(tempstr, "x86_64\n")) > - 1) system("rm -rf x86_64")
+		system("nrnivmodl")
+		print "\nPlease restart the model"
+	}
+
+} else {
+
+	print "Mod files not compiled"
+}

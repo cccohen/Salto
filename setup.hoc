@@ -1,0 +1,390 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+print "nFit Setup"
+print "Simulation setup details"
+print "Run once per cell"
+
+
+// ------------------------------Directories---------------------------------------
+strdef root
+root = getcwd()
+
+strdef lib, ses
+strdef cwd
+sprint(lib, "%s%s", root, "lib/")
+sprint(ses, "%s%s", root, "ses/")
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------Libraries----------------------------------------
+load_file("stdgui.hoc")
+chdir(lib)
+load_file("startlib.hoc")
+// --------------------------------------------------------------------------------
+
+
+
+// -----------------------Import Recorded Data-------------------------------------
+print "-------------------Import Recorded Data-----------------------"
+
+// Recording temperature
+strdef tempqstr
+tempqstr = "Please enter recording temperature (C)"
+temprec = xred(tempqstr, 35.3, 0, 100)
+writenum(ses, "temprec.dat", temprec)
+
+// Bessel filter setting
+strdef bessqstr
+bessqstr = "Please enter Bessel filter (\"Vm filter\") setting on the recording amplifier (kHz)"
+bess = xred(bessqstr, 10, 1, 30)
+writenum(ses, "bessfil.dat", bess)
+
+
+// Recording locations
+objref reclocmat, recloclist
+reclocmat = new Matrix(1, 10)
+recloclist = new List()
+
+nrec = 0
+proc inputrecloc() {
+
+	if (nrec == 0) {
+
+		string_dialog("Please enter the injection/recording location. Example: soma(0.5)", tempstr)
+		
+	} else {
+
+		string_dialog("Please enter next recording section. Example: axon[10](0.5). Return blank when done.", tempstr)
+	}
+
+	if (strf.len(tempstr) > 0) {
+
+		recloclist.append(reclocmat.getcol(nrec))
+		recloclist.o(nrec).label(tempstr)
+
+		// strdef question_str
+		// strdef response_str
+
+		// sprint(question_str, "%s%s%s", "Does the recording for ", tempstr, " contain a pipette artifact?")
+
+		// string_dialog(question_str, teststr)
+
+		// if (strf.substr(teststr, "y") > -1 || strf.substr(teststr, "yes") > -1 || strf.substr(teststr, "Y") > -1 || strf.substr(teststr, "Yes") > -1 || strf.substr(teststr, "YES") > -1) {
+
+		// 	recloclist.o(nrec).x[0] = 1
+		// }
+
+		nrec += 1
+
+		inputrecloc()
+	}
+}
+inputrecloc()
+
+writestring(ses, "locstim.dat", recloclist.o(0).label)
+
+
+injvec = new Vector(nrec, 0)
+
+// for rec = 0, nrec-1 {
+
+// 	injvec.append(recloclist.o(rec).x[0])
+// }
+injvec.x[0] = 1
+savevec(ses, "injlist.dat", injvec)
+
+
+for rec = 0, nrec-1 {
+
+	if (rec == 0) {
+
+		writestring(ses, "recloclist.dat", recloclist.o(rec).label)
+
+	} else {
+
+		appendstring(ses, "recloclist.dat", recloclist.o(rec).label)
+	}
+}
+
+
+// Bridge balance of each recording pipette.
+// Pipettes will be modelled explicity to parse out their biophysical contribution.
+BBvec = new Vector(nrec, 1e6)
+
+strdef BBqstr, BBqstr_left, BBqstr_right
+BBqstr_left = "\nPlease enter bridge balance for pipette at "
+BBqstr_right = " (MOhm):"
+
+print "\nRecording pipettes will be modelled explicitly to parse their biophysical contribution out"
+
+for BB = 0, BBvec.size-1 {
+
+	sprint(BBqstr, "%s%s%s", BBqstr_left, recloclist.o(BB).label, BBqstr_right)
+
+	BBvec.x[BB] = 1e6*xred(BBqstr, 1, 1, 100)
+}
+
+savevec(ses, "BBvec.dat", BBvec)
+
+
+// Passive or active data?
+strdef modeqstr
+modeqstr = "\nDo you wish to set up passive conditions only, active conditions only, or both?\nPassive = 0\nActive = 1\nBoth = 2"
+ans = xred(modeqstr, 2, 0, 2)
+
+if (ans == 2) {
+
+	print "\nPlease import passive data:\n"
+
+	mode = 0
+	writebit(ses, "mode.dat", mode)
+	setfilestr(mode)
+	writebit(ses, "initbit-pas.dat", 0)
+
+	// delay before current injection (ms)
+	strdef idelqstr
+	idelqstr = "Please enter delay to injection start (ms):"
+	idel = xred(idelqstr, 9.375, 0, 1000)
+	writenum(ses, idelfilestr, idel)
+
+	// duration of current injection (ms)
+	strdef idurqstr
+	idurqstr = "Please enter duration of current injections (ms):"
+	idur = xred(idurqstr, 1.875, 0, 1000)
+	writenum(ses, idurfilestr, idur)
+
+	// import injection and recorded voltage data
+	importdata()
+
+	writenum(ses, "iamp-pas.dat", iampvec.x[0])
+	writebit(ses, "iiamp-pas.dat", 0)
+
+	print "\nPlease import active data:\n"
+
+	mode = 1
+	writebit(ses, "mode.dat", mode)
+	setfilestr(mode)
+	writebit(ses, "initbit-act.dat", 0)
+
+	// delay before current injection (ms)
+	strdef idelqstr
+	idelqstr = "Please enter delay to injection start (ms):"
+	idel = xred(idelqstr, 5, 0, 1000)
+	writenum(ses, idelfilestr, idel)
+
+	// duration of current injection (ms)
+	strdef idurqstr
+	idurqstr = "Please enter duration of current injections (ms):"
+	idur = xred(idurqstr, 3, 0, 1000)
+	writenum(ses, idurfilestr, idur)
+
+	// import injection amplitudes and recorded voltage
+	importdata()
+
+	writenum(ses, "iamp-act.dat", iampvec.x[0])
+	writebit(ses, "iiamp-act.dat", 0)
+
+	writebit(ses, "mode.dat", 0)
+}
+
+if (ans == 0) {
+
+	print "\nPlease import passive data:\n"
+
+	mode = 0
+	writebit(ses, "mode.dat", mode)
+	setfilestr(mode)
+	writebit(ses, "initbit-pas.dat", 0)
+
+	// delay before current injection (ms)
+	strdef idelqstr
+	idelqstr = "Please enter delay to injection start (ms):"
+	idel = xred(idelqstr, 9.375, 0, 1000)
+	writenum(ses, idelfilestr, idel)
+
+	// duration of current injection (ms)
+	strdef idurqstr
+	idurqstr = "Please enter duration of current injections (ms):"
+	idur = xred(idurqstr, 1.875, 0, 1000)
+	writenum(ses, idurfilestr, idur)
+
+	// import injection amplitudes and recorded voltage
+	importdata()
+
+	writenum(ses, "iamp-pas.dat", iampvec.x[0])
+	writebit(ses, "iiamp-pas.dat", 0)
+}
+
+if (ans == 1) {
+
+	print "\nPlease import active data:\n"
+
+	mode = 1
+	writebit(ses, "mode.dat", 1)
+	setfilestr(mode)
+	writebit(ses, "initbit-act.dat", 0)
+
+	// delay before current injection (ms)
+	strdef idelqstr
+	idelqstr = "Please enter delay to injection start (ms):"
+	idel = xred(idelqstr, 5, 0, 1000)
+	writenum(ses, idelfilestr, idel)
+
+	// duration of current injection (ms)
+	strdef idurqstr
+	idurqstr = "Please enter duration of current injections (ms):"
+	idur = xred(idurqstr, 3, 0, 1000)
+	writenum(ses, idurfilestr, idur)
+
+	// import injection amplitudes and recorded voltage
+	importdata()
+
+	writenum(ses, "iamp-act.dat", iampvec.x[0])
+	writebit(ses, "iiamp-act.dat", 0)	
+}
+writebit(ses, "resetbit.dat", 0)
+// --------------------------------------------------------------------------------
+
+
+
+// ---------------------------Simulation Setup-------------------------------------
+print "-------------------Simulation Setup----------------------"
+
+// create voltage fit variables from recording locations
+strdef locstr, sublocstr
+
+objref sublocvec, locmat, loclist
+sublocvec = new Vector()
+subloc = 0
+locmat = new Matrix(1, nrec)
+loclist = new List()
+
+for rec = 0, nrec-1 {
+	
+	// get recloc including section array and sublocation
+	if (strf.substr(recloclist.o(rec).label, "(") > -1 && strf.substr(recloclist.o(rec).label, ")")) {
+
+		// recloc including section array
+		strf.head(recloclist.o(rec).label, "[(]", locstr)
+		loclist.append(locmat.getcol(rec))
+		loclist.o(rec).label(locstr)
+
+		// sublocation
+		strf.tail(recloclist.o(rec).label, "[(]", sublocstr)
+		strf.head(sublocstr, "[)]", sublocstr)
+
+		// sscan sublocstr into subloc
+		sscanf(sublocstr, "%g", &subloc)
+
+		// append subloc into sublocvec
+		if (subloc >= 0 && subloc <= 1) {
+
+			sublocvec.append(subloc)
+		
+		} else {
+
+			// in case sublocation badly specified
+			sublocvec.append(0.5)			
+		}
+
+	} else {
+
+		// in case no sublocation is specified
+		print "Error: please include sublocation (0-1) for recording section ", recloclist.o(rec).label
+	}
+}
+
+// create fit variables list
+objref fitvarmat, fitvarlist
+fitvarmat = new Matrix(1, nrec)
+fitvarlist = new List()
+
+print "The following fit variables have been created:"
+
+for rec = 0, nrec-1 {
+
+	fitvarlist.append(fitvarmat.getcol(rec))
+	sprint(tempstr, "%s%s%g%s", loclist.o(rec).label, ".v(", sublocvec.x[rec], ")")
+	fitvarlist.o(rec).label(tempstr)
+
+	print fitvarlist.o(rec).label
+
+	if (rec == 0) {
+
+		writestring(ses, "fitvarlist.dat", fitvarlist.o(rec).label)
+	
+	} else {
+
+		appendstring(ses, "fitvarlist.dat", fitvarlist.o(rec).label)
+	}
+}
+
+
+// Define axon type
+strdef axonqstr
+axonqstr = "\nPlease select an initial axon type:\n1 = no myelin\n2 = single cable\n3 = double cable without paranodes\n4 = double cable with paranodes\n"
+axontype = xred(axonqstr, 4, 1, 5)
+
+writebit(ses, "axontype.dat", axontype)
+
+if (axontype > 1) {
+
+	strdef grqstr
+	grqstr = "\nPlease enter expected g ratio:"
+	gr = xred(grqstr, 0.7, 0.001, 0.999)
+	writenum(ses, "gr.dat", gr)
+
+	strdef mintnodqstr
+	mintnodqstr = "\nPlease enter minimum expected internode to node length ratio:"
+	mintnod = xred(mintnodqstr, 10, 2, 100)
+	writenum(ses, "mintnod.dat", mintnod)
+
+	strdef paranodqstr
+	paranodqstr = "\nPlease indicate whether paranodes are included in the morphological reconstruction (1/0):"
+	paranod = xred(paranodqstr, 1, 0, 1)
+	writebit(ses, "paranod.dat", paranod)
+}
+
+strdef mintauqstr
+mintauqstr = "\nPlease enter minimum expected tau_m across recording locations (ms):\n(Used for setting nseg via d_lambda rule)\n"
+mintau0 = (1e-3)*xred(mintauqstr, 1, 1e-3, 1e3)
+writenum(ses, "mintau0.dat", mintau0)
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------Mod file compilation-----------------------------------
+strdef modqstr
+modqstr = "\nDo you wish to compile mod files for your system now?\t[y/n]\nMod files are required for running active and passive models (even though active mechanisms are not implemented in passive models)."
+
+ans = sred(modqstr, "y", "ny")
+
+if (ans) {
+
+	chdir(lib)
+
+	if (unix_mac_pc() == 4 || unix_mac_pc() == 1 || unix_mac_pc() == 2) {
+
+		print "\nUNIX/LINUX detected...\n"
+
+		system("ls", tempstr)
+		if ((strf.substr(tempstr, "x86_64\n")) > - 1) system("rm -r x86_64")
+		system("nrnivmodl")
+	}
+
+} else {
+
+	print "Mod files not compiled"
+}
+// --------------------------------------------------------------------------------
+print "\n---------------------End Setup---------------------------"
+// --------------------------------------------------------------------------------
+
+print "\nYou may now open the model with openmodel.hoc"

@@ -1,0 +1,26 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+// ------------------------------Directories---------------------------------------
+strdef root
+root = getcwd()
+
+strdef lib, ses
+strdef cwd
+sprint(lib, "%s%s", root, "lib/")
+sprint(ses, "%s%s", root, "ses/")
+// --------------------------------------------------------------------------------
+
+
+load_file("stdgui.hoc")
+chdir(ses)
+load_file("morph.hoc")
+load_file("shapebox.hoc")
+makeMenuExplore()
+
+print "Please take note of the following on the recording location(s):\n--> Section name\n--> Array number (if applicable)\n--> Section sublocation (0-1)\n--> Close NEURON\n--> Run setup.hoc"

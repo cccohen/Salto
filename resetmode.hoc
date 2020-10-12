@@ -1,0 +1,80 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+// ------------------------------Directories---------------------------------------
+strdef root
+root = getcwd()
+
+strdef lib, ses
+strdef cwd
+sprint(lib, "%s%s", root, "lib/")
+sprint(ses, "%s%s", root, "ses/")
+// --------------------------------------------------------------------------------
+
+
+
+// -------------------------------Libraries----------------------------------------
+load_file("stdgui.hoc")
+chdir(lib)
+load_file("startlib.hoc")
+loadfile(ses, "morph.hoc")
+has_data = getvar(ses, "has_data.dat")
+load_file("setstim.hoc")
+// --------------------------------------------------------------------------------
+
+
+
+print "\nReset Mode to Active or Passive"
+
+mode = getvar(ses, "mode.dat")
+
+strdef modeqstr, sesqstr
+modeqstr = "\nEnter 0 for changing to Passive, 1 for Active [0/1]"
+
+if (mode == 0) {
+
+	print "\nCurrent mode = Passive (0)"
+	ans = xred(modeqstr, 1, 0, 1)
+
+	if (ans == 0) {
+
+		print "Mode unchanged"
+	
+	} else if (ans == 1) {
+
+		print "\nChanging mode to Active...\n"
+		mode = 1
+		writebit(ses, "mode.dat", mode)
+		print "Mode changed to Active"
+	}
+
+} else if (mode == 1) {
+
+	print "\nCurrent mode = Active (1)"
+	ans = xred(modeqstr, 0, 0, 1)
+
+	if (ans == 1) {
+
+		print "Mode unchanged"
+
+	} else if (ans == 0) {
+
+		print "\nChanging mode to Passive...\n"
+		mode = 0
+		writebit(ses, "mode.dat", mode)
+		print "Mode changed to Passive"
+	}
+}
+
+
+print "\nPlease confirm starting IClamp:\n"
+setfilestr(mode, has_data)
+getvec(ses, iampvecfilestr, iampvec)
+changeiclamp()
+
+print "\nYou may now restart the model"

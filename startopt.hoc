@@ -1,0 +1,14 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+load_file("openmodel.hoc")
+load_file("genopt.hoc")
+setgen()
+parac = new ParallelContext()
+parac.runworker()
+parallex(0, 0)
