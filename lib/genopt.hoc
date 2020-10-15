@@ -48,23 +48,23 @@ proc setgen() {local p, tempnum
 			// Na_so
 			genvec.append(tempnum+0)
 			// Na_ais
-			genvec.append(tempnum+2)
-			// Na_int
 			genvec.append(tempnum+3)
-			// Na_nod
+			// Na_int
 			genvec.append(tempnum+4)
-			// Na_end
+			// Na_nod
 			genvec.append(tempnum+5)
+			// Na_end
+			genvec.append(tempnum+6)
 			// Kv1_so
-			genvec.append(tempnum+11)
+			genvec.append(tempnum+12)
 			// Kv1_ais
-			genvec.append(tempnum+13)
-			// Kv1_int
-			genvec.append(tempnum+14)
-			// Kv1_nod
 			genvec.append(tempnum+15)
-			// Kv1_end
+			// Kv1_int
 			genvec.append(tempnum+16)
+			// Kv1_nod
+			genvec.append(tempnum+17)
+			// Kv1_end
+			genvec.append(tempnum+18)
 		}
 	}
 	
@@ -179,7 +179,7 @@ proc optimizem() {local p, f, k, tsim, tempnum localobj svec, vvec, boundvec, te
 		strdef tsimstr, iampsimstr
 		tsim = setnsig(time/3600, 3)
 		sprint(tsimstr, "%g", tsim)
-		getiamp($1, iampsimstr)		
+		getiamp($1, iampsimstr)
 		// error and parameter logging
 		// error vec from errloglist is resized to accomodate the new resultant errors (+nf+1)
 		$o8.resize($o8.size+nf+1)
@@ -590,11 +590,7 @@ proc serpack() {local p, f, k, kstart, kend, indi, istart, scount, setind
 		for k = 0, nrows-1 vmat.x[k][istart*nf*(scount+1)+nf*indi+f] = $o5.x[kstart+k]
 	}
 	// emat: individual errors in cols 0,nf-1
-	for f = 0, nf-1 emat.x[setind][f] = $o6.x[$o6.size-1+$o6.x[$o6.size-1]+f]
-	// add total error at col nf
-	emat.x[setind][nf] = $o6.x[$o6.size-1+$o6.x[$o6.size-1]+nf]
-	// add tol at col nf+1
-	emat.x[setind][nf+1] = $o6.x[$o6.size-1-1]
+	for f = 0, nf+1 emat.x[setind][f] = $o6.x[$o6.size+$o6.x[$o6.size-1]-1+f]
 }
 // ---------------------------------------------------------------------------------------
 
@@ -1511,7 +1507,7 @@ proc parallex() {local k, sim, p, q, f, istart, upstart, qstart, qend, scount, s
 
 			// what emerges from each call to func genopt, i.e. +1 for each call.
 			scounter += parac.retval
-			// this is the hoc_ac_ sent by genopt
+			// this is the hoc_ac_ sent by genopt through optimizem and then data_out
 			parac.take(jobi)
 			// ind AKA sim
 			indi = parac.upkscalar()
@@ -1537,13 +1533,9 @@ proc parallex() {local k, sim, p, q, f, istart, upstart, qstart, qend, scount, s
 			}
 			// errloglist
 			errloglist.o(setind).resize(errlogvecout.size)
-			for q = 0, errlogvecout.size-1 errloglist.o(setind).x[q] = errlogvecout.x[q]
+			for q = 0, errloglist.o(setind).size-1 errloglist.o(setind).x[q] = errlogvecout.x[q]
 			// emat: individual errors in cols 0,nf-1
-			for f = 0, nf-1 emat.x[setind][f] = errlogvecout.x[errlogvecout.size+errlogvecout.x[errlogvecout.size-1]-nf+f]
-			// add total error at col nf
-			emat.x[setind][nf] = errlogvecout.x[errlogvecout.size+errlogvecout.x[errlogvecout.size-1]]
-			// add tol at col nf+1
-			emat.x[setind][nf+1] = errlogvecout.x[errlogvecout.size-1-1]
+			for f = 0, nf+1 emat.x[setind][f] = errloglist.o(setind).x[errloglist.o(setind).size+errloglist.o(setind).x[errlogvecout.size-1]-1+f]
 			// paramquadlist
 			paramquadlist.o(setind).resize(paramquadvecout.size)
 			for q = 0, paramquadvecout.size-1 paramquadlist.o(setind).x[q] = paramquadvecout.x[q]

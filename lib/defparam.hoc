@@ -288,6 +288,15 @@ Na_so_norm = Na_so/Na_so_low
 Na_so_low_norm = Na_so_low/Na_so_low
 Na_so_high_norm = Na_so_high/Na_so_low
 
+lc_Na_de_low = 100
+lc_Na_de_high = 400
+lc_Na_de_def = 200
+lc_Na_de = lc_Na_de_def
+lc_Na_de_norm_def = lc_Na_de_def/lc_Na_de_low
+lc_Na_de_norm = lc_Na_de/lc_Na_de_low
+lc_Na_de_low_norm = lc_Na_de_low/lc_Na_de_low
+lc_Na_de_high_norm = lc_Na_de_high/lc_Na_de_low
+
 Na_prox_low = 0.001
 Na_prox_high = 25000
 Na_prox_def = 1000
@@ -390,6 +399,15 @@ Kv1_so_norm_def = Kv1_so_def/Kv1_so_low
 Kv1_so_norm = Kv1_so/Kv1_so_low
 Kv1_so_low_norm = Kv1_so_low/Kv1_so_low
 Kv1_so_high_norm = Kv1_so_high/Kv1_so_low
+
+lc_Kv_Kv1_de_low = 100
+lc_Kv_Kv1_de_high = 400
+lc_Kv_Kv1_de_def = 200
+lc_Kv_Kv1_de = lc_Kv_Kv1_de_def
+lc_Kv_Kv1_de_norm_def = lc_Kv_Kv1_de_def/lc_Kv_Kv1_de_low
+lc_Kv_Kv1_de_norm = lc_Kv_Kv1_de/lc_Kv_Kv1_de_low
+lc_Kv_Kv1_de_low_norm = lc_Kv_Kv1_de_low/lc_Kv_Kv1_de_low
+lc_Kv_Kv1_de_high_norm = lc_Kv_Kv1_de_high/lc_Kv_Kv1_de_low
 
 Kv1_prox_low = 0.001
 Kv1_prox_high = 5000
@@ -587,8 +605,6 @@ H_ax_norm_high = H_ax_high/H_ax_low
 // of Kv and Kv1 (Keren et al 2009, JPhysiol, 587:1413-37), and exponential 
 // distribution of H (Kole et al 2006).
 tauh = 3e-3
-lc_Na_de = 200
-lc_Kv_Kv1_de = 200
 
 vShift_na = 12
 vShift_nais = 12
@@ -664,6 +680,7 @@ if (mode == 1) {
 }
 
 Na_so_doarg = 1
+lc_Na_de_doarg = 1
 Na_prox_doarg = 1
 Na_ais_doarg = 1
 Na_int_doarg = 1
@@ -677,6 +694,7 @@ Nap_nod_doarg = 1
 Nap_end_doarg = 1
 
 Kv1_so_doarg = 1
+lc_Kv_Kv1_de_doarg = 1
 Kv1_prox_doarg = 1
 Kv1_ais_doarg = 1
 Kv1_int_doarg = 1
@@ -708,6 +726,7 @@ H_ax_doarg = 1
 // ------------------------------uselogs---------------------------------------------
 // uselog refers to whether a parameter will be optimized in logspace.
 Na_so_uselog = 1
+lc_Na_de_uselog = 1
 Na_prox_uselog = 1
 Na_ais_uselog = 1
 Na_int_uselog = 1
@@ -721,6 +740,7 @@ Nap_nod_uselog = 1
 Nap_end_uselog = 1
 
 Kv1_so_uselog = 1
+lc_Kv_Kv1_de_uselog = 1
 Kv1_prox_uselog = 1
 Kv1_ais_uselog = 1
 Kv1_int_uselog = 1

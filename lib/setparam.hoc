@@ -182,7 +182,7 @@ func setnp() {local np
 
 	} else if ($1 == 1) {
 
-		np = setnp(0) + 32
+		np = setnp(0) + 34
 	}
 
 	return np
@@ -249,53 +249,55 @@ proc setpname() {local k, tempnum
 
 		// selected for SOAX and axbleb_exists
 		pnamelist.o(0+tempnum).label("Na_so")
-		pnamelist.o(1+tempnum).label("Na_prox")
+		pnamelist.o(1+tempnum).label("lc_Na_de")
+		pnamelist.o(2+tempnum).label("Na_prox")
 		// selected for SOAX and axbleb_exists
-		pnamelist.o(2+tempnum).label("Na_ais")
+		pnamelist.o(3+tempnum).label("Na_ais")
 		// selected for SOAX and axbleb_exists
-		pnamelist.o(3+tempnum).label("Na_int")
+		pnamelist.o(4+tempnum).label("Na_int")
 		// selected for SOAX and axbleb_exists
-		pnamelist.o(4+tempnum).label("Na_nod")
+		pnamelist.o(5+tempnum).label("Na_nod")
 		// selected for SOAX and axbleb_exists
-		pnamelist.o(5+tempnum).label("Na_end")
-		pnamelist.o(6+tempnum).label("Na_col")
+		pnamelist.o(6+tempnum).label("Na_end")
+		pnamelist.o(7+tempnum).label("Na_col")
 		
-		pnamelist.o(7+tempnum).label("Nap_ais")
-		pnamelist.o(8+tempnum).label("Nap_int")
-		pnamelist.o(9+tempnum).label("Nap_nod")
-		pnamelist.o(10+tempnum).label("Nap_end")
+		pnamelist.o(8+tempnum).label("Nap_ais")
+		pnamelist.o(9+tempnum).label("Nap_int")
+		pnamelist.o(10+tempnum).label("Nap_nod")
+		pnamelist.o(11+tempnum).label("Nap_end")
 		
 		// selected for SOAX and axbleb_exists
-		pnamelist.o(11+tempnum).label("Kv1_so")
-		pnamelist.o(12+tempnum).label("Kv1_prox")
+		pnamelist.o(12+tempnum).label("Kv1_so")
+		pnamelist.o(13+tempnum).label("lc_Kv_Kv1_de")
+		pnamelist.o(14+tempnum).label("Kv1_prox")
 		// selected for SOAX and axbleb_exists
-		pnamelist.o(13+tempnum).label("Kv1_ais")
+		pnamelist.o(15+tempnum).label("Kv1_ais")
 		// selected for SOAX and axbleb_exists
-		pnamelist.o(14+tempnum).label("Kv1_int")
+		pnamelist.o(16+tempnum).label("Kv1_int")
 		// selected for SOAX and axbleb_exists
-		pnamelist.o(15+tempnum).label("Kv1_nod")
+		pnamelist.o(17+tempnum).label("Kv1_nod")
 		// selected for SOAX and axbleb_exists
-		pnamelist.o(16+tempnum).label("Kv1_end")
-		pnamelist.o(17+tempnum).label("Kv1_col")
+		pnamelist.o(18+tempnum).label("Kv1_end")
+		pnamelist.o(19+tempnum).label("Kv1_col")
 		
-		pnamelist.o(18+tempnum).label("Kv_so")
+		pnamelist.o(20+tempnum).label("Kv_so")
 		
-		pnamelist.o(19+tempnum).label("Kv7_de")
-		pnamelist.o(20+tempnum).label("Kv7_so")
-		pnamelist.o(21+tempnum).label("Kv7_prox")
-		pnamelist.o(22+tempnum).label("Kv7_ais")
-		pnamelist.o(23+tempnum).label("Kv7_int")
-		pnamelist.o(24+tempnum).label("Kv7_nod")
-		pnamelist.o(25+tempnum).label("Kv7_end")
-		pnamelist.o(26+tempnum).label("Kv7_col")
+		pnamelist.o(21+tempnum).label("Kv7_de")
+		pnamelist.o(22+tempnum).label("Kv7_so")
+		pnamelist.o(23+tempnum).label("Kv7_prox")
+		pnamelist.o(24+tempnum).label("Kv7_ais")
+		pnamelist.o(25+tempnum).label("Kv7_int")
+		pnamelist.o(26+tempnum).label("Kv7_nod")
+		pnamelist.o(27+tempnum).label("Kv7_end")
+		pnamelist.o(28+tempnum).label("Kv7_col")
 
-		pnamelist.o(27+tempnum).label("KCa")
+		pnamelist.o(29+tempnum).label("KCa")
 		
-		pnamelist.o(28+tempnum).label("Ca")
-		pnamelist.o(29+tempnum).label("It2")
+		pnamelist.o(30+tempnum).label("Ca")
+		pnamelist.o(31+tempnum).label("It2")
 
-		pnamelist.o(30+tempnum).label("H_so")
-		pnamelist.o(31+tempnum).label("H_ax")
+		pnamelist.o(32+tempnum).label("H_so")
+		pnamelist.o(33+tempnum).label("H_ax")
 	}
 
 	tempstr = ""
@@ -613,10 +615,10 @@ proc distions() {local seg, pos, dist localobj tempvec
 			pos = (2*seg-1)/(2*nseg)
 			dist = getdist("soma", 0.5, secname(), pos)
 
-			gbar_na(pos) = (Na_so_norm * Na_so_low) * exp(-dist/lc_Na_de)
+			gbar_na(pos) = (Na_so_norm * Na_so_low) * exp(-dist/(lc_Na_de_norm * lc_Na_de_low))
 			
-			gbar_kv1(pos) = (Kv1_so_norm * Kv1_so_low) * exp(-dist/lc_Kv_Kv1_de)
-			gbar_kv(pos) = (Kv_so_norm * Kv_so_low) * exp(-dist/lc_Kv_Kv1_de)
+			gbar_kv1(pos) = (Kv1_so_norm * Kv1_so_low) * exp(-dist/(lc_Kv_Kv1_de_norm * lc_Kv_Kv1_de_low))
+			gbar_kv(pos) = (Kv_so_norm * Kv_so_low) * exp(-dist/(lc_Kv_Kv1_de_norm * lc_Kv_Kv1_de_low))
 			
 			gbar_ih(pos) = H_so_norm * H_so_low * exp(tauh * dist)
 		}
@@ -629,10 +631,10 @@ proc distions() {local seg, pos, dist localobj tempvec
 			pos = (2*seg-1)/(2*nseg)
 			dist = getdist("soma", 0.5, secname(), pos)
 
-			gbar_na(pos) = (Na_so_norm * Na_so_low) * exp(-dist/lc_Na_de)
+			gbar_na(pos) = (Na_so_norm * Na_so_low) * exp(-dist/(lc_Na_de_norm * lc_Na_de_low))
 			
-			gbar_kv1(pos) = (Kv1_so_norm * Kv1_so_low) * exp(-dist/lc_Kv_Kv1_de)
-			gbar_kv(pos) = (Kv_so_norm * Kv_so_low) * exp(-dist/lc_Kv_Kv1_de)
+			gbar_kv1(pos) = (Kv1_so_norm * Kv1_so_low) * exp(-dist/(lc_Kv_Kv1_de_norm * lc_Kv_Kv1_de_low))
+			gbar_kv(pos) = (Kv_so_norm * Kv_so_low) * exp(-dist/(lc_Kv_Kv1_de_norm * lc_Kv_Kv1_de_low))
 			
 			gbar_ih(pos) = H_so_norm * H_so_low * exp(tauh * dist)
 		}
