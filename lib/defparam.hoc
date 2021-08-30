@@ -1,4 +1,4 @@
-// nFit
+// Salto
 // (c) Charles CH Cohen, 2014-present
 // this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
 // International license (CC BY-NC-ND 4.0, in English).
@@ -238,43 +238,6 @@ eext = 0
 // ---------------------------------------------------------------------------------
 
 
-// ------------------------------uselogs---------------------------------------------
-// uselog refers to whether a parameter will be optimized in logspace.
-Ri_uselog = 1
-rpa_uselog = 1
-parafact_uselog = 1
-Rm_uselog = 1
-Rmy_uselog = 1
-Cm_uselog = 1
-Cmy_uselog = 1
-RmN_uselog = 1
-RmA_uselog = 1
-RmI_uselog = 1
-RiA_uselog = 1
-Cpip_uselog = 1
-// ---------------------------------------------------------------------------------
-
-
-// ------------------------------doargs---------------------------------------------
-// Decide whether a parameter should be a fit variable (in a given simulation type)
-Ri_doarg = 1
-rpa_doarg = 1
-parafact_doarg = 1
-Rm_doarg = 1
-Rmy_doarg = 1
-Cm_doarg = 1
-Cmy_doarg = 1
-Cpip_doarg = 1
-RmN_doarg = 0
-RmA_doarg = 0
-RmI_doarg = 0
-RiA_doarg = 0
-per_int_doarg = 0
-exp_doarg = 0
-// ---------------------------------------------------------------------------------
-// ---------------------------------------------------------------------------------
-
-
 // -------------------------Active Parameters---------------------------------------
 
 // --------------------------Sodium channels----------------------------------------
@@ -288,9 +251,9 @@ Na_so_norm = Na_so/Na_so_low
 Na_so_low_norm = Na_so_low/Na_so_low
 Na_so_high_norm = Na_so_high/Na_so_low
 
-lc_Na_de_low = 100
-lc_Na_de_high = 400
-lc_Na_de_def = 200
+lc_Na_de_low = 20
+lc_Na_de_high = 600
+lc_Na_de_def = 100
 lc_Na_de = lc_Na_de_def
 lc_Na_de_norm_def = lc_Na_de_def/lc_Na_de_low
 lc_Na_de_norm = lc_Na_de/lc_Na_de_low
@@ -306,7 +269,7 @@ Na_prox_norm = Na_prox/Na_prox_low
 Na_prox_low_norm = Na_prox/Na_prox_low
 Na_prox_high_norm = Na_prox_high/Na_prox_low
 
-Na_ais_low = 0.001
+Na_ais_low = Na_prox_low
 Na_ais_high = 50000
 Na_ais_def = 10000
 Na_ais = Na_ais_def
@@ -400,8 +363,8 @@ Kv1_so_norm = Kv1_so/Kv1_so_low
 Kv1_so_low_norm = Kv1_so_low/Kv1_so_low
 Kv1_so_high_norm = Kv1_so_high/Kv1_so_low
 
-lc_Kv_Kv1_de_low = 100
-lc_Kv_Kv1_de_high = 400
+lc_Kv_Kv1_de_low = 20
+lc_Kv_Kv1_de_high = 600
 lc_Kv_Kv1_de_def = 200
 lc_Kv_Kv1_de = lc_Kv_Kv1_de_def
 lc_Kv_Kv1_de_norm_def = lc_Kv_Kv1_de_def/lc_Kv_Kv1_de_low
@@ -427,18 +390,27 @@ Kv1_ais_norm = Kv1_ais/Kv1_ais_low
 Kv1_ais_low_norm = Kv1_ais_low/Kv1_ais_low
 Kv1_ais_high_norm = Kv1_ais_high/Kv1_ais_low
 
+Kv1_juxta_low = 0.001
+Kv1_juxta_high = 10000
+Kv1_juxta_def = 2000
+Kv1_juxta = Kv1_juxta_def
+Kv1_juxta_norm_def = Kv1_juxta_def/Kv1_juxta_low
+Kv1_juxta_norm = Kv1_juxta/Kv1_juxta_low
+Kv1_juxta_low_norm = Kv1_juxta_low/Kv1_juxta_low
+Kv1_juxta_high_norm = Kv1_juxta_high/Kv1_juxta_low
+
 Kv1_int_low = 0.001
-Kv1_int_high = 10000
-Kv1_int_def = 2000
+Kv1_int_high = 1000
+Kv1_int_def = 400
 Kv1_int = Kv1_int_def
 Kv1_int_norm_def = Kv1_int_def/Kv1_int_low
 Kv1_int_norm = Kv1_int/Kv1_int_low
 Kv1_int_low_norm = Kv1_int_low/Kv1_int_low
 Kv1_int_high_norm = Kv1_int_high/Kv1_int_low
 
-Kv1_nod_low = Kv1_ais_low
-Kv1_nod_high = Kv1_ais_high
-Kv1_nod_def = 400
+Kv1_nod_low = 0.001
+Kv1_nod_high = 1000
+Kv1_nod_def = 200
 Kv1_nod = Kv1_nod_def
 Kv1_nod_norm_def = Kv1_nod_def/Kv1_nod_low
 Kv1_nod_norm = Kv1_nod/Kv1_nod_low
@@ -446,8 +418,8 @@ Kv1_nod_norm_low = Kv1_nod_low/Kv1_nod_low
 Kv1_nod_norm_high = Kv1_nod_high/Kv1_nod_low
 
 Kv1_end_low = 0.001
-Kv1_end_high = Kv1_nod_high
-Kv1_end_def = 600
+Kv1_end_high = 10000
+Kv1_end_def = 400
 Kv1_end = Kv1_end_def
 Kv1_end_norm_def = Kv1_end_def/Kv1_end_low
 Kv1_end_norm = Kv1_end/Kv1_end_low
@@ -455,8 +427,8 @@ Kv1_end_norm_low = Kv1_end_low/Kv1_end_low
 Kv1_end_norm_high = Kv1_end_high/Kv1_end_low
 
 Kv1_col_low = 0.001
-Kv1_col_high = 2000
-Kv1_col_def = 300
+Kv1_col_high = 1000
+Kv1_col_def = 200
 Kv1_col = Kv1_col_def
 Kv1_col_norm_def = Kv1_col_def/Kv1_col_low
 Kv1_col_norm = Kv1_col/Kv1_col_low
@@ -466,7 +438,7 @@ Kv1_col_norm_high = Kv1_col_high/Kv1_col_low
 // also known as Kv_slow
 Kv_so_low = 0.001
 Kv_so_high = 1000
-Kv_so_def = 25
+Kv_so_def = 15
 Kv_so = Kv_so_def
 Kv_so_norm_def = Kv_so_def/Kv_so_low
 Kv_so_norm = Kv_so/Kv_so_low
@@ -589,6 +561,15 @@ H_so_norm = H_so/H_so_low
 H_so_norm_low = H_so_low/H_so_low
 H_so_norm_high = H_so_high/H_so_low
 
+tc_H_de_def = 2.5e-3
+tc_H_de = tc_H_de_def
+tc_H_de_low = 1e-3
+tc_H_de_high = 8e-3
+tc_H_de_norm_def = tc_H_de_def/tc_H_de_low
+tc_H_de_norm = tc_H_de/tc_H_de_low
+tc_H_de_norm_low = tc_H_de_low/tc_H_de_low
+tc_H_de_norm_high = tc_H_de_high/tc_H_de_low
+
 H_ax_def = 1e-4
 H_ax = H_ax_def
 H_ax_low = H_so_low
@@ -601,11 +582,6 @@ H_ax_norm_high = H_ax_high/H_ax_low
 
 
 // ---------------------------Misc constants----------------------------------------
-// Constants for linear distribution of dendritic Na and exponential distribution 
-// of Kv and Kv1 (Keren et al 2009, JPhysiol, 587:1413-37), and exponential 
-// distribution of H (Kole et al 2006).
-tauh = 3e-3
-
 vShift_na = 12
 vShift_nais = 12
 vShift_nax = 12
@@ -635,11 +611,11 @@ q10h_nax = 2.3
 
 // preAIS_border_percentage (prior to large rise in Na and K channel expression) determined according to
 // Battefeld et al. (2014), Hamada and Kole (2015), and Hamada et al. (2016). Midpoint percentage 
-// (midpoint of sigmoid) for AIS distributions of Na based on Battefeld et al. (2014),
+// (midpoint of Gaussian) for AIS distributions of Na based on Battefeld et al. (2014),
 // similar to Hallerman et al. (2012). Kv1 according to Kole and Stuart (2012), similar to Hallerman et al.
 // (2012). Kv7, Battefeld et al. (2014).
 preAIS_border_percentage = 0.1
-Nais_midpoint_percentage = 0.3
+Nais_midpoint_percentage = ((1-preAIS_border_percentage)/2)+preAIS_border_percentage
 Kv1_ais_midpoint_percentage = 0.4
 Kv7_ais_midpoint_percentage = 0.5
 
@@ -651,121 +627,16 @@ proc defAISpts() {
 	
 	preAIS_border = preAIS_border_percentage * total_ais_length
 	Nais_midpoint = Nais_midpoint_percentage * total_ais_length
+	a_nais_Gaussian = 1
+	b_nais_Gaussian = Nais_midpoint_percentage * total_ais_length
+	FWHM_nais_Gaussian = (total_ais_length * (1-preAIS_border_percentage))/2
+	c_nais_Gaussian = FWHM_nais_Gaussian/(2*sqrt(2*log(2)))
+	
 	Kv1_ais_midpoint = Kv1_ais_midpoint_percentage * total_ais_length
 	Kv7_ais_midpoint = Kv7_ais_midpoint_percentage * total_ais_length
-}
-defAISpts()
-
-// ---------------------------------------------------------------------------------
-
-
-// ------------------------------doargs---------------------------------------------
-// Decide whether a parameter should be a fit variable (in a given simulation type)
-if (mode == 1) {
 	
-	Ri_doarg = 0
-	rpa_doarg = 0
-	parafact_doarg = 0
-	Rm_doarg = 0
-	Rmy_doarg = 0
-	Cm_doarg = 0
-	Cmy_doarg = 0
-	Cpip_doarg = 0
-	RmN_doarg = 0
-	RmA_doarg = 0
-	RmI_doarg = 0
-	RiA_doarg = 0
-	per_int_doarg = 0
-	exp_doarg = 0
+	ais_length = total_ais_length - preAIS_border
 }
-
-Na_so_doarg = 1
-lc_Na_de_doarg = 1
-Na_prox_doarg = 1
-Na_ais_doarg = 1
-Na_int_doarg = 1
-Na_nod_doarg = 1
-Na_end_doarg = 1
-Na_col_doarg = 1
-
-Nap_ais_doarg = 1
-Nap_int_doarg = 1
-Nap_nod_doarg = 1
-Nap_end_doarg = 1
-
-Kv1_so_doarg = 1
-lc_Kv_Kv1_de_doarg = 1
-Kv1_prox_doarg = 1
-Kv1_ais_doarg = 1
-Kv1_int_doarg = 1
-Kv1_nod_doarg = 1
-Kv1_end_doarg = 1
-Kv1_col_doarg = 1
-
-Kv_so_doarg = 1
-
-Kv7_de_doarg = 1
-Kv7_so_doarg = 1
-Kv7_prox_doarg = 1
-Kv7_ais_doarg = 1
-Kv7_int_doarg = 1
-Kv7_nod_doarg = 1
-Kv7_end_doarg = 1
-Kv7_col_doarg = 1
-
-KCa_doarg = 1
-
-Ca_doarg = 1
-It2_doarg = 1
-
-H_so_doarg = 1
-H_ax_doarg = 1
-// ---------------------------------------------------------------------------------
-
-
-// ------------------------------uselogs---------------------------------------------
-// uselog refers to whether a parameter will be optimized in logspace.
-Na_so_uselog = 1
-lc_Na_de_uselog = 1
-Na_prox_uselog = 1
-Na_ais_uselog = 1
-Na_int_uselog = 1
-Na_nod_uselog = 1
-Na_end_uselog = 1
-Na_col_uselog = 1
-
-Nap_ais_uselog = 1
-Nap_int_uselog = 1
-Nap_nod_uselog = 1
-Nap_end_uselog = 1
-
-Kv1_so_uselog = 1
-lc_Kv_Kv1_de_uselog = 1
-Kv1_prox_uselog = 1
-Kv1_ais_uselog = 1
-Kv1_int_uselog = 1
-Kv1_nod_uselog = 1
-Kv1_end_uselog = 1
-Kv1_col_uselog = 1
-
-Kv_so_uselog = 1
-
-Kv7_de_uselog = 1
-Kv7_so_uselog = 1
-Kv7_prox_uselog = 1
-Kv7_ais_uselog = 1
-Kv7_int_uselog = 1
-Kv7_nod_uselog = 1
-Kv7_end_uselog = 1
-Kv7_col_uselog = 1
-
-KCa_uselog = 1
-
-Ca_uselog = 1
-It2_uselog = 1
-
-H_so_uselog = 1
-H_ax_uselog = 1
 // ---------------------------------------------------------------------------------
 
 
@@ -777,11 +648,11 @@ order = 0
 
 
 // ----------------------------initperint-------------------------------------------
-proc initperint() {local nint, k
+proc initperint() {local numint, k
 
-	nint = crintlist()
+	numint = crintlist()
 
-	for k = 1, nint {
+	for k = 1, numint {
 		
 		sprint(tempstr, "%s%d%s", "Rmy_", k, "_def = Rmy_def")
 		execute(tempstr)
@@ -825,10 +696,5 @@ proc initperint() {local nint, k
 		sprint(tempstr, "%s%d%s", "Cmy_", k, "_uselog = 1")
 		execute(tempstr)
 	}
-
-	tempstr = ""
 }
-// ---------------------------------------------------------------------------------
-
-if (per_int_doarg) initperint()
 // ---------------------------------------------------------------------------------

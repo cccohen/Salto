@@ -1,4 +1,4 @@
-// nFit
+// Salto
 // (c) Charles CH Cohen, 2014-present
 // this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
 // International license (CC BY-NC-ND 4.0, in English).
@@ -7,28 +7,45 @@
 
 
 // -------------------------------Variables----------------------------------------
+objref paramvec, solnvec, elogvec, plogvec, nefunvec, optibox
+objref genvec, spacemat, genvec, mutmat, permvec, chkmat
+objref pmat, vvec, rangemat
+objref eqlist, pqlist
 objref boundvec, origboundlist, newboundlist, weightvec, weightmat, origweightlist, newweightlist, errlist, scalelist
-objref drand, diamvec, speedvec, graphobj, prand
+objref drand, diamvec, speedvec, graphobj, prand, krand
 
+solnvec = new Vector()
+genvec = new Vector()
+spacemat = new Matrix()
+
+elogvec = new Vector()
+plogvec = new Vector()
 nefunvec = new Vector()
-errlogvec = new Vector()
-paramquadvec = new Vector()
-allerrlogvec = new Vector()
-paramlogvec = new Vector()
 
-strdef pheader, theader, vheader, eheader, alleheader, pnnheader, varstr
+strdef pheader, eheader, vheader, varstr, plogdir, elogdir, logstr, logmatstr, outstr, esimstr, psimstr
+strdef mutstart, mutp, mutcom, mutend, mutexec
 
+nefun_ = 0
+nquad_ = 0
 fitoff = 1
-nefun = 0
-nquad = 0
-time = 0
+runtime = 0
+hourlog = 1
+chkhour = 2
+
+// number of genetic divisions into which each paramater's parameter space 
+// will be distributed.
+nd = 2
+
+esim = -1
+psim = -1
+
 newg = 0
 // --------------------------------------------------------------------------------
 
 
 
-// -------------------------------adj_injbound-------------------------------------
-// $1 = mode
+// --------------------------------------------------------------------------------
+// $1 = mode_
 proc adj_injbound() {local f, pifdelt localobj tempxvec
 
 	if (!$1) {
@@ -55,34 +72,41 @@ proc adj_injbound() {local f, pifdelt localobj tempxvec
 			}
 		}
 	}
-
-	tempstr = ""
 }
 // --------------------------------------------------------------------------------
 
 
 
-// -------------------------------adj_weight---------------------------------------
-// Places a derivative-adjusted weight scale on voltage traces.
-// should take analogue Bessel filter setting on the amplifier in kHz.
-proc adj_weight() {local points_to_adv, f, lo_bound, up_bound, indlo, indhi, k localobj tempvec, tempxvec, tempyvec, boundvec, weightvec
+// --------------------------------------------------------------------------------
+// Places a voltage derivative-adjusted weight scale on voltage traces. No arguments.
+
+proc adj_weight() {local points_to_adv, f, k, lo_bound, up_bound, indlo, indhi localobj tempvec, tempxvec, tempyvec, boundvec, weightvec
 
 	points_to_adv = 1/dt/bess
 	tempvec = new Vector()
-	tempvec.append(points_to_adv)
+	tempvec.resize(tempvec.size+1)
+	tempvec.x[tempvec.size-1] = points_to_adv
 	tempvec.floor()
-	points_to_adv = tempvec.x[0]	
+	points_to_adv = tempvec.x[tempvec.size-1]
 
 	for f = 0, nf-1 {
 
 		lo_bound = RegionFitness[f].boundary.x[0]
 		up_bound = RegionFitness[f].boundary.x[RegionFitness[f].boundary.size-1]
 
-		tempxvec = new Vector()
-		tempxvec.append(RegionFitness[f].xdat)
+		tempxvec = new Vector(RegionFitness[f].xdat.size)
+		
+		for k = 0, tempxvec.size-1 {
 
-		tempyvec = new Vector()
-		tempyvec.append(RegionFitness[f].ydat)
+			tempxvec.x[k] = RegionFitness[f].xdat.x[k]
+		}
+
+		tempyvec = new Vector(RegionFitness[f].ydat.size)
+		
+		for k = 0, tempyvec.size-1 {
+
+			tempyvec.x[k] = RegionFitness[f].ydat.x[k]
+		}
 
 		indlo = tempxvec.indwhere("==", lo_bound)
 		indhi = tempxvec.indwhere("==", up_bound)
@@ -108,7 +132,11 @@ proc adj_weight() {local points_to_adv, f, lo_bound, up_bound, indlo, indhi, k l
 		for k = 0, tempvec.size-1 {
 
 			tempvec.x[k] = abs(tempvec.x[k])
-			if (tempvec.x[k] < 1) tempvec.x[k] = 1
+			
+			if (tempvec.x[k] < 1) {
+
+				tempvec.x[k] = 1
+			}
 		}
 
 		weightvec = new Vector()
@@ -128,8 +156,58 @@ proc adj_weight() {local points_to_adv, f, lo_bound, up_bound, indlo, indhi, k l
 
 
 
-// -------------------------------add_weight---------------------------------------
-proc add_weight() {local f, k, points_to_adv, lo_bound, up_bound, indlo, indhi, nbound, indi, tempnum, m, sizecount localobj tempvec, origboundlist, boundvec, newboundlist, origweightlist, newweightlist, testvec, errlist, scalelist, weightvec
+// --------------------------------------------------------------------------------
+proc nopelog() {
+
+	sscanf(elogvec.label, "%lf", &esim)
+	sscanf(plogvec.label, "%lf", &psim)
+
+	sprint(esimstr, "%s", elogvec.label)
+	sprint(psimstr, "%s", plogvec.label)
+
+	elogvec.label("")
+	plogvec.label("")
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc pelog() {
+
+	if (!numarg()) {
+
+		sprint(esimstr, "%d", esim)
+		sprint(psimstr, "%d", psim)
+		
+		elogvec.label(esimstr)
+		plogvec.label(psimstr)
+	}
+
+	if (numarg() == 1) {
+
+		esim = $1
+		sprint(esimstr, "%d", esim)
+		elogvec.label(esimstr)
+	}
+
+	if (numarg() == 2) {
+
+		esim = $1
+		sprint(esimstr, "%d", esim)
+		elogvec.label(esimstr)
+
+		psim = $2
+		sprint(psimstr, "%d", psim)
+		plogvec.label(psimstr)
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc add_weight() {local f, k, points_to_adv, lo_bound, up_bound, indlo, indhi, nbound, ind, tempnum, m, sizecount localobj tempvec, origboundlist, boundvec, newboundlist, origweightlist, newweightlist, testvec, errlist, scalelist, weightvec	
 
 	points_to_adv = min_weight*(1/dt/bess)
 	tempvec = new Vector()
@@ -146,13 +224,25 @@ proc add_weight() {local f, k, points_to_adv, lo_bound, up_bound, indlo, indhi, 
 	for f = 0, nf-1 {
 			
 		origboundlist.o(f).resize(RegionFitness[f].boundary.size)
-		for k = 0, origboundlist.o(f).size-1 origboundlist.o(f).x[k] = RegionFitness[f].boundary.x[k]
+		
+		for k = 0, origboundlist.o(f).size-1 {
+
+			origboundlist.o(f).x[k] = RegionFitness[f].boundary.x[k]
+		}
 
 		origweightlist.o(f).resize(RegionFitness[f].weight.size)
-		for k = 0, origweightlist.o(f).size-1 origweightlist.o(f).x[k] = RegionFitness[f].weight.x[k]		
+		
+		for k = 0, origweightlist.o(f).size-1 {
 
-		tempxvec = new Vector()
-		tempxvec.append(RegionFitness[f].xdat)
+			origweightlist.o(f).x[k] = RegionFitness[f].weight.x[k]
+		}
+
+		tempxvec = new Vector(RegionFitness[f].xdat.size)
+		
+		for k = 0, tempxvec.size-1 {
+
+			tempxvec.x[k] = RegionFitness[f].xdat.x[k]
+		}
 
 		lo_bound = origboundlist.o(f).x[0]
 		up_bound = origboundlist.o(f).x[origboundlist.o(f).size-1]
@@ -162,42 +252,62 @@ proc add_weight() {local f, k, points_to_adv, lo_bound, up_bound, indlo, indhi, 
 		
 		nbound = (indhi-indlo+1)/points_to_adv
 		tempvec = new Vector()
-		tempvec.append(nbound)
+		tempvec.resize(tempvec.size+1)
+		tempvec.x[tempvec.size-1] = nbound
 		tempvec.floor()
-		nbound = tempvec.x[0]
+		nbound = tempvec.x[tempvec.size-1]
 
 		if (nbound < min_weight) {
 
-			print "add_weight() cannot be used for fit variable ", f, "because nbound = ", nbound, " is too low or min_weight = ", min_weight, " is too high."
-			print "Consider increasing the total range of weight intervals."
+			print "add_weight() cannot be used for fit variable ", f, "because nbound = ", nbound, " is too low or min_weight = ", min_weight, " is too high..."
+			print "Consider increasing the total range of weight intervals..."
 			stop
 		}
 
 		boundvec = new Vector()
-		boundvec.append(tempxvec.x[indlo])
+		boundvec.resize(boundvec.size+1)
+		boundvec.x[boundvec.size-1] = tempxvec.x[indlo]
 
 		k = indlo
 		while (k <= indhi) {
 
-			boundvec.append(tempxvec.x[k+points_to_adv-1])
+			boundvec.resize(boundvec.size+1)
+			boundvec.x[boundvec.size-1] = tempxvec.x[k+points_to_adv-1]
 			k += points_to_adv
 		}
 
-		if (boundvec.size < nbound+1) boundvec.append(tempxvec.x[indhi])
+		if (boundvec.size < nbound+1) {
+
+			boundvec.resize(boundvec.size+1)
+			boundvec.x[boundvec.size+1] = tempxvec.x[indhi]
+		}
 
 		newboundlist.o(f).resize(boundvec.size)
-		for k = 0, newboundlist.o(f).size-1 newboundlist.o(f).x[k] = boundvec.x[k]
+		
+		for k = 0, newboundlist.o(f).size-1 {
+
+			newboundlist.o(f).x[k] = boundvec.x[k]
+		}
 	}
 	
 	// create new weight vecs in newweightlist
 	tempnum = 0
-	for f = 0, nf-1 tempnum += newboundlist.o(f).size
+	
+	for f = 0, nf-1 {
+
+		tempnum += newboundlist.o(f).size
+	}
+
 	crveclist(tempnum-nf, newweightlist)
 
 	for f = 0, nf-1 {
 
 		weightmat = new Matrix(newboundlist.o(f).size, newboundlist.o(f).size-1)
-		for k = 0, weightmat.ncol-1 weightmat.x[0][k] = origweightlist.o(f).x[0]
+		
+		for k = 0, weightmat.ncol-1 {
+
+			weightmat.x[0][k] = origweightlist.o(f).x[0]
+		}
 
 		weightvec = new Vector(weightmat.nrow, 0)
 		weightvec.x[0] = origweightlist.o(f).x[0]
@@ -221,49 +331,87 @@ proc add_weight() {local f, k, points_to_adv, lo_bound, up_bound, indlo, indhi, 
 		for k = 0, weightmat.ncol-1 {
 
 			newweightlist.o(f*weightmat.ncol+k).resize(weightmat.nrow)
-			for m = 0, newweightlist.o(f*weightmat.ncol+k).size-1 newweightlist.o(f*weightmat.ncol+k).x[m] = weightmat.x[m][k]
+			
+			for m = 0, newweightlist.o(f*weightmat.ncol+k).size-1 {
+
+				newweightlist.o(f*weightmat.ncol+k).x[m] = weightmat.x[m][k]
+			}
 		}
 	}
 
 	// create a list containing the errors from each newboundlist and newweightlist combination
 	crveclist(nf, errlist)
+	
 	// size-1 because not counting the first bound/weight, which is always 0
-	for k = 0, errlist.count-1 errlist.o(k).resize(newboundlist.o(k).size-1)
+	for k = 0, errlist.count-1 {
+
+		errlist.o(k).resize(newboundlist.o(k).size-1)
+	}
+
 	// determine if all new weightvecs will be of equal size, to save time
-	testvec = new Vector()
-	for k = 0, newboundlist.count-1 testvec.append(newboundlist.o(k).size-1)
+	testvec = new Vector(newboundlist.count)
+	
+	for k = 0, testvec.size-1 {
+
+		testvec.x[k] = newboundlist.o(k).size-1
+	}
+	
 	tempnum = 0
-	for k = 0, testvec.size-2 if (testvec.x[k] == testvec.x[k+1]) tempnum += 1
+	
+	for k = 0, testvec.size-2 {
+
+		if (testvec.x[k] == testvec.x[k+1]) {
+
+			tempnum += 1
+		}
+	}
 
 	if (tempnum == testvec.size-1) {
 	
-		print "add weight time saver activated"
+		print "Add weight activated (one run per interval)..."
 
 		for m = 0, newboundlist.o(0).size-2 {
 
 			for f = 0, nf-1 {
 
-				RegionFitness[f].boundary = new Vector()
-				RegionFitness[f].boundary.append(newboundlist.o(f))
-					
-				RegionFitness[f].weight = new Vector()
-				RegionFitness[f].weight.append(newweightlist.o(f*(newboundlist.o(0).size-1)+m))
+				RegionFitness[f].boundary = new Vector(newboundlist.o(f).size)
+				
+				for k = 0, RegionFitness[f].boundary.size-1 {
 
-				tempxvec = new Vector()
-				tempxvec.append(RegionFitness[f].xdat)
+					RegionFitness[f].boundary.x[k] = newboundlist.o(f).x[k]
+				}
+					
+				RegionFitness[f].weight = new Vector(newweightlist.o(f*(newboundlist.o(0).size-1)+m).size)
+				
+				for k = 0, RegionFitness[f].weight.size-1 {
+
+					RegionFitness[f].weight.x[k] = newweightlist.o(f*(newboundlist.o(0).size-1)+m).x[k]
+				}				
+
+				tempxvec = new Vector(RegionFitness[f].xdat.size)
+				
+				for k = 0, tempxvec.size-1 {
+
+					tempxvec.x[k] = RegionFitness[f].xdat.x[k]
+				}
 
 				RegionFitness[f].set_modelx(tempxvec)
 			}
 
+			print "Checking interval ", m+1, "of ", newboundlist.o(0).size-1
+			nopelog()
 			FitnessGenerator[0].efun()
-			print "Completed run ", m, "of ", newboundlist.o(0).size-2
-				
-			for k = 0, errlist.count-1 errlist.o(k).x[m] = RegionFitness[k].ydat_.meansqerr(FitnessGenerator[0].yveclist.o(k), RegionFitness[k].dw_)
+			pelog()
+
+			for k = 0, errlist.count-1 {
+
+				errlist.o(k).x[m] = RegionFitness[k].ydat_.meansqerr(FitnessGenerator[0].yveclist.o(k), RegionFitness[k].dw_)
+			}
 		}
 	
 	} else {
 	
-		print "add weight time saver NOT activated"
+		print "Add weight activated (one run per interval per fit variable)..."
 
 		sizecount = 0
 
@@ -273,31 +421,54 @@ proc add_weight() {local f, k, points_to_adv, lo_bound, up_bound, indlo, indhi, 
 			
 			for k = sizecount-(newboundlist.o(f).size-1), sizecount-1 {
 
-				RegionFitness[f].boundary = new Vector()
-				RegionFitness[f].boundary.append(newboundlist.o(f))
+				RegionFitness[f].boundary = new Vector(newboundlist.o(f).size)
 				
-				RegionFitness[f].weight = new Vector()
-				RegionFitness[f].weight.append(newweightlist.o(k))
+				for m = 0, RegionFitness[f].boundary.size-1 {
 
-				tempxvec = new Vector()
-				tempxvec.append(RegionFitness[f].xdat)
+					RegionFitness[f].boundary.x[m] = newboundlist.o(f).x[m]
+				}
+				
+				RegionFitness[f].weight = new Vector(newweightlist.o(k).size)
+				
+				for m = 0, RegionFitness[f].weight.size-1 {
+
+					RegionFitness[f].weight.x[m] = newweightlist.o(k).x[m]
+				}
+
+				tempxvec = new Vector(RegionFitness[f].xdat.size)
+				
+				for m = 0, tempxvec.size-1 {
+
+					tempxvec.x[m] = RegionFitness[f].xdat.x[m]
+				}
 
 				RegionFitness[f].set_modelx(tempxvec)
 
+				print "Checking interval ", k+1, "of ", testvec.sum
+				nopelog()
 				FitnessGenerator[0].efun()
-				print "Completed run ", k, "of ", testvec.sum-1
+				pelog()
 
 				errlist.o(f).x[k] = RegionFitness[f].ydat_.meansqerr(FitnessGenerator[0].yveclist.o(f), RegionFitness[f].dw_)
 			}
 		}
 	}
 
-	// calculate ratio of weight to add/scale for each time/bound interval, and place these in a new list.
+	// calculate ratio of weight to scale for each time/bound interval, and place these in scalelist.
 	crveclist(errlist.count, scalelist)
-	for k = 0, scalelist.count-1 scalelist.o(k).resize(errlist.o(k).size)
-	// append minimum errors from each fit variable's fit
-	tempvec = new Vector()
-	for k = 0, errlist.count-1 tempvec.append(errlist.o(k).min)
+	
+	for k = 0, scalelist.count-1 {
+
+		scalelist.o(k).resize(errlist.o(k).size)
+	}
+
+	// append minimum errors from each fit variable's error run over the selected intervals
+	tempvec = new Vector(errlist.count)
+	
+	for k = 0, tempvec.size-1 {
+
+		tempvec.x[k] = errlist.o(k).min
+	}
 
 	// calculate ratio to min error
 	for k = 0, scalelist.count-1 {
@@ -308,558 +479,41 @@ proc add_weight() {local f, k, points_to_adv, lo_bound, up_bound, indlo, indhi, 
 		}
 	}
 
-	// apply add weight scale
+	// apply the new weight scale
 	for f = 0, nf-1 {
 
-		weightvec = new Vector()
-		RegionFitness[f].boundary = new Vector()
+		RegionFitness[f].weight = new Vector(scalelist.o(f).size+1)
+		RegionFitness[f].boundary = new Vector(newboundlist.o(f).size)
 
-		if (origweightlist.o(f).size-1 >= scalelist.o(f).size) {
+		for k = 1, RegionFitness[f].weight.size-1 {
 
-			points_to_adv = (origweightlist.o(f).size-1)/scalelist.o(f).size
-			tempvec = new Vector()
-			tempvec.append(points_to_adv)
-			tempvec.floor
-			points_to_adv = tempvec.x[0]
-
-			weightvec.append(origweightlist.o(f))			
-
-			k = 1
-			indi = 1
-			for m = 0, scalelist.o(f).size-1 {
-				
-				k = indi
-				while (k <= indi+points_to_adv-1) {
-
-					weightvec.x[k] *= scalelist.o(f).x[m]
-					k += 1
-				}
-
-				indi += points_to_adv
-			}
-
-			RegionFitness[f].boundary.append(origboundlist.o(f))
-		
-		} else {
-
-			weightvec.append(origweightlist.o(f).x[0])
-			weightvec.append(scalelist.o(f))
-			
-			RegionFitness[f].boundary.append(newboundlist.o(f))
+			RegionFitness[f].weight.x[k] = scalelist.o(f).x[k-1]
 		}
 
-		RegionFitness[f].weight = new Vector()
-		RegionFitness[f].weight.append(weightvec)
+		for k = 0, RegionFitness[f].boundary.size-1 {
 
-		tempxvec = new Vector()
-		tempxvec.append(RegionFitness[f].xdat)
+			RegionFitness[f].boundary.x[k] = newboundlist.o(f).x[k]
+		}
+
+		tempxvec = new Vector(RegionFitness[f].xdat.size)
+
+		for k = 0, tempxvec.size-1 {
+
+			tempxvec.x[k] = RegionFitness[f].xdat.x[k]
+		}		
 
 		RegionFitness[f].set_modelx(tempxvec)
-
-		print "test: add_weight without adj_weight"
-		print "..................................."
-		print "final weightvec", f
-		print "..................................."
-		for k = 0, RegionFitness[f].weight.size-1 {
-
-			print RegionFitness[f].weight.x[k]
-		}
-		print "..................................."
 	}
 
-	allerrlogvec = new Vector()
-	paramlogvec = new Vector()
+	initfit()
 
-	print "...add weight ended..."
-}
-// --------------------------------------------------------------------------------
-
-
-
-// -------------------------------getthresh----------------------------------------
-// based on the 3 sigma approach
-proc getthresh() {local f, deli, k localobj tempyvec, tempvec
-
-	speedvec = new Vector()
-
-	for f = 0, nf-1 {
-
-		tempyvec = new Vector()
-
-		deli = RegionFitness[f].xdat.indwhere(">=", stim.del)
-
-		for k = 0, deli tempyvec.append(RegionFitness[f].ydat.x[k])
-
-		tempvec = new Vector()
-
-		tempvec.deriv(tempyvec, dt, 1)
-
-		speedvec.append(4*tempvec.stdev())
-	}
-}
-// --------------------------------------------------------------------------------
-
-
-
-// ------------------------------croutiampdirman-----------------------------------
-proc croutiampdirman() {
-
-	getmod()
-	sprint(manstr, "outdir")
-	crdir(root, manstr)
-	sprint(mandir, "%s%s%s", root, manstr, "/")
-	crdir(mandir, modstr)
-	sprint(moddir, "%s%s%s", mandir, modstr, "/")
-
-	getiamp()
-	crdir(moddir, iampstr)
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------getpheader--------------------------------------
-proc getpheader() {local p
-
-	sprint(pheader, "%s%s", pnamelist.o(0).label, "_norm")
-	for p = 1, pnamelist.count-1 sprint(pheader, "%s\t%s%s", pheader, pnamelist.o(p).label, "_norm")
-	sprint(pheader, "%s\n", pheader)
-}
-// --------------------------------------------------------------------------------
-
-
-
-// -------------------------------getpnnheader-------------------------------------
-proc getpnnheader() {local p
-
-	sprint(pnnheader, "%s", pnamelist.o(0).label)
-	for p = 1, pnamelist.count-1 sprint(pnnheader, "%s\t%s", pnnheader, pnamelist.o(p).label)
-	sprint(pnnheader, "%s\n", pnnheader)
-}
-// --------------------------------------------------------------------------------
-
-
-
-// -------------------------------geteheader---------------------------------------
-proc geteheader() {local f
-	
-	// construct emat/errlogmat header
-	// each col fitvar name, then col total, then tol
-	sprint(eheader, "%s", fitvarlist.o(0).label)
-	for f = 1, nf-1 sprint(eheader, "%s\t%s", eheader, fitvarlist.o(f).label)
-	sprint(eheader, "%s\t%s\t%s\n", eheader, "total", "tol")
-}
-// --------------------------------------------------------------------------------
-
-
-
-// -----------------------------getalleheader--------------------------------------
-proc getalleheader() {local f
-
-	// construct allerrlogmat header
-	// each col fitvar name, then col total
-	sprint(alleheader, "%s", fitvarlist.o(0).label)
-	for f = 1, nf-1 sprint(alleheader, "%s\t%s", alleheader, fitvarlist.o(f).label)
-	sprint(alleheader, "%s\t%s\n", alleheader, "total")
-}
-// --------------------------------------------------------------------------------
-
-
-
-// -------------------------------getvheader---------------------------------------
-proc getvheader() {local f
-
-	// construct vmat header
-	// col0 = time, col1,...,coln = v(fit variables)
-	sprint(vheader, "%s", "time")
-	for f = 0, nf-1 sprint(vheader, "%s\t%s", vheader, fitvarlist.o(f).label)
-	sprint(vheader, "%s\n", vheader)
-}
-// --------------------------------------------------------------------------------
-
-
-
-// -------------------------------gettheader---------------------------------------
-proc gettheader() {
-	
-	// construct tmat header
-	sprint(theader, "%s\t%s\t%s\t%s\n", "t-tot", "t-each", "avg", "sem")
-}
-// --------------------------------------------------------------------------------
-
-
-
-// -------------------------------getpnnmat----------------------------------------
-obfunc getpnnmat() {local p localobj tempmat
-
-	if (numarg() == 1 && argtype(1) == 2) {
-
-		if (!strcmp($s1, "help")) {
-
-			print "Enter:"
-			print "1) pmat obj organized in columns"
-			print "Output: pnnmat"
-			stop
-		}
-	}
-
-	tempmat = new Matrix($o1.nrow, $o1.ncol)
-	getplow()
-	for p = 0, tempmat.ncol-1 tempmat.setcol(p, $o1.getcol(p).mul(plowvec.x[p]))
-
-	return tempmat
+	print "add weight ended..."
 }
 // --------------------------------------------------------------------------------
 
 
 
 // --------------------------------------------------------------------------------
-proc savemanopt() {local f, k, p, nfcount, npcount localobj tempmat, tempvec
-
-	if (numarg() == 1 && argtype(1) == 2) {
-
-		if (!strcmp($s1, "help")) {
-
-			print "No arguments required. Will save the following elements of a manually run optimization:"
-			print "Time, as simulation times, in tmat.dat"
-			print "Optimized voltages, in vmat.dat"
-			print "Errors following each quad, including the final quad (but not repeated), in errlogmat.dat"
-			print "Errors following each run, in allerrlogmat.dat"
-			print "Output (final) errors, in emat.dat"
-			stop
-		}
-	}	
-
-	croutiampdirman()
-
-	// save as tmat
-	// additonal time statistics also produced here and saved:
-	// col0 = time per simulation (seconds)
-	// col1 = average
-	// col2 = sem = sigma/sqrt(n)
-	tempmat = new Matrix(timevec.size, 4)
-	for k = 0, tempmat.nrow-1 tempmat.x[k][0] = timevec.x[k]
-	if (timevec.size > 1) {
-		for k = 0, tempmat.nrow-1 {
-			if (!k) {
-				tempmat.x[k][1] = tempmat.x[k][0]
-			} else {
-				tempmat.x[k][1] = timevec.x[k]-timevec.x[k-1]
-			}
-		}
-		tempmat.x[0][2] = tempmat.getcol(0).mean
-		tempmat.x[0][3] = tempmat.getcol(0).stderr
-	}
-	gettheader()
-	getiampdir()
-	savemat(iampdir, "tmat.dat", tempmat, tformvec, theader)
-
-	
-	// vmat
-	tempmat = new Matrix(nrows, nf+1)
-	tempmat.setcol(0, tdatvec)
-	// copy into vmat the full optimized model traces
-	for f = 0, nf-1 {
-
-		// if boundaries are different from default, output full trace v
-		if (RegionFitness[f].boundary.x[0] > RegionFitness[f].xdat.x[0] || RegionFitness[f].boundary.x[RegionFitness[f].boundary.size-1] < RegionFitness[f].xdat.x[RegionFitness[f].xdat.size-1] || RegionFitness[f].boundary.size > 2) {
-
-			// save previous boundaries
-			tempvec = new Vector()
-			tempvec.append(RegionFitness[f].boundary)
-
-			// set new (default) boundaries
-			RegionFitness[f].boundary = new Vector()
-			RegionFitness[f].boundary.append(RegionFitness[f].xdat.x[0], RegionFitness[f].xdat.x[RegionFitness[f].xdat.size-1])
-			
-			// make these new boundaries effective (must use different xdat vector)
-			tempxvec = new Vector()
-			tempxvec.append(RegionFitness[f].xdat)
-			RegionFitness[f].set_modelx(tempxvec)
-
-			// get default optimized voltage trace
-			FitnessGenerator[0].efun()
-			tempmat.setcol(f+1, FitnessGenerator[0].yveclist.o(f))
-
-			// restore original bounds
-			RegionFitness[f].boundary = new Vector()
-			RegionFitness[f].boundary.append(tempvec)
-			RegionFitness[f].set_modelx(tempxvec)
-		
-		} else {
-
-			tempmat.setcol(f+1, FitnessGenerator[0].yveclist.o(f))
-		}
-	}
-	getvheader()
-	savemat(iampdir, "vmat.dat", tempmat, vformvec, vheader)
-
-	
-	// errlogmat: organized as fit variable0,...,n, total error and tolerance,
-	// with the exit code (the start index of the first fitvar err of the last
-	// quad) as the last value in the first column
-	// save as errlogmat
-	tempmat = new Matrix((errlogvec.size-2)/(nf+1)+1, nf+2)
-	nfcount = 0
-	for k = 0, tempmat.nrow-3 {
-		
-		for f = 0, nf {
-
-			tempmat.x[k][f] = errlogvec.x[k+f+nfcount*(nf+1)]
-		}
-
-		nfcount+=1
-
-		tempmat.x[k][nf+1] = errlogvec.x[errlogvec.size-2]
-	}
-	tempmat.x[tempmat.nrow-1][0] = errlogvec.x[errlogvec.size-1]
-	geteheader()
-	savemat(iampdir, "errlogmat.dat", tempmat, vformvec, eheader)
-
-	
-	// allerrlogmat: organized as fit variable0,...,n, total error for each fit run.
-	// save as allerrlogmat
-	tempmat = new Matrix(allerrlogvec.size/(nf+1), nf+1)
-	nfcount = 0
-	for k = 0, tempmat.nrow-1 {
-		
-		for f = 0, nf {
-
-			tempmat.x[k][f] = allerrlogvec.x[k+f+nfcount*nf]
-		}
-
-		nfcount+=1
-	}
-	getalleheader()
-	savemat(iampdir, "allerrlogmat.dat", tempmat, vformvec, alleheader)
-
-
-	// emat: organized as fit variable0,...,n, total error and tolerance
-	// save as emat 
-	tempmat = new Matrix(1, nf+2)
-	for f = 0, nf tempmat.x[0][f] = errlogvec.x[errlogvec.size-1-1+errlogvec.x[errlogvec.size-1]+f]
-	tempmat.x[0][nf+1] = errlogvec.x[errlogvec.size-2]
-	savemat(iampdir, "emat.dat", tempmat, vformvec, eheader)
-
-
-	// save paramlogmat as p0,...,pn (all opt params), for all iterations
-	tempmat = new Matrix(paramlogvec.size/getnp(), getnp())
-	npcount = 0
-	for k = 0, tempmat.nrow-1 {
-
-		for p = 0, tempmat.ncol-1 {
-
-			tempmat.x[k][p] = paramlogvec.x[p+npcount*tempmat.ncol]
-		}
-
-		npcount+=1
-	}
-	getpheader()
-	savemat(iampdir, "paramlogmat.dat", tempmat, maxformvec, pheader)
-
-	
-	// save paramquadmat as p0,...,pn (all opt params), for all quads
-	// the exit code will be saved on the last row of the first col
-	tempmat = new Matrix(((paramquadvec.size-1)/getnp())+1, getnp())
-	npcount = 0
-	for k = 0, tempmat.nrow-2 {
-
-		for p = 0, tempmat.ncol-1 {
-
-			tempmat.x[k][p] = paramquadvec.x[p+npcount*tempmat.ncol]
-		}
-
-		npcount+=1
-	}
-	tempmat.x[tempmat.nrow-1][0] = paramquadvec.x[paramquadvec.size-1]
-	savemat(iampdir, "paramquadmat.dat", tempmat, maxformvec, pheader)
-
-	
-	// save pmat as p0,...,pn (all opt params)
-	tempmat = new Matrix(1, getnp())
-	for p = 0, getnp()-1 {
-
-		tempmat.x[0][p] = paramquadvec.x[p+paramquadvec.size+paramquadvec.x[paramquadvec.size-1]]
-	}
-	savemat(iampdir, "pmat.dat", tempmat, maxformvec, pheader)
-
-	
-	// save pmat-nn, the non-normalized version of pmat
-	getpnnheader()
-	tempmat = getpnnmat(tempmat)
-	savemat(iampdir, "pmat-nn.dat", tempmat, maxformvec, pnnheader)
-}
-// --------------------------------------------------------------------------------
-
-
-
-// ------------------------------saveallerrlogmat----------------------------------
-proc saveallerrlogmat() {local f, m, nfcount, k localobj tempmat
-
-	// construct allerrlogmat header
-	// each col fitvar name, then col total
-	sprint(alleheader, "%s", fitvarlist.o(0).label)
-	for f = 1, nf-1 sprint(alleheader, "%s\t%s", alleheader, fitvarlist.o(f).label)
-	sprint(alleheader, "%s\t%s\n", alleheader, "total")
-
-	// create output directory
-	croutiampdirman()
-
-	// allerrlogmat: organized as fit variable0,...,n, total error for each fit run.
-	// save as allerrlogmat
-	tempmat = new Matrix(allerrlogvec.size/(nf+1), nf+1)
-	
-	nfcount = 0
-
-	for m = 0, tempmat.nrow-1 {
-
-		for f = 0, nf {
-
-			tempmat.x[m][f] = allerrlogvec.x[m+nfcount*nf+f]
-		} 
-		
-		nfcount += 1
-	}
-	getiampdir()
-	savemat(iampdir, "allerrlogmat.dat", tempmat, vformvec, alleheader)
-
-	// save paramlogmat as p0,...,pn (all opt params), for all iterations
-	tempmat = new Matrix(paramlogvec.size/getnp(), getnp())
-	npcount = 0
-	for k = 0, tempmat.nrow-1 {
-
-		for p = 0, tempmat.ncol-1 {
-
-			tempmat.x[k][p] = paramlogvec.x[p+npcount*tempmat.ncol]
-		}
-
-		npcount+=1
-	}
-	getpheader()
-	savemat(iampdir, "paramlogmat.dat", tempmat, maxformvec, pheader)	
-}
-// --------------------------------------------------------------------------------
-
-
-
-// ---------------------------------savepelog--------------------------------------
-proc savepelog() {local f, m, k, p, nfcount, npcount localobj tempmat
-
-	// create output directory
-	croutiampdirman()
-
-	// allerrlogmat: organized as fit variable0,...,n, total error for each fit run.
-	// save as allerrlogmat
-	tempmat = new Matrix(allerrlogvec.size/(nf+1), nf+1)
-	
-	nfcount = 0
-
-	for m = 0, tempmat.nrow-1 {
-
-		for f = 0, nf {
-
-			tempmat.x[m][f] = allerrlogvec.x[m+nfcount*nf+f]
-		} 
-		
-		nfcount += 1
-	}
-	getalleheader()
-	getiampdir()
-	savemat(iampdir, "allerrlogmat.dat", tempmat, vformvec, alleheader)
-
-
-	// save paramlogmat as p0,...,pn (all opt params), for all iterations
-	tempmat = new Matrix(paramlogvec.size/getnp(), getnp())
-	npcount = 0
-	for k = 0, tempmat.nrow-1 {
-
-		for p = 0, tempmat.ncol-1 {
-
-			tempmat.x[k][p] = paramlogvec.x[p+npcount*tempmat.ncol]
-		}
-
-		npcount+=1
-	}
-	getpheader()
-	savemat(iampdir, "paramlogmat.dat", tempmat, maxformvec, pheader)	
-}
-// --------------------------------------------------------------------------------
-
-
-
-// ----------------------------------savepnn---------------------------------------
-proc savepnn() {local p, m, pcount localobj tempmat, tempvec
-
-	if (numarg() == 1 && argtype(1) == 2) {
-
-		if (!strcmp($s1, "help")) {
-
-			print "Enter:"
-			print "1) filename of param mat (normalized)"
-			print "2) iamp address within iampvec. if unknown, use getiampind(iamp) [iamp in nA]."
-			print "3) row address within param mat containing log of interest. leave blank to obtain entire matrix."
-			print "Output: non-normalized param mat of chosen row organized with each parameter in a separate column"
-			stop
-		}
-	}
-
-	getiampdir($2)
-	getmat(iampdir, $s1, tempmat)
-
-	strf.head($s1, "[.]", headstr)
-	strf.tail($s1, "[.]", tailstr)	
-
-	if (numarg() > 2) {
-
-		tempvec = new Vector()		
-	
-		tempvec.append(tempmat.getrow($3))
-
-		tempmat = new Matrix(tempvec.size, 1)
-		tempmat.setcol(0, tempvec)
-		tempmat = delzeromat(tempmat)
-
-		tempvec = new Vector()
-		tempvec.append(tempmat.getcol(0))
-
-		tempmat = new Matrix(tempvec.size/getnp(), getnp())
-		
-		pcount = 0
-
-		for m = 0, tempmat.nrow-1 {
-
-			for p = 0, tempmat.ncol-1 {
-
-				tempmat.x[m][p] = tempvec.x[p+pcount*getnp()]
-			}
-
-			pcount += 1
-		}
-		
-		sprint(filestr, "%s%g%s%s", headstr, $3, "-nn.", tailstr)
-	
-	} else {
-
-		sprint(filestr, "%s%s%s", headstr, "-nn.", tailstr)
-	}
-
-	getpnnheader()
-	tempmat = getpnnmat(tempmat)
-
-	croutiampdirman($2)
-	savemat(iampdir, filestr, tempmat, maxformvec, pnnheader)
-
-	filestr = ""
-	headstr = ""
-	tailstr = ""
-}
-// --------------------------------------------------------------------------------
-
-
-
-// ---------------------------------getnp------------------------------------------
-// takes no argument.
-// outputs number of parameters entered for simulation.
 func getnp() {
 
 	return ParmFitness[0].parmlist.count()
@@ -869,32 +523,103 @@ func getnp() {
 
 
 // --------------------------------------------------------------------------------
-proc updparampanel() {local p
+proc getpheader() {local p
 
-	for p = 0, getnp()-1 pvec.x[p] = RunFitParm[p].val * plowvec.x[p]
+	sprint(pheader, "%s", "")
+	
+	for p = 0, pnamelist.count-1 {
+
+		sprint(pheader, "%s%s\t", pheader, pnamelist.o(p).label)
+	}
+	
+	sprint(pheader, "%s\n", pheader)
 }
 // --------------------------------------------------------------------------------
 
 
 
 // --------------------------------------------------------------------------------
-// update param and error log if fit present
-proc updpelog() {local f, p, yfitsize, ydatsize
-
-	yfitsize = 0
-	ydatsize = 0
-
+proc geteheader() {local f
+	
+	// construct emat/elogmat header
+	// each col fitvar name, then col total, then tol
+	sprint(eheader, "%s", "")
+	
 	for f = 0, nf-1 {
 
-		yfitsize += FitnessGenerator[0].yveclist.o(f).size
-		ydatsize += RegionFitness[f].ydat_.size
+		sprint(eheader, "%s%s\t", eheader, fitvarlist.o(f).label)
 	}
+	
+	sprint(eheader, "%s\t%s\t%s\n", eheader, "total", "tol")
+}
+// --------------------------------------------------------------------------------
 
-	if (yfitsize == ydatsize) {
 
-		for p = 0, getnp()-1 paramlogvec.append(RunFitParm[p].val)
-		for f = 0, nf-1 allerrlogvec.append(RegionFitness[f].ydat_.meansqerr(FitnessGenerator[0].yveclist.o(f), RegionFitness[f].dw_))
-		allerrlogvec.append(allerrlogvec.c(allerrlogvec.size-nf, allerrlogvec.size-1).sum)
+
+// --------------------------------------------------------------------------------
+proc getvheader() {local f, k
+
+	// construct vmat header
+	// col0 = time, col1,...,coln = v(fit variables)
+	sprint(vheader, "%s", "time")
+	
+	for k = 0, $1-1 {
+
+		for f = 0, nf-1 {
+
+			sprint(vheader, "%s\t%s", vheader, fitvarlist.o(f).label)
+		}
+	}
+	
+	sprint(vheader, "%s\n", vheader)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc getpnnheader() {local p
+
+	sprint(pnnheader, "%s", "")
+	
+	for p = 0, pnamelist.count-1 {
+
+		sprint(pnnheader, "%s%s%s\t", pnnheader, pnamelist.o(p).label, "_nn")
+	}
+	
+	sprint(pnnheader, "%s\n", pnnheader)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc initfit() {
+
+	elogvec.resize(0)
+	plogvec.resize(0)
+	nefunvec.resize(0)
+
+	chkmat = crchkmat()
+
+	nefun_ = 0
+	nquad_ = 0
+	runtime = 0
+	hourlog = 1
+	chkhour = 2
+	fitoff = 1
+}
+// --------------------------------------------------------------------------------
+
+
+
+
+// --------------------------------------------------------------------------------
+proc updparampanel() {local p
+
+	for p = 0, getnp()-1 {
+
+		pvec.x[p] = RunFitParm[p].val * plowvec.x[p]
 	}
 }
 // --------------------------------------------------------------------------------
@@ -902,7 +627,911 @@ proc updpelog() {local f, p, yfitsize, ydatsize
 
 
 // --------------------------------------------------------------------------------
-// updates both pnorm and corresponding RunFitParm with pnorm arguments of different type
+func chktime() {localobj krand
+
+	krand = new Random()
+
+	if (runtime >= hourlog * krand.uniform($1*3600, $2*3600)) {
+
+		hourlog += 1
+
+		return 1
+	
+	} else {
+
+		return 0
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// update error and parameter log. REQUIRES A MINIMUM OF 1 FIT RUN 
+// WITH THE PARAMETERS OF CHOICE to record these, as well as their corresponding error.
+
+proc updpelog() {local f, p, ydatsize, yfitsize
+
+	if (strf.len(elogvec.label) && strf.len(plogvec.label)) {
+
+		ydatsize = 0
+		yfitsize = 0
+
+		for f = 0, nf-1 {
+
+			ydatsize += RegionFitness[f].ydat_.size
+			yfitsize += FitnessGenerator[0].yveclist.o(f).size
+		}
+
+		if (ydatsize == yfitsize) {
+
+			elogvec.resize(elogvec.size+nf+1)
+
+			for f = 0, nf-1 {
+
+				elogvec.x[elogvec.size-(nf+1)+f] = RegionFitness[f].ydat_.meansqerr(FitnessGenerator[0].yveclist.o(f), RegionFitness[f].dw_)
+				elogvec.x[elogvec.size-1] += elogvec.x[elogvec.size-(nf+1)+f]
+			}
+
+			plogvec.resize(plogvec.size+getnp())
+
+			for p = 0, getnp()-1 {
+
+				plogvec.x[plogvec.size-getnp()+p] = RunFitParm[p].val
+			}
+
+			if (chktime(chkhour, chkhour+0.2)) {
+
+				savepelog()
+			}
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc savepelog() {local k localobj tempvec
+
+	if (strf.len(elogvec.label) && strf.len(plogvec.label)) {
+
+		sscanf(elogvec.label, "%lf", &esim)
+		sscanf(plogvec.label, "%lf", &psim)
+
+		if (getiampdir()) {
+
+			if (elogvec.size && plogvec.size) {
+
+				if (chkdir(iampdir, "elog") && chkdir(iampdir, "plog")) {
+
+					sprint(elogdir, "%s%s", iampdir, "elog/")
+					sprint(plogdir, "%s%s", iampdir, "plog/")
+									
+					sprint(format, "%s%s", "%s", vformvec)
+
+					sprint(outstr, "%s", "")
+
+					// save elog
+					for k = 0, elogvec.size-1 {
+
+						sprint(outstr, format, outstr, elogvec.x[k])
+					}
+
+					elogvec.resize(0)
+
+					sprint(filestr, "%d%s", esim, ".dat")
+
+					writestr(elogdir, filestr, outstr, 1)
+
+					sprint(outstr, "%s", "")
+
+					sprint(format, "%s%s", "%s", maxformvec)
+
+					// save plog
+					for k = 0, plogvec.size-1 {
+
+						sprint(outstr, format, outstr, plogvec.x[k])
+					}
+
+					plogvec.resize(0)
+
+					sprint(filestr, "%d%s", psim, ".dat")
+
+					writestr(plogdir, filestr, outstr, 1)
+
+					sprint(outstr, "%s", "")
+				
+				} else {
+
+					crdir(iampdir, "elog")
+					crdir(iampdir, "plog")
+
+					savepelog()
+				}
+			
+			} else {
+
+				if (!chkdir(iampdir, "elog") && !chkdir(iampdir, "plog")) {
+
+					crdir(iampdir, "elog")
+					crdir(iampdir, "plog")
+				}
+			}
+		
+		} else {
+
+			if (chkdir(root, "out")) {
+
+				getmod()
+
+				if (chkdir(out, modstr)) {
+
+					crdir(moddir, iampstr)
+					savepelog()
+				
+				} else {
+
+					crdir(out, modstr)
+					savepelog()
+				}
+			
+			} else {
+
+				crdir(root, "out")
+				savepelog()
+			}
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc getpelogdirs() {
+
+	if (numarg() == 0) {
+
+		getiampdir()
+		sprint(elogdir, "%s%s", iampdir, "elog/")
+		sprint(plogdir, "%s%s", iampdir, "plog/")
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc getmodeltype() {local rec, SOf, AXf, DEf
+
+	sprint(modeltypestr, "%s", "")
+	DEFAULT = 0
+
+	if ($2) {
+
+		// count locations
+		SOf = 0
+		AXf = 0
+		DEf = 0
+
+		sprint(SOstr, "%s", "soma")
+		sprint(AXstr, "%s", "axon")
+		sprint(DEstr, "%s", "dend")
+		sprint(APstr, "%s", "apic")
+
+		// define number and location of recordings
+		for rec = 0, nrec-1 {
+
+			if (strf.substr(recloclist.o(rec).label, SOstr) > -1) {
+			
+				SOf += 1
+			
+			} else if (strf.substr(recloclist.o(rec).label, AXstr) > -1) {
+			
+				AXf += 1
+			
+			} else if ((strf.substr(recloclist.o(rec).label, DEstr) > -1) || (strf.substr(recloclist.o(rec).label, APstr) > -1)) {
+
+				DEf += 1
+			}
+		}
+
+		// labels for combination of fit variables
+		SOAX = 0
+		SODE = 0
+		SO = 0
+		AX = 0
+		DE = 0		
+
+		// Establish model type as a function of fit variable locations
+		if (SOf > 0 && AXf > 0 && DEf == 0) {
+
+			SOAX = 1
+			modeltypestr = "SOAX"
+
+			if ($1 == 0) {
+
+				Ri_doarg = 1
+				Ri_uselog = 1
+				
+				rpa_doarg = 1
+				rpa_uselog = 1
+				
+				parafact_doarg = 1
+				parafact_uselog = 1
+				
+				Rm_doarg = 1
+				Rm_uselog = 1
+
+				Rmy_doarg = 1
+				Rmy_uselog = 1
+				
+				Cm_doarg = 1
+				Cm_uselog = 1
+				
+				Cmy_doarg = 1
+				Cmy_uselog = 1
+				
+				Cpip_doarg = 1
+				Cpip_uselog = 1
+
+				
+				Na_so_doarg = 0
+				Na_so_uselog = 0
+
+				lc_Na_de_doarg = 0
+				lc_Na_de_uselog = 0
+
+				Na_prox_doarg = 0
+				Na_prox_uselog = 0
+
+				Na_ais_doarg = 0
+				Na_ais_uselog = 0
+
+				Na_int_doarg = 0
+				Na_int_uselog = 0
+
+				Na_nod_doarg = 0
+				Na_nod_uselog = 0
+
+				Na_end_doarg = 0
+				Na_end_uselog = 0
+
+				Na_col_doarg = 0
+				Na_col_uselog = 0
+
+
+				Nap_ais_doarg = 0
+				Nap_ais_uselog = 0
+
+				Nap_int_doarg = 0
+				Nap_int_uselog = 0
+
+				Nap_nod_doarg = 0
+				Nap_nod_uselog = 0
+
+				Nap_end_doarg = 0
+				Nap_end_uselog = 0
+
+
+				Kv1_so_doarg = 0
+				Kv1_so_uselog = 0
+
+				lc_Kv_Kv1_de_doarg = 0
+				lc_Kv_Kv1_de_uselog = 0
+
+				Kv1_prox_doarg = 0
+				Kv1_prox_uselog = 0
+
+				Kv1_ais_doarg = 0
+				Kv1_ais_uselog = 0
+
+				Kv1_int_doarg = 0
+				Kv1_int_uselog = 0
+
+				Kv1_nod_doarg = 0
+				Kv1_nod_uselog = 0
+
+				Kv1_end_doarg = 0
+				Kv1_end_uselog = 0
+
+				Kv1_col_doarg = 0
+				Kv1_col_uselog = 0
+
+
+				Kv_so_doarg = 0
+				Kv_so_uselog = 0
+
+
+				Kv7_de_doarg = 0
+				Kv7_de_uselog = 0
+
+				Kv7_so_doarg = 0
+				Kv7_so_uselog = 0
+
+				Kv7_prox_doarg = 0
+				Kv7_prox_uselog = 0
+
+				Kv7_ais_doarg = 0
+				Kv7_ais_uselog = 0
+
+				Kv7_int_doarg = 0
+				Kv7_int_uselog = 0
+
+				Kv7_nod_doarg = 0
+				Kv7_nod_uselog = 0
+
+				Kv7_end_doarg = 0
+				Kv7_end_uselog = 0
+
+				Kv7_col_doarg = 0
+				Kv7_col_uselog = 0
+
+
+				KCa_doarg = 0
+				KCa_uselog = 0
+
+
+				Ca_doarg = 0
+				Ca_uselog = 0
+
+				It2_doarg = 0
+				It2_uselog = 0
+
+
+				H_so_doarg = 0
+				H_so_uselog = 0
+
+				tc_H_de_doarg = 0
+				tc_H_de_uselog = 0
+
+				H_ax_doarg = 0
+				H_ax_uselog = 0
+
+
+				Kv1_juxta_doarg = 0
+				Kv1_juxta_uselog = 0
+			}
+
+			if ($1 == 1) {
+
+				Ri_doarg = 0
+				Ri_uselog = 0
+				
+				rpa_doarg = 0
+				rpa_uselog = 0
+				
+				parafact_doarg = 0
+				parafact_uselog = 0
+				
+				Rm_doarg = 0
+				Rm_uselog = 0
+
+				Rmy_doarg = 0
+				Rmy_uselog = 0
+				
+				Cm_doarg = 0
+				Cm_uselog = 0
+				
+				Cmy_doarg = 0
+				Cmy_uselog = 0
+				
+				Cpip_doarg = 0
+				Cpip_uselog = 0
+
+				
+				Na_so_doarg = 1
+				Na_so_uselog = 1
+
+				lc_Na_de_doarg = 1
+				lc_Na_de_uselog = 1
+
+				Na_prox_doarg = 1
+				Na_prox_uselog = 1
+
+				Na_ais_doarg = 1
+				Na_ais_uselog = 1
+
+				Na_int_doarg = 1
+				Na_int_uselog = 1
+
+				Na_nod_doarg = 1
+				Na_nod_uselog = 1
+
+				Na_end_doarg = 1
+				Na_end_uselog = 1
+
+				Na_col_doarg = 1
+				Na_col_uselog = 1
+
+
+				Nap_ais_doarg = 1
+				Nap_ais_uselog = 1
+
+				Nap_int_doarg = 1
+				Nap_int_uselog = 1
+
+				Nap_nod_doarg = 1
+				Nap_nod_uselog = 1
+
+				Nap_end_doarg = 1
+				Nap_end_uselog = 1
+
+
+				Kv1_so_doarg = 1
+				Kv1_so_uselog = 1
+
+				lc_Kv_Kv1_de_doarg = 1
+				lc_Kv_Kv1_de_uselog = 1
+
+				Kv1_prox_doarg = 1
+				Kv1_prox_uselog = 1
+
+				Kv1_ais_doarg = 1
+				Kv1_ais_uselog = 1
+
+				Kv1_int_doarg = 1
+				Kv1_int_uselog = 1
+
+				Kv1_nod_doarg = 1
+				Kv1_nod_uselog = 1
+
+				Kv1_end_doarg = 1
+				Kv1_end_uselog = 1
+
+				Kv1_col_doarg = 1
+				Kv1_col_uselog = 1
+
+
+				Kv_so_doarg = 1
+				Kv_so_uselog = 1
+
+
+				Kv7_de_doarg = 1
+				Kv7_de_uselog = 1
+
+				Kv7_so_doarg = 1
+				Kv7_so_uselog = 1
+
+				Kv7_prox_doarg = 1
+				Kv7_prox_uselog = 1
+
+				Kv7_ais_doarg = 1
+				Kv7_ais_uselog = 1
+
+				Kv7_int_doarg = 1
+				Kv7_int_uselog = 1
+
+				Kv7_nod_doarg = 1
+				Kv7_nod_uselog = 1
+
+				Kv7_end_doarg = 1
+				Kv7_end_uselog = 1
+
+				Kv7_col_doarg = 1
+				Kv7_col_uselog = 1
+
+
+				KCa_doarg = 1
+				KCa_uselog = 1
+
+
+				Ca_doarg = 1
+				Ca_uselog = 1
+
+				It2_doarg = 1
+				It2_uselog = 1
+
+
+				H_so_doarg = 1
+				H_so_uselog = 1
+
+				tc_H_de_doarg = 1
+				tc_H_de_uselog = 1
+
+				H_ax_doarg = 1
+				H_ax_uselog = 1
+
+				if (juxtaparanod) {
+
+					Kv1_juxta_doarg = 1
+					Kv1_juxta_uselog = 1
+				}
+			}
+
+			if (numarg() == 3 && argtype(3) == 0) {
+
+				if ($3 == 1) {
+
+					print SOf, "somatic and ", AXf, "axonal recording locations found"
+				}				
+			}
+
+		} else if (SOf > 0 && DEf > 0 && AXf == 0) {
+
+			SODE = 1
+			modeltypestr = "SODE"
+
+			if ($1 == 0) {
+
+				Ri_doarg = 1
+				Ri_uselog = 1
+				
+				rpa_doarg = 0
+				rpa_uselog = 0
+				
+				parafact_doarg = 0
+				parafact_uselog = 0
+				
+				Rm_doarg = 1
+				Rm_uselog = 1
+
+				Rmy_doarg = 0
+				Rmy_uselog = 0
+				
+				Cm_doarg = 1
+				Cm_uselog = 1
+				
+				Cmy_doarg = 0
+				Cmy_uselog = 0
+				
+				Cpip_doarg = 1
+				Cpip_uselog = 1
+
+				
+				Na_so_doarg = 0
+				Na_so_uselog = 0
+
+				lc_Na_de_doarg = 0
+				lc_Na_de_uselog = 0
+
+				Na_prox_doarg = 0
+				Na_prox_uselog = 0
+
+				Na_ais_doarg = 0
+				Na_ais_uselog = 0
+
+				Na_int_doarg = 0
+				Na_int_uselog = 0
+
+				Na_nod_doarg = 0
+				Na_nod_uselog = 0
+
+				Na_end_doarg = 0
+				Na_end_uselog = 0
+
+				Na_col_doarg = 0
+				Na_col_uselog = 0
+
+
+				Nap_ais_doarg = 0
+				Nap_ais_uselog = 0
+
+				Nap_int_doarg = 0
+				Nap_int_uselog = 0
+
+				Nap_nod_doarg = 0
+				Nap_nod_uselog = 0
+
+				Nap_end_doarg = 0
+				Nap_end_uselog = 0
+
+
+				Kv1_so_doarg = 0
+				Kv1_so_uselog = 0
+
+				lc_Kv_Kv1_de_doarg = 0
+				lc_Kv_Kv1_de_uselog = 0
+
+				Kv1_prox_doarg = 0
+				Kv1_prox_uselog = 0
+
+				Kv1_ais_doarg = 0
+				Kv1_ais_uselog = 0
+
+				Kv1_int_doarg = 0
+				Kv1_int_uselog = 0
+
+				Kv1_nod_doarg = 0
+				Kv1_nod_uselog = 0
+
+				Kv1_end_doarg = 0
+				Kv1_end_uselog = 0
+
+				Kv1_col_doarg = 0
+				Kv1_col_uselog = 0
+
+
+				Kv_so_doarg = 0
+				Kv_so_uselog = 0
+
+
+				Kv7_de_doarg = 0
+				Kv7_de_uselog = 0
+
+				Kv7_so_doarg = 0
+				Kv7_so_uselog = 0
+
+				Kv7_prox_doarg = 0
+				Kv7_prox_uselog = 0
+
+				Kv7_ais_doarg = 0
+				Kv7_ais_uselog = 0
+
+				Kv7_int_doarg = 0
+				Kv7_int_uselog = 0
+
+				Kv7_nod_doarg = 0
+				Kv7_nod_uselog = 0
+
+				Kv7_end_doarg = 0
+				Kv7_end_uselog = 0
+
+				Kv7_col_doarg = 0
+				Kv7_col_uselog = 0
+
+
+				KCa_doarg = 0
+				KCa_uselog = 0
+
+
+				Ca_doarg = 0
+				Ca_uselog = 0
+
+				It2_doarg = 0
+				It2_uselog = 0
+
+
+				H_so_doarg = 0
+				H_so_uselog = 0
+
+				tc_H_de_doarg = 0
+				tc_H_de_uselog = 0
+
+				H_ax_doarg = 0
+				H_ax_uselog = 0
+
+
+				Kv1_juxta_doarg = 0
+				Kv1_juxta_uselog = 0
+			}
+
+			if ($1 == 1) {
+
+				Ri_doarg = 0
+				Ri_uselog = 0
+				
+				rpa_doarg = 0
+				rpa_uselog = 0
+				
+				parafact_doarg = 0
+				parafact_uselog = 0
+				
+				Rm_doarg = 0
+				Rm_uselog = 0
+
+				Rmy_doarg = 0
+				Rmy_uselog = 0
+				
+				Cm_doarg = 0
+				Cm_uselog = 0
+				
+				Cmy_doarg = 0
+				Cmy_uselog = 0
+				
+				Cpip_doarg = 0
+				Cpip_uselog = 0
+
+				
+				Na_so_doarg = 1
+				Na_so_uselog = 1
+
+				lc_Na_de_doarg = 1
+				lc_Na_de_uselog = 1
+
+				Na_prox_doarg = 1
+				Na_prox_uselog = 1
+
+				Na_ais_doarg = 1
+				Na_ais_uselog = 1
+
+				Na_int_doarg = 0
+				Na_int_uselog = 0
+
+				Na_nod_doarg = 0
+				Na_nod_uselog = 9
+
+				Na_end_doarg = 0
+				Na_end_uselog = 0
+
+				Na_col_doarg = 0
+				Na_col_uselog = 0
+
+
+				Nap_ais_doarg = 1
+				Nap_ais_uselog = 1
+
+				Nap_int_doarg = 0
+				Nap_int_uselog = 0
+
+				Nap_nod_doarg = 0
+				Nap_nod_uselog = 0
+
+				Nap_end_doarg = 0
+				Nap_end_uselog = 0
+
+
+				Kv1_so_doarg = 1
+				Kv1_so_uselog = 1
+
+				lc_Kv_Kv1_de_doarg = 1
+				lc_Kv_Kv1_de_uselog = 1
+
+				Kv1_prox_doarg = 1
+				Kv1_prox_uselog = 1
+
+				Kv1_ais_doarg = 1
+				Kv1_ais_uselog = 1
+
+				Kv1_int_doarg = 0
+				Kv1_int_uselog = 0
+
+				Kv1_nod_doarg = 0
+				Kv1_nod_uselog = 0
+
+				Kv1_end_doarg = 0
+				Kv1_end_uselog = 0
+
+				Kv1_col_doarg = 0
+				Kv1_col_uselog = 0
+
+
+				Kv_so_doarg = 1
+				Kv_so_uselog = 1
+
+
+				Kv7_de_doarg = 1
+				Kv7_de_uselog = 1
+
+				Kv7_so_doarg = 1
+				Kv7_so_uselog = 1
+
+				Kv7_prox_doarg = 1
+				Kv7_prox_uselog = 1
+
+				Kv7_ais_doarg = 1
+				Kv7_ais_uselog = 1
+
+				Kv7_int_doarg = 0
+				Kv7_int_uselog = 0
+
+				Kv7_nod_doarg = 0
+				Kv7_nod_uselog = 0
+
+				Kv7_end_doarg = 1
+				Kv7_end_uselog = 1
+
+				Kv7_col_doarg = 1
+				Kv7_col_uselog = 1
+
+
+				KCa_doarg = 1
+				KCa_uselog = 1
+
+
+				Ca_doarg = 1
+				Ca_uselog = 1
+
+				It2_doarg = 1
+				It2_uselog = 1
+
+
+				H_so_doarg = 1
+				H_so_uselog = 1
+
+				tc_H_de_doarg = 1
+				tc_H_de_uselog = 1
+
+				H_ax_doarg = 1
+				H_ax_uselog = 1
+
+				Kv1_juxta_doarg = 0
+				Kv1_juxta_uselog = 0
+			}
+
+			if (numarg() == 3 && argtype(3) == 0) {
+
+				if ($3 == 1) {
+
+					print SOf, "somatic and ", DEf, "dendritic recording locations found"
+				}
+			}
+
+		} else if (SOf > 0 && AXf == 0 && DEf == 0) {
+
+			SO = 1
+			modeltypestr = "SO"
+
+			Ri_doarg = 1
+			rpa_doarg = 0
+			parafact_doarg = 0
+			Rm_doarg = 1
+			Rmy_doarg = 0
+			Cm_doarg = 1
+			Cmy_doarg = 0
+			Cpip_doarg = 1
+
+			if (numarg() == 3 && argtype(3) == 0) {
+
+				if ($3 == 1) {
+
+					print SOf, "somatic recording location(s) found"
+				}
+			}
+		}
+	
+	} else {
+
+		DEFAULT = 1
+		modeltypestr = "DEFAULT"
+	}
+
+	if ($1 == 0) {
+
+		sprint(modeltypestr, "%s%s%s", "pas", "-", modeltypestr)
+	
+	} else if ($1 == 1) {
+
+		sprint(modeltypestr, "%s%s%s", "act", "-", modeltypestr)
+	}
+
+	// to modify from defaults, and take into account extra parameters, if any.
+	loadfile(ses, doargfilestr)
+
+	if ($2) {
+
+		if (RmN_doarg) {
+
+			sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "RmN")
+		}
+		
+		if (RmA_doarg) {
+
+			sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "RmA")
+		}
+
+		if (RmI_doarg) {
+
+			sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "RmI")
+		}
+
+		if (RiA_doarg) {
+
+			sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "RiA")
+		}
+
+		if (per_int_doarg) {
+		
+			sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "perint")
+			initperint()
+		}
+	}
+
+	if (numarg() == 3 && argtype(3) == 0) {
+
+		if ($3 == 0 || $3 == 1) {
+
+			print "Model type: ", modeltypestr
+		}			
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// updates both pnorm and corresponding RunFitParm with pnorm arguments
 proc updfitparam() {local p, i, k
 
 	if (argtype(1) == 1) {
@@ -949,6 +1578,7 @@ proc updfitparam() {local p, i, k
 // --------------------------------------------------------------------------------
 // check number of RunFitParm variables against number that should be present, 
 // based on setnp(), and fixes these accordingly. Should be run once before opts.
+
 proc updrfp() {local k, tempnum
 
 	getpnorm()
@@ -964,10 +1594,15 @@ proc updrfp() {local k, tempnum
 		if (k < tempnum) {
 
 			sprint(tempstr, "%s%s", pnamelist.o(k).label, "_norm")
+			
 			if (uselogvec.x[k]) {
+			
 				ParmFitness[0].parmlist.o(k).set(tempstr, pnormvec.x[k], 1, phivec.x[k]/plowvec.x[k], doargvec.x[k], uselogvec.x[k])
+			
 			} else {
+			
 				if (plowvec.x[k] < 0 && phivec.x[k] >= 0) {
+			
 					ParmFitness[0].parmlist.o(k).set(tempstr, pnormvec.x[k], phivec.x[k]/plowvec.x[k], 1, doargvec.x[k], uselogvec.x[k])
 				}
 			}
@@ -981,19 +1616,28 @@ proc updrfp() {local k, tempnum
 
 		} else {
 
-			sprint(tempstr, "%s%s", pnamelist.o(k).label, "_norm")
+			sprint(tempstr, "%s%s", pnamelist.o(k).label, "_norm")			
 			tempobj = new RunFitParm(tempstr)
+
 			if (uselogvec.x[k]) {
+			
 				tempobj.set(tempstr, pnormvec.x[k], 1, phivec.x[k]/plowvec.x[k], doargvec.x[k], uselogvec.x[k])
+			
 			} else {
+			
 				if (plowvec.x[k] < 0 && phivec.x[k] >= 0) {
+			
 					tempobj.set(tempstr, pnormvec.x[k], phivec.x[k]/plowvec.x[k], 1, doargvec.x[k], uselogvec.x[k])
 				}
 			}
+			
 			ParmFitness[0].declare(tempobj)
 			ParmFitness[0].parmlist.append(tempobj)
 			objref domainbox, domainlist, parmbox
+			
 			if (strf.head(tempstr, "\\$", teststr) == -1) {
+
+				sprint(tempstr, "%s", "")
 				sprint(tempstr, "%s.val = %s", tempobj, tempstr)
 				execute1(tempstr)
 			}
@@ -1015,42 +1659,13 @@ proc updrfp() {local k, tempnum
 
 	ParmFitness[0].def_parmlist_use()
 
-	tempstr = ""
 	objref tempobj
 }
 // --------------------------------------------------------------------------------
 
 
 
-// -------------------------------showdom------------------------------------------
-proc showdom() {
-
-	ParmFitnessGui[0].showdomain(1637.9, 724, 218.74, 213.12)
-}
 // --------------------------------------------------------------------------------
-
-
-
-// ------------------------------initfit-------------------------------------------
-// takes no argument.
-// resets parameter panel values to default. Do not use in parallel contexts.
-proc initfit() {
-
-	nquad = 0
-	nefun = 0
-	nefunvec = new Vector()
-	time = 0
-	timevec = new Vector()
-	errlogvec = new Vector()
-	allerrlogvec = new Vector()
-	paramquadvec = new Vector()
-	paramlogvec = new Vector()
-}
-// --------------------------------------------------------------------------------
-
-
-
-// ------------------------------initpnormdef--------------------------------------
 proc initpnormdef() {local p
 
 	for p = 0, getnp()-1 {
@@ -1064,9 +1679,653 @@ proc initpnormdef() {local p
 
 
 // --------------------------------------------------------------------------------
+proc showdom() {
+
+	ParmFitnessGui[0].showdomain(1637.9, 724, 218.74, 213.12)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// set to-be-optimized genes, i.e. parameters.
+proc setgen() {local p, tempnum
+
+	genvec.resize(0)
+
+	if (mode_ == 0) {
+
+		getmodeltype(mode_, idata)
+		getdoarg()
+
+		for p = 0, doargvec.size-2 {
+
+			if (doargvec.x[p]) {
+
+				genvec.resize(genvec.size+1)
+				genvec.x[genvec.size-1] = p
+			}
+		}
+	
+	} else if (mode_ == 1) {
+
+		if (SOAX && axbleb_exists) {
+			
+			tempnum = setnp(0)
+			setnp(mode_)
+
+			genvec.resize(11)
+			
+			// Selected parameters
+			// Na: so, ais, nod, end
+			// Kv1: so, ais, nod, end
+			// if juxta: Kv1 juxta
+			// Kv: so
+
+			// Na_so
+			genvec.x[0] = tempnum+0
+			// Na_ais
+			genvec.x[1] = tempnum+3
+			// Na_int
+			genvec.x[2] = tempnum+4
+			// Na_nod
+			genvec.x[3] = tempnum+5
+			// Na_end
+			genvec.x[4] = tempnum+6
+
+			// Kv1_so
+			genvec.x[5] = tempnum+12
+			// Kv1_ais
+			genvec.x[6] = tempnum+15
+			// Kv1_int
+			genvec.x[7] = tempnum+16
+			// Kv1_nod
+			genvec.x[8] = tempnum+17
+			// Kv1_end
+			genvec.x[9] = tempnum+18
+
+			// Kv_so
+			genvec.x[10] = tempnum+20
+
+			// Kv1_juxta
+			if (juxtaparanod) {
+
+				genvec.resize(genvec.size+1)
+				genvec.x[genvec.size-1] = tempnum+35
+			}
+		}
+	}
+	
+	ns = nd^(genvec.size)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ---------------------------------------------------------------------------------------
+// delimit the domains in parameter space, from which a randomly chosen base, 
+// or initial condition, will be mutated and expressed. Excludes the very weakly-constrained 
+// Cpip, which will still be optimized, but as a "silent" gene.
+
+proc spacegen() {local m, p
+
+	getphi()
+	getplow()
+	
+	spacemat.resize(nd+1, genvec.size)
+
+	for m = 0, spacemat.nrow-1 {
+			
+		for p = 0, spacemat.ncol-1 {
+
+			spacemat.x[m][p] = 1 + m*(((phivec.x[genvec.x[p]]/plowvec.x[genvec.x[p]])-1)/nd)
+		}
+	}
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ---------------------------------getmutation-------------------------------------------
+// procedure for getting  mutation possibilities, which are really just
+// permutations of all possible pspace row indices (row = 0, row = nrow-2).
+// i.e. if nd = 2, there are 2 possible pspace rows indices, representing
+// the 2 states of the variable: (row = 0, row = 1) and (row = 1, row = 2).
+
+proc getmutation() {local k localobj tempvec
+
+	tempvec = new Vector(genvec.size, 0)
+	mutmat = new Matrix(ns, tempvec.size)
+
+	if (nd == 1) {
+
+		for k = 0, mutmat.nrow-1 {
+
+			mutmat.setrow(k, tempvec)
+		}
+
+	} else {
+
+		mutsim = 0
+		sprint(mutstart, "%s", "")
+		sprint(mutp, "%s", "")
+		sprint(mutend, "%s", "")
+
+		for k = 0, tempvec.size-1 {
+
+			sprint(mutstart, "%s%s%d%s", mutstart, "for p", k, " = 0, nd-1 {\n")
+			sprint(mutp, "%s%s%d%s", mutp, "p", k, ",")
+			sprint(mutend, "%s%s", mutend, "}\n")
+		}
+
+		strf.left(mutp, strf.len(mutp)-1)
+		sprint(mutcom, "%s%s%s", "permvec = new Vector()\npermvec.append(", mutp, ")\nmutmat.setrow(mutsim, permvec)\nmutsim+=1\n")
+		sprint(mutexec, "%s%s%s", mutstart, mutcom, mutend)
+		execute(mutexec)
+
+		mutsim = 0
+		sprint(mutstart, "%s", "")
+		sprint(mutp, "%s", "")
+		sprint(mutend, "%s", "")
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+obfunc crchkmat() {local m
+
+	// chkmat created and sized to current number of fit parameters, 
+	// and initialized to all parameters being non-optimal (=1) 
+	// and therefore eligible for further optimization
+	chkmat = new Matrix(getnp(), 1)
+
+	for m = 0, chkmat.nrow-1 {
+
+		chkmat.x[m][0] = 1
+	}
+
+	// remove eligibility from already optimal or currently non-optimized parameters (in increasing order of parameter numbers)
+	if (solnvec.size) {
+
+		for m = 0, solnvec.size-1 {
+
+			chkmat.x[m][0] = 0
+		}
+	}
+
+	if (strf.len(elogvec.label) && strf.len(plogvec.label)) {
+
+		if (esim == -1 && psim == -1) {
+
+			for m = 0, chkmat.nrow-1 {
+
+				chkmat.x[m][0] = 0
+			}
+		}
+	}
+
+	getmodeltype(mode_, idata)
+	getdoarg()
+	for m = 0, chkmat.nrow-1 {
+
+		if (!doargvec.x[m]) {
+
+			chkmat.x[m][0] = 0
+		}
+	}
+
+	return chkmat
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+obfunc chkparam() {local m, tempnum, p
+
+	$o1.resize($o1.nrow, 3)
+
+	getplow()
+	getphi()
+
+	for m = 0, $o1.nrow-1 {
+
+		if ($o1.x[m][0]) {
+
+			$o1.x[m][1] = 1
+			$o1.x[m][2] = phivec.x[m]/plowvec.x[m]
+		}
+	}
+
+	if (strf.len(elogvec.label) && strf.len(plogvec.label)) {
+
+		sscanf(elogvec.label, "%lf", &esim)
+		sscanf(plogvec.label, "%lf", &psim)
+
+		if (esim > -1 && psim > -1) {
+
+			for m = 0, genvec.size-1 {
+
+				$o1.x[genvec.x[m]][1] = spacemat.x[mutmat.x[psim][m]][m]
+				$o1.x[genvec.x[m]][2] = spacemat.x[mutmat.x[psim][m]+1][m]
+			}
+
+			tempnum = setnp(0)
+
+			for p = 0, $o1.nrow-1 {
+
+				// Na_so
+				if (p == 0+tempnum) {
+
+					// if Na_so < Na_ais, < Na_nod
+					if (RunFitParm[p].val < RunFitParm[3+tempnum].val && RunFitParm[p].val < RunFitParm[5+tempnum].val) {
+
+						$o1.x[p][0] = 0
+						$o1.x[1+tempnum][0] = 0
+						$o1.x[2+tempnum][0] = 0
+					}
+				}
+
+				// Na_ais
+				if (p == 3+tempnum) {
+					
+					if (!$o1.x[0+tempnum][0]) {
+
+						// if Na_ais > Na_int, > Na_col
+						if (RunFitParm[p].val > RunFitParm[4+tempnum].val && RunFitParm[p].val > RunFitParm[7+tempnum].val) {
+
+							$o1.x[p][0] = 0
+						}
+					}
+				}
+
+				// Na_int
+				if (p == 4+tempnum) {
+
+					if (!$o1.x[3+tempnum][0]) {
+
+						// if Na_int < Na_nod
+						if (RunFitParm[p].val < RunFitParm[5+tempnum].val) {
+
+							$o1.x[p][0] = 0	
+						}
+					}
+				}
+
+				// Na_nod
+				if (p == 5+tempnum) {
+
+					if (!$o1.x[4+tempnum][0]) {
+
+						// if Na_nod > Na_col
+						if (RunFitParm[p].val > RunFitParm[7+tempnum].val) {
+
+							$o1.x[p][0] = 0
+							$o1.x[7+tempnum][0] = 0
+						}
+					}
+
+					// no restrictive statements can definitively be made about Na_end
+					$o1.x[6+tempnum][0] = 0	
+				}
+
+				// Nap_ais
+				if (p == 8+tempnum) {
+
+					// Nap_ais > Nap_int
+					if (RunFitParm[p].val > RunFitParm[9+tempnum].val) {
+
+						$o1.x[p][0] = 0
+					}
+				}
+
+				// Nap_int
+				if (p == 9+tempnum) {
+
+					// Nap_int < Nap_ais, < Nap_nod
+					if (RunFitParm[p].val < RunFitParm[8+tempnum].val && RunFitParm[p].val < RunFitParm[10+tempnum].val) {
+
+						$o1.x[p][0] = 0
+						// Nap_nod
+						$o1.x[10+tempnum][0] = 0
+					}
+
+					// No definitive restrictions on Nap_end
+					$o1.x[11+tempnum][0] = 0
+				}
+
+				// Kv1_so
+				if (p == 12+tempnum) {
+
+					// Kv1_so < Kv1_ais, < Kv1_juxta, if present
+					if (RunFitParm[p].val < RunFitParm[15+tempnum].val) {
+
+						if (juxtaparanod) {
+
+							if (RunFitParm[p].val < RunFitParm[35+tempnum].val) {
+
+								$o1.x[p][0] = 0
+								// lc_Kv_Kv1_de
+								$o1.x[13+tempnum][0] = 0
+								// Kv1_prox
+								$o1.x[14+tempnum][0] = 0
+							}
+						
+						} else {
+
+							$o1.x[p][0] = 0
+							// lc_Kv_Kv1_de
+							$o1.x[13+tempnum][0] = 0
+							// Kv1_prox
+							$o1.x[14+tempnum][0] = 0
+						}
+					}
+				}
+
+				// Kv1_ais
+				if (p == 15+tempnum) {
+
+					if (!$o1.x[12+tempnum][0]) {
+
+						// if Kv1_ais > Kv1_int, > Kv1_nod, > Kv1_col
+						if (RunFitParm[p].val > RunFitParm[16+tempnum].val && RunFitParm[p].val > RunFitParm[17+tempnum].val && RunFitParm[p].val > RunFitParm[19+tempnum].val) {
+
+							$o1.x[p][0] = 0
+						}
+					}
+				}
+
+				// Kv1_int
+				if (p == 16+tempnum) {
+
+					// Kv1_int < Kv1_ais
+					if (!$o1.x[15+tempnum][0]) {
+
+						if (juxtaparanod) {
+
+							if (RunFitParm[p].val < RunFitParm[35+tempnum].val) {
+
+								$o1.x[p][0] = 0
+							}
+						
+						} else {
+
+							$o1.x[p][0] = 0
+						}
+					}
+				}
+
+				// Kv1_nod
+				if (p == 17+tempnum) {
+
+					// Kv1_nod < Kv1_ais
+					if (!$o1.x[15+tempnum][0]) {
+
+						if (juxtaparanod) {
+
+							if (RunFitParm[p].val < RunFitParm[35+tempnum].val) {
+
+								$o1.x[p][0] = 0
+							}
+						
+						} else {
+
+							$o1.x[p][0] = 0
+						}
+					}
+
+					// No restrictive statements can be made about Kv1_end
+					$o1.x[18+tempnum][0] = 0
+				}
+
+				// Kv1_col
+				if (p == 19+tempnum) {
+
+					// if Kv1_col < Kv1_ais
+					if (!$o1.x[15+tempnum][0]) {
+
+						if (juxtaparanod) {
+
+							if (RunFitParm[p].val < RunFitParm[35+tempnum].val) {
+
+								$o1.x[p][0] = 0
+							}
+						
+						} else {
+
+							$o1.x[p][0] = 0
+						}
+					}
+				}
+
+				// Kv_so
+				if (p == 20+tempnum) {
+
+					if (!$o1.x[13+tempnum][0]) {
+
+						$o1.x[p][0] = 0
+					}
+				}
+
+				// Kv7_so
+				if (p == 21+tempnum) {
+
+					// if Kv7_so >= Kv7_de, < Kv7_ais, < Kv7_nod
+					if (RunFitParm[p].val >= RunFitParm[22+tempnum].val && RunFitParm[p].val < RunFitParm[24+tempnum].val && RunFitParm[p].val < RunFitParm[26+tempnum].val) {
+
+						$o1.x[p][0] = 0
+						// Kv7_de
+						$o1.x[22+tempnum][0] = 0
+						// Kv7_prox
+						$o1.x[23+tempnum][0] = 0
+					}
+				}
+
+				// Kv7_ais
+				if (p == 24+tempnum) {
+
+					if (!$o1.x[21+tempnum][0]) {
+
+						// if Kv7_ais > Kv7_int, > Kv7_col
+						if (RunFitParm[p].val > RunFitParm[25+tempnum].val && RunFitParm[p].val > RunFitParm[28+tempnum].val) {
+
+							$o1.x[p][0] = 0
+						}
+					}
+				}
+
+				// Kv7_int
+				if (p == 25+tempnum) {
+
+					if (!$o1.x[24+tempnum][0]) {
+
+						// if Kv7_int < Kv7_nod && Kv7_int < Kv7_col
+						if (RunFitParm[p].val < RunFitParm[26+tempnum].val) {						
+
+							$o1.x[p][0] = 0
+						}
+					}
+				}
+
+				// Kv7_nod
+				if (p == 26+tempnum) {
+
+					if (!$o1.x[25+tempnum][0]) {
+
+						// if Kv7_nod > Kv7_col
+						if (RunFitParm[p].val > RunFitParm[28+tempnum].val) {
+
+								$o1.x[p][0] = 0
+								// Kv7_col
+								$o1.x[28+tempnum][0] = 0
+						}
+					}
+
+					// no definitive restrictions on Kv7_end
+					$o1.x[27+tempnum][0] = 0
+				}
+
+				// No restrictive statements can be made at this time on KCa, Ca, It2, H_so, tc_H_de, H_ax
+				if (p == 29+tempnum) {
+
+					$o1.x[p][0] = 0
+					$o1.x[30+tempnum][0] = 0
+					$o1.x[31+tempnum][0] = 0
+					$o1.x[32+tempnum][0] = 0
+					$o1.x[33+tempnum][0] = 0
+					$o1.x[34+tempnum][0] = 0
+				}
+
+				// Kv1_juxta
+				if (p == 35+tempnum) {
+
+					// if Kv1_juxta > Kv1_so, > Kv1_int, > Kv1_nod, > Kv1_col
+					if (!$o1.x[12+tempnum][0] && !$o1.x[16+tempnum][0] && !$o1.x[17+tempnum][0] && !$o1.x[19+tempnum][0]) {
+
+						$o1.x[35+tempnum][0] = 0
+					}
+				}
+			}			
+		}
+	}
+
+	return $o1
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+obfunc mutparam() {local p localobj prand, tempvec
+
+	prand = new Random()
+	tempvec = new Vector()
+
+	for p = 0, $o1.nrow-1 {
+
+		tempvec.resize(tempvec.size+1)
+
+		if ($o1.x[p][0]) {
+			
+			tempvec.x[tempvec.size-1] = prand.uniform($o1.x[p][1], $o1.x[p][2])
+		
+		} else {
+
+			tempvec.x[tempvec.size-1] = RunFitParm[p].val
+		}
+	}
+
+	return tempvec
+}
+// --------------------------------------------------------------------------------
+
+
+// --------------------------------------------------------------------------------
+proc optimizewrap() {local tempnum, iiamp localobj rangemat
+
+	initfit()
+	savepelog()
+
+	tempnum = iampvec.indwhere("==", stim.amp)
+
+	if (tempnum != -1) {
+
+		iiamp = tempnum
+	
+	} else {
+
+		iiamp = 0
+	}
+
+	crdir(root, "out", 0)
+	getmod()
+	crdir(out, modstr)
+	// create iampdir
+
+	getmat(ses, vdatfilestr, vdatmat)
+	tdatvec = new Vector()
+	tdatvec.append(vdatmat.getcol(0))
+	nsigt = getnsig(tdatvec)
+	dt = setnsig(dt, nsigt)
+	nsigv = getnsig(vdatmat.getcol(1))
+	
+	setmaxform()
+	setmaxformvec()
+	setvform()
+	setvformvec()
+	settform()
+	settformvec()
+
+	croutmat(1)
+	croutlist(1)
+
+	getpheader()
+	geteheader()
+	getvheader(1)
+
+	adj_injbound(mode_)
+
+	getpnorm()
+
+	tol = settol(iiamp)
+	maxstepsize = setmaxstepsize(tol)
+
+	eqlist.o(0).resize(0)
+	pqlist.o(0).resize(0)
+
+	saveopt(iampdir, 1)
+
+	print "\nRunning simulation 1 of 1"
+
+	// required optimize parameters:
+	// $1 = iiamp
+	// $2 = mode_
+	// $3 = ll
+	// $4 = uopt
+	// $o5 = pnormvec
+	// $6 = tol
+	// $7 = maxstepsize
+	// $o8 = eqvec from eqlist, to be updated with resultant quad errors
+	// $o9 = pqvec from pqlist, to be updated with resultant quad parameters
+	// $o10 = elogvec from eloglist, to be updated
+	// $o11 = plogvec from ploglist, to be updated
+	// $12 = sim
+	// $13 = scount
+	// $14 = istart
+	// $15 = internal job id, for GUI-based calls to optimize (718573=GUI)
+	optimize(iiamp, mode_, ll, uopt, pnormvec, tol, maxstepsize, eqlist.o(0), pqlist.o(0), 0, 0, 0, 718573)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc setoptpanel() {
+
+	optibox = new VBox(3)
+	optibox.intercept(1)
+	xpanel("", 1)
+	xbutton("optimize", "optimizewrap()")
+	xlabel(" spatially non-uniform parameter distributions")
+	xpanel()
+	xpanel("", 1)
+	xpvalue("nquad", &nquad_, 0, "", 0, 1)
+	xlabel(" ")
+	xpvalue("nefun", &nefun_, 0, "", 0, 1)
+	xpanel()
+	optibox.intercept(0)
+	optibox.map("Non-uniform (NU) optimization", 998, 961, 360.96, 93.12)
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
 // change fit data according to iiamp and imported vdat
 // $1 = iiamp
-// $2 = mode
+// $2 = mode_
 proc changedata() {local f localobj boundvec, weightvec, tempxvec
 
 	for f = 0, nf-1 {
@@ -1104,14 +2363,13 @@ proc changedata() {local f localobj boundvec, weightvec, tempxvec
 
 	strdef chgdata_iampstr
 	getiamp($1, chgdata_iampstr)
-	print "Fit data changed to ", chgdata_iampstr, " voltage response"
-	chgdata_iampstr = ""	
+	print "Fit data changed to ", chgdata_iampstr, " voltage response"	
 }
 // --------------------------------------------------------------------------------
 
 
 
-// -------------------------------reseticlamp--------------------------------------
+// --------------------------------------------------------------------------------
 // $1 = iiamp
 // $2 = 0, or 1; whether to rewrite and reload associated data files and windows
 
@@ -1135,7 +2393,6 @@ proc reseticlamp() {local wstart, wkill, win, interval, wcount
 		loadfile(1, ses, shapeplotfilestr)
 	}
 	
-
 	// deprecated: as window replacement is slow and does not seem to work for every window type.
 	// windows are therefore replaced directly on top of each other.
 	// window replacement is best for GUI-based model exploration. Otherwise, 
@@ -1162,17 +2419,17 @@ proc reseticlamp() {local wstart, wkill, win, interval, wcount
 		
 	// 		if (wcount > win+nf+1) {	
 
-	// 			writevtplot(mode, stim.amp)
-	// 			writevxplot(mode, stim.amp)
-	// 			writeshape(mode, stim.amp)
+	// 			writevtplot(mode_, stim.amp)
+	// 			writevxplot(mode_, stim.amp)
+	// 			writeshape(mode_, stim.amp)
 
-	// 			if (mode == 0) {
+	// 			if (mode_ == 0) {
 					
 	// 				loadfile(1, ses, "vtplot-pas.ses")
 	// 				loadfile(1, ses, "vxplot-pas.ses")
 	// 				loadfile(1, ses, "shapeplot-pas.ses")
 
-	// 			} else if (mode == 1) {
+	// 			} else if (mode_ == 1) {
 
 	// 				loadfile(1, ses, "vtplot-act.ses")
 	// 				loadfile(1, ses, "vxplot-act.ses")
@@ -1192,231 +2449,103 @@ proc reseticlamp() {local wstart, wkill, win, interval, wcount
 
 
 
-// -------------------------------optimize-----------------------------------------
-// The NU algorithm, serial version (GUI-based).
-// See genopt for the massively parallel version.
+// --------------------------------------------------------------------------------
+func getoptsoln() {local k localobj tempmat
 
-// Description: a "just-enough" or sufficiency approach to optimization, ideal 
-// for unevenly- distributed parameters, such as myelin over a primary axon, 
-// or weakly-constrained parameters in general, due to intrinsic noise or possibly
-// other factors.
+	if (getiampdir()) {
 
-// $1 is the tolerance (optional).
-// $2 is the maxstepsize (optional).
+		if (chkdir(iampdir, "\npmatr.dat\n") || chkdir(iampdir, "\npmatr-all.dat\n")) {
 
-proc optimize() {local p, f
+			if (numarg() == 2 && argtype(2) == 2) {
 
-	// variable tracking whether this optimize procedure is running
-	fitoff = 0
-	// minimum nquad to be performed
-	MulfitPraxWrap[1].nstep = 1
-	// set attributes of praxis
-	if (numarg() == 2) {
-		
-		tol = $1
-		maxstepsize = $2
-	}
-	attr_praxis(tol, maxstepsize, 0)
-	// start optimize. Stop button needs to be pressed twice on the gui to exit.
-	MulRunFitter[0].prun()
+				if (!strcmp($s2, "all")) {
 
-	// exit strategy
-	while (!fitoff) {
-
-		if (stoprun) {
-		
-			nquad = 0
-			nefun = 0
-			nefunvec = new Vector()
-			time = 0
-			timevec = new Vector()
-			errlogvec = new Vector()
-			allerrlogvec = new Vector()
-			paramquadvec = new Vector()
-			paramlogvec = new Vector()
-			fitoff = 1
-			break
-		 
-		} else {
-
-			// optimization variables of interest
-			// net number of quads performed (to be adjusted below)
-			nquad += 1
-			// net number of error functions evaluated (to be adjusted below)
-			nefunvec.append(MulRunFitter[0].opt.nefun)
-			// total time elapsed in seconds.
-			time += MulRunFitter[0].opt.time
-			if (time) timevec.append(time)			
-			strdef tsimstr
-			tsim = setnsig(time/3600, 3)
-			sprint(tsimstr, "%g", tsim)				
-			
-			// error and parameter logging
-			for f = 0, nf-1 errlogvec.append(RegionFitness[f].ydat_.meansqerr(FitnessGenerator[0].yveclist.o(f), RegionFitness[f].dw_))
-			errlogvec.append(errlogvec.c(errlogvec.size-nf, errlogvec.size-1).sum)
-			for p = 0, getnp()-1 paramquadvec.append(RunFitParm[p].val)
-			
-			// ------------------------------------------------------------------------------------------------------------------------------------
-			// If error is marginal, i.e. in the noise, then exit.
-			if (errlogvec.x[errlogvec.size-1] < tol) {
-
-				// add tol to errlog in the 2nd to last position.
-				errlogvec.append(tol)				
-
-				// step back to relevant nefun if appropriate (the penultimate).
-				if (nefunvec.size >= 2) {
-
-					nefun = nefunvec.sum-nefunvec.x[nefunvec.size-1]
-					nquad -= 1
-					print "Net total: nquad=", nquad, "nefun=", nefun, "time=", time, "e=", errlogvec.x(errlogvec.size-2)
-					print "Optimization completed in ", tsimstr, " hour(s)"
-
-					// exit codes
-					// the last position is occupied by the exit code.
-					// the exit code answers the question: how many steps back from the last position in a given solution vector do you need to take in order to retrieve
-					// the first position of the relevant solution set?
-					// exit codes are added to errlog and paramquad.
-					errlogvec.append(-2*(nf+1)-1)
-
-					// step back to penultimate, to avoid over-optimization with error found in the noise.
-					paramquadvec.append(-2*getnp())					
+					getmat(iampdir, "pmatr-all.dat", tempmat)
 				
 				} else {
-				
-					nefun = nefunvec.sum
-					print "Net total: nquad=", nquad, "nefun=", nefun, "time=", time, "e=", errlogvec.x(errlogvec.size-1)
 
-					errlogvec.append(-(nf+1)-1)
-					paramquadvec.append(-getnp())
-				}				
-	
-				print "Reason for exit: error is in the noise"
-				fitoff = 1
-			}
-
-			// ------------------------------------------------------------------------------------------------------------------------------------
-			// If enough quads have been performed, check if can exit.
-			if (!fitoff && errlogvec.size > 2*(nf+1)) {
-				
-				// If error improvement is increasingly marginal and in the noise, then exit. The penultimate quad becomes the relevant, non-over-optimized one.
-				if (abs(errlogvec.x[errlogvec.size-(nf+1)-1] - errlogvec.x[errlogvec.size-2*(nf+1)-1]) > abs(errlogvec.x[errlogvec.size-1] - errlogvec.x[errlogvec.size-(nf+1)]) && abs(errlogvec.x[errlogvec.size-(nf+1)-1] - errlogvec.x[errlogvec.size-1]) < tol) {
-						
-						updfitparam(paramquadvec.c(paramquadvec.size-2*getnp(), paramquadvec.size-getnp()-1))
-						FitnessGenerator[0].efun()
-						nquad -= 1
-						nefun = nefunvec.sum-nefunvec.x[nefunvec.size-1]
-						print "Net total: nquad=", nquad, "nefun=", nefun, "time=", time, "e=", errlogvec.x[errlogvec.size-(nf+1)-1]
-						print "Optimization completed in ", tsimstr, " hour(s)"
-						
-						errlogvec.append(tol)
-						errlogvec.append(-2*(nf+1)-1)
-						paramquadvec.append(-2*getnp())
-
-						print "Reason for exit: error improvement is marginal and in the noise"
-						fitoff = 1
-
+					getmat(iampdir, "pmatr.dat", tempmat)
 				}
+			}		
+
+			solnvec = new Vector(tempmat.getrow(0).size)
+
+			for k = 0, solnvec.size-1 {
+
+				solnvec.x[k] = tempmat.getrow(0).x[k]
 			}
+
+			updfitparam(solnvec)
+			getpnorm()
+
+			print "Optimal parameters loaded for ", modstr
+
+			return solnvec.size
 		
-			// ------------------------------------------------------------------------------------------------------------------------------------
-			if (!fitoff) {
+		} else {
 
-				nefun = nefunvec.sum
-				print "total: nquad=", nquad, "nefun=", nefun, "time=", time, "e=", MulfitPraxWrap[1].minerr
-				optimize(tol, maxstepsize)
-			}
+			print "Optimal parameters do not exist for ", modstr
+
+			getoptpas($1)
+
+			return 0
 		}
-	}
-}
-// --------------------------------------------------------------------------------
-
-
-
-// -----------------------------optimizewrap---------------------------------------
-proc optimizewrap() {
-
-	initfit()
-
-	if (numarg() == 2 && argtype(1) == 0 && argtype(2) == 0) {
-
-		optimize($1, $2)
 	
 	} else {
 
-		optimize()
+		print "Optimization directory does not exist for ", modstr
+
+		getoptpas($1)
+
+		return 0
 	}
 }
 // --------------------------------------------------------------------------------
 
 
 
-// -----------------------------setoptpanel----------------------------------------
-proc setoptpanel() {
-
-	optibox = new VBox(3)
-	optibox.intercept(1)
-	xpanel("", 1)
-	xbutton("optimize", "optimizewrap()")
-	xlabel(" spatially non-uniform parameter distributions")
-	xpanel()
-	xpanel("", 1)
-	xpvalue("nquad", &nquad, 0, "", 0, 1)
-	xlabel(" ")
-	xpvalue("nefun", &nefun, 0, "", 0, 1)
-	xpanel()
-	optibox.intercept(0)
-	// optibox.map("Non-uniform (NU) optimization", 667.9, 961, 360.96, 93.12)
-	optibox.map("Non-uniform (NU) optimization", 998, 961, 360.96, 93.12)
-}
 // --------------------------------------------------------------------------------
+func getoptpas() {local k, tempnum
 
+	tempnum = $1
+	mode_ = 0	
+	
+	if (getmod()) {
 
+		if (chkdir(moddir, "pematr.dat")) {
 
-// -----------------------------getoptsoln-----------------------------------------
-proc getoptsoln() {local chk, origmode, k, np_pas, np localobj tempmat
-
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
-
-	$o1 = new Vector()
-
-	if (chkdir(root, "outdir")) {
-
-		origmode = mode
-		mode = 0
-		getmod()
-
-		if (chkdir(out, modstr) && chkdir(moddir, "pematr.dat")) {
-
-			np_pas = setnp(mode)
 			getmat(moddir, "pematr.dat", tempmat)
-			for k = 0, np_pas-1 $o1.append(tempmat.getrow(tempmat.nrow-2).x[k])
+
+			solnvec = new Vector(setnp(mode_))
+
+			for k = 0, setnp(mode_)-1 solnvec.x[k] = tempmat.getrow(tempmat.nrow-2).x[k]
+
+			updfitparam(solnvec)
+			getpnorm()
+
+			print "Optimal parameters loaded for ", modstr
+
+			mode_ = $1			
+
+			return solnvec.size
+	
+		} else {
+
+			print "Optimal parameters do not exist for ", modstr
+
+			mode_ = $1
+
+			return 0
 		}
+	
+	} else {
 
-		mode = origmode
-		np = setnp(mode)
-		getmod()
+		print "Parameter directory does not exist for ", modstr
 
-		if (mode == 1) {
+		mode_ = $1
 
-			getiampdir()
-		
-			if (chkdir(out, modstr)) {
-
-				if (chkdir(moddir, iampstr)) {
-
-					if (chkdir(iampdir, "pmat.dat")) {
-
-						getmat(iampdir, "pmat.dat", tempmat)
-						for k = np_pas, np-1 $o1.append(tempmat.getrow(0).x[k])
-					}
-				}
-			}
-		}
+		return 0
 	}
-
-	chdir(cwd)
-	if (chk) cwd = ""	
 }
 // --------------------------------------------------------------------------------
 
@@ -1434,6 +2563,8 @@ proc perr() {local f
 		}
 	}
 
+	sprint(tempstr, "%s", "")
+
 	for f = 0, nf-1 {
 
 		sprint(numstr, vformvec, RegionFitness[f].ydat_.meansqerr(FitnessGenerator[0].yveclist.o(f), RegionFitness[f].dw_))
@@ -1442,15 +2573,14 @@ proc perr() {local f
 
 	print tempstr
 
-	numstr = ""
-	tempstr = ""
+	sprint(tempstr, "%s", "")
 }
 // --------------------------------------------------------------------------------
 
 
 
 // --------------------------------------------------------------------------------
-proc ppnorm() {local k, np_pas
+proc ppnorm() {local k, tempnum
 
 	if (numarg() == 1 && argtype(1) == 2) {
 
@@ -1461,10 +2591,12 @@ proc ppnorm() {local k, np_pas
 		}
 	}
 
-	np_pas = setnp(0)
-	setnp(mode)
+	tempnum = setnp(0)
 
-	for k = np_pas, pnormvec.size-1 print pnormvec.x[i]
+	for k = tempnum, pnormvec.size-1 {
+
+		print pnormvec.x[k]
+	}
 }
 // --------------------------------------------------------------------------------
 
@@ -1479,37 +2611,61 @@ proc getsecparam() {local seg, countseg, pos, nrecrows, k localobj tempvec, temp
 
 			print "Enter:"
 			print "1) section name (string) or sectionlist (object)"
-			print "2) variable of interest to record, e.g. v or vext (string)"
-			print "3) optional file name header (string, i.e. sectionlist name)"
+			print "2) variable of interest to record (\"v\" or \"vext\", as string)"
+			print "3) optional file name header (especially for sectionlist names, as string)"
 			stop
 		}
 	}
 
 	countseg = 0
+
 	if (argtype(1) == 2) {
 
-		forsec $s1 countseg = nseg 
+		forsec $s1 {
+
+			countseg = nseg 
+		}
 	
 	} else {
 
-		forsec $o1 countseg += nseg
+		forsec $o1 {
+
+			countseg += nseg
+		}
 	}
 
 	nrecrows = tstop/dt
+	
 	tempvec = new Vector(1, nrecrows)
+	
 	tempvec.floor
 	nrecrows = tempvec.x[0]+1
+	
 	crveclist(countseg+1, templist)
-	for k = 0, templist.count-1 templist.o(k).resize(nrecrows)
+	
+	for k = 0, templist.count-1 {
+
+		templist.o(k).resize(nrecrows)
+	}
 
 	strdef exprtok_left, exprtok_right
-	if (!strcmp($s2, "v")) sprint(exprtok_left, ".v(")
-	if (!strcmp($s2, "vext")) sprint(exprtok_left, ".vext(")
+	
+	if (!strcmp($s2, "v")) {
+
+		sprint(exprtok_left, ".v(")
+	}
+	
+	if (!strcmp($s2, "vext")) {
+
+		sprint(exprtok_left, ".vext(")
+	}
+	
 	sprint(exprtok_right, ")")	
 	
 	templist.o(0).record(&t)
 	num = 1
 	strdef getsecparamstr
+	
 	if (argtype(1) == 2) {
 
 		forsec $s1 for seg = 1, nseg {
@@ -1533,8 +2689,9 @@ proc getsecparam() {local seg, countseg, pos, nrecrows, k localobj tempvec, temp
 
 	init()
 	run()
-
+	
 	getmod()
+	
 	if (numarg() == 3 && argtype(3) == 2) {
 
 		if (argtype(1) == 2) {
@@ -1559,11 +2716,15 @@ proc getsecparam() {local seg, countseg, pos, nrecrows, k localobj tempvec, temp
 	}
 	
 	tempmat = new Matrix(nrecrows, countseg+1)
-	for k = 0, templist.count-1 tempmat.setcol(k, templist.o(k))
+	
+	for k = 0, templist.count-1 {
+
+		tempmat.setcol(k, templist.o(k))
+	}
+	
 	savemat(ses, tempstr, tempmat, vformvec)
 
 	objref templist
-	tempstr = ""
 }
 // --------------------------------------------------------------------------------
 
@@ -1585,8 +2746,17 @@ proc gadd() {local seg, pos
 	}
 
 	strdef exprtok_left, exprtok_right
-	if (!strcmp($s2, "v")) sprint(exprtok_left, ".v(")
-	if (!strcmp($s2, "vext")) sprint(exprtok_left, ".vext(")
+	
+	if (!strcmp($s2, "v")) {
+
+		sprint(exprtok_left, ".v(")
+	}
+	
+	if (!strcmp($s2, "vext")) {
+
+		sprint(exprtok_left, ".vext(")
+	}
+	
 	sprint(exprtok_right, ")")
 	
 	if (!newg) {
@@ -1663,7 +2833,9 @@ proc chlam() {local k localobj tempvec
 		init()
 
 		strdef lamstr
+		
 		sprint(lamstr, "%s%g", "lamellae = ", $2^($3+k))
+		
 		if (numarg() == 7) {
 
 			sprint(lamstr, "%s%s%s", $s7, ", ", lamstr)
@@ -1848,7 +3020,10 @@ proc chdelta_pa() {local dpa, dpn, apa, apn, Rpa, Rpn, k, rpa_norm_orig, parafac
 
 		sprint(varstr, "%s%g", "new delta *= ", ($1^($2+k)))
 
-		if (numarg() == 6 && argtype(6) == 2) sprint(varstr, "%s%s%s", $s6, ", ", varstr)
+		if (numarg() == 6 && argtype(6) == 2) {
+
+			sprint(varstr, "%s%s%s", $s6, ", ", varstr)
+		}
 		
 		getsecparam($s5, $o4, varstr)
 	}
@@ -1902,7 +3077,10 @@ proc chdelta_pa() {local ad, apa, Rpa, k, rpa_norm_orig, Rmy_norm_orig
 
 		sprint(varstr, "%s%g%s%g%s", "base delta_pa = ", $1, "nm, new delta_pa = ", $1*($2^($3+k)), "nm")
 
-		if (numarg() == 7 && argtype(7) == 2) sprint(varstr, "%s%s%s", $s7, ", ", varstr)
+		if (numarg() == 7 && argtype(7) == 2) {
+
+			sprint(varstr, "%s%s%s", $s7, ", ", varstr)
+		}
 		
 		getsecparam($s6, $o5, varstr)
 	}
@@ -1963,9 +3141,13 @@ proc chparam() {local k localobj tempvec, paramvec
 		init()
 
 		strdef header
+		
 		sprint(header, "%s%s%g%s%s", $s1, "=", ($2^($3+k)), "*", $s1)
 
-		if (numarg() == 7 && argtype(7) == 2) sprint(header, "%s%s%s", $s7, ", ", header)
+		if (numarg() == 7 && argtype(7) == 2) {
+
+			sprint(header, "%s%s%s", $s7, ", ", header)
+		}
 
 		if (argtype(5) == 1) {
 			
@@ -1987,8 +3169,6 @@ proc chparam() {local k localobj tempvec, paramvec
 	pnormvec.x[tempvec.x[0]] = tempvec.x[1]
 	updfitparam(pnormvec)
 	init()
-
-	tempstr = ""
 }
 // --------------------------------------------------------------------------------
 
@@ -2075,10 +3255,14 @@ proc randomizep() {local k localobj prand, tempvec
 	}
 
 	if (numarg() == 3) {
+		
 		prand = new Random($3)
+	
 	} else {
+	
 		prand = new Random()
 	}
+	
 	tempvec = new Vector()
 
 	getplow()
@@ -2093,5 +3277,30 @@ proc randomizep() {local k localobj prand, tempvec
 	updfitparam(tempvec, $1, $2)
 
 	init()
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// based on the 3 sigma approach
+proc getthresh() {local f, deli, k localobj tempyvec, tempvec
+
+	speedvec = new Vector()
+
+	for f = 0, nf-1 {
+
+		tempyvec = new Vector()
+
+		deli = RegionFitness[f].xdat.indwhere(">=", stim.del)
+
+		for k = 0, deli tempyvec.append(RegionFitness[f].ydat.x[k])
+
+		tempvec = new Vector()
+
+		tempvec.deriv(tempyvec, dt, 1)
+
+		speedvec.append(4*tempvec.stdev())
+	}
 }
 // --------------------------------------------------------------------------------

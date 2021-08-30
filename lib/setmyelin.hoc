@@ -1,0 +1,251 @@
+// nFit
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+// -------------------------------Variables----------------------------------------
+// scale factor for myelin, accounting for the difference in surface area between
+// the myelin sheath and axon core. Based on g and ratio entered at setup.
+smy = 1/(gr = getvar(ses, "gr.dat"))
+// to contain internode numbers (including paranodal sections) requested for demyelination
+// by function demyelinate(int1, int2, ..., intn). Each internode number corresponds to the
+// same index number in the intlist created by demyelinate().
+objref demyvec
+leak_dist = 0
+paracount = 0
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------setmy-------------------------------------------
+// set myelin parameters according to the the myelin scale (smy)
+// to account for myelin dimensions (i.e. extra radius over that of the axon core)
+// and the extra surface area that affords to the myelin structure to accordingly 
+// scale any myelin-specific parameters in axon types involving myelin.
+
+proc setmy() {local k, m, seg, pos, dist_, Kv7_ais_distal
+
+	forsec internodal {
+
+		if (DC || DCPARA) {
+
+			xg[0] *= smy
+			xc[0] *= smy
+
+			if (demy) {
+
+				sprint(secstr, secname())
+
+				for k = 0, demyvec.size-1 {
+
+					for m = 0, intlist.o(demyvec.x[k]).size-1 {
+
+						strdef strint
+						sprint (strint, "%s%g%s", ".*[", intlist.o(demyvec.x[k]).x[m], "].*")						
+					
+						if (issection(strint)) {
+
+							// this will demyelinate the section
+							xg[0] = 1/Rext
+							xc[0] = 0
+							xraxial[0] = rext
+							
+							// 1st internode, into which there will be leakage of high density Kv7 channels from the AIS (Hamada and Kole 2015).
+							// That leakage is quantified as an effective increase in AIS length by a factor of 35/23 (Hamada and Kole 2015).
+							if (demyvec.x[k] == 0) {
+								
+								if (mode_ == 1) {							
+									
+									strdef strais
+									forsec AIS sprint(strais, "%s", secname())
+									leak_dist = ais_length * ((35/23) - 1)
+									
+									forsec AIS {
+
+										for seg = 1, nseg {
+
+											pos = (2*seg-1)/(2*nseg)											
+											Kv7_ais_distal = gbar_kv7(pos)
+										}
+									}
+
+									forsec secstr {
+
+										for seg = 1, nseg {
+
+											pos = (2*seg-1)/(2*nseg)
+											dist_ = getdist(strais, 1, secstr, pos)
+
+											if (dist_ < leak_dist) {
+
+												gbar_kv7(pos) = Kv7_ais_distal
+											
+											} else {
+
+												// the position is beyond but is within the downstream paranode...
+												// take into account Nav and Kv7 leakage from the downstream node into this demyelinated paranode (Hamada and Kole 2015).
+												ifsec paranodal {
+
+													gbar_nax = Na_nod_norm * Na_nod_low
+													gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
+												}												
+											}
+										}
+									}
+								}
+							
+							} else if (demyvec.x[k] > 0 && demyvec.x[k] < intlist.count-1) {
+
+								if (mode_ == 1) {
+									
+									// any other internode.
+									// there will be only be leakage of Nav and Kv7 into a given paranode if the internode containing that paranode is demyelinated (Hamada and Kole 2015).
+									ifsec paranodal {
+
+										gbar_nax = Na_nod_norm * Na_nod_low
+										gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
+									}
+								}
+							
+							} else if (demyvec.x[k] == intlist.count-1) {
+
+								if (mode_ == 1) {
+
+									if (!axbleb_exists) {
+
+										ifsec paranodal {
+
+											gbar_nax = Na_nod_norm * Na_nod_low
+											gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
+										}
+									
+									} else {
+
+										ifsec paranodal {
+
+											paracount += 1
+
+											if (paracount == 1) {
+
+												gbar_nax = Na_nod_norm * Na_nod_low
+												gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
+											
+											} else if (paracount == 2) {
+
+												gbar_nax = Na_end_norm * Na_end_low
+												gbar_kv7 = Kv7_end_norm * Kv7_end_low
+
+												paracount = 0
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		
+		if (SC) {
+
+			g_pas = 1/((Rm_norm * Rm_low) + ((Rmy_norm * Rmy_low)/smy))
+			cm = (Cm_norm * Cm_low * Cmy_norm * Cmy_low * smy)/((Cm_norm * Cm_low) + (Cmy_norm * Cmy_low * smy))
+
+			if (per_int_doarg) {
+			
+				for k = 0, intlist.count-1 {
+
+					for m = 0, intlist.o(k).size-1 {
+
+						axon[intlist.o(k).x[m]] {
+
+							sprint(tempstr, "%s%d%s%d%s", "~g_pas = 1/((Rm_norm * Rm_low) + ((Rmy_", k+1, "_norm * Rmy_", k+1, "_low)/smy))")
+							execute(tempstr)
+
+							sprint(tempstr, "%s%d%s%d%s%d%s%d%s", "~cm = (Cm_norm * Cm_low * Cmy_", k+1, "_norm * Cmy_", k+1, "_low * smy)/((Cm_norm * Cm_low) + (Cmy_", k+1, "_norm * Cmy_", k+1, "_low * smy))")
+							execute(tempstr)
+						}
+					}
+				}
+			}
+
+			if (RmA_doarg) {
+
+				g_pas = 1/((RmA_norm * RmA_low) + ((Rmy_norm * Rmy_low)/smy))
+			}
+
+			if (RmI_doarg) {
+
+				g_pas = 1/((RmI_norm * RmI_low) + ((Rmy_norm * Rmy_low)/smy))
+			}
+
+			if (exp_doarg) {
+
+				g_pas = 1/((Rm_norm * Rm_low) + (Rm_norm * 20 * Rmy_low)/smy)
+				cm = (Cm_norm * Cm_low * (Cm_norm/20) * Cm_low * smy)/((Cm_norm * Cm_low) + ((Cm_norm/20) * Cm_low * smy))
+			}			
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc demyelinate() {local i
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter number corresponding to each internode to demyelinate, starting at 1 (separate by commas)."
+			print "To discover the number of internodes, try nint()."
+			stop
+		}
+	}
+
+	crintlist()
+
+	demyvec = new Vector()
+	for i = 1, numarg() demyvec.append($i-1)
+		
+	print "Demyelinating..."
+	
+	demy = 1
+	init()
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc remyelinate() {
+
+	print "Remyelinating..."	
+	
+	demy = 0
+	init()
+}
+// --------------------------------------------------------------------------------
+proc temp_() {local k localobj tempvec
+	
+	tempvec=new Vector()
+	tempvec.append(261.41, 25238, 1.3716, 578600, 0.0076935, 141024, 25.222, 3.4474e-06, 778.745, 153.56, 1469.43, 10000, 203.097, 13359.4, 665.328, 81.2534, 0.825793, 0.0486485, 0.860195, 2.81808, 76.9301, 322.897, 144.934, 3043.07, 1175.35, 330.394, 44.8813, 662.046, 376.883, 7.47497, 15, 25.4779, 122.233, 157.238, 3.3044, 141.321, 31.919, 12.2709, 0.00412862, 0.00102773, 2.30221, 0.000104181, 0.000165713)
+	for k=0,tempvec.size-1 tempvec.x[k]/=plowvec.x[k]
+	updfitparam(tempvec)
+	init()
+}
+
+proc demyall() {
+
+	forsec internodal {
+
+		xg[0] = 1/Rext
+		xc[0] = 0
+		xraxial[0] = rext		
+	}
+}

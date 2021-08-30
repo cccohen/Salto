@@ -1,4 +1,4 @@
-// nFit
+// Salto
 // (c) Charles CH Cohen, 2014-present
 // this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
 // International license (CC BY-NC-ND 4.0, in English).
@@ -7,34 +7,36 @@
 
 
 // -------------------------------Variables----------------------------------------
-objref getfile, writefile, strf, PWM, timer
-objref tempobj, tempmat, templist, tempseclist, tempvec, testvec, tempxvec, tempyvec
-objref recloclist, recseclist, subloclist, iampvec, piplist, fitvarlist, pnamelist, vvarlist
+objref getfile, writefile, llc, strf, PWM, timer
+objref tempobj, tempmat, templist, tempseclist, tempvec, testvec, tempxvec, tempyvec, rvec
+objref recloclist, recseclist, loclist, subloclist, sublocvec, iampvec, piplist, fitvarlist, pnamelist, vvarlist, dirlist
 objref secref, tsecref, cdiamvec, pvec, pnormvec
-objref BBvec, injvec, vdatmat, newvdatmat, vdatlist, vdatvec, tdatvec, tcmpvec, vpathlist
+objref BBvec, celltypevec, injvec, vdatmat, newvdatmat, vdatlist, vdatvec, tdatvec, tcmpvec, vpathlist
 objref xcvec, ycvec, avgxcvec, avgycvec
 objref noisevec, pdefvec, pnormdefvec, plowvec, phivec, doargvec, uselogvec
-objref errlogvec, allerrlogvec, nefunvec, timevec, paramquadvec, paramlogvec, optibox, solnvec, paramvec
 
 getfile = new File()
 writefile = new File()
+llc = new ParallelContext()
 strf = new StringFunctions()
 PWM = new PWManager()
 
-strdef cwd, tempstr, teststr, tempdir, testdir, tempheader, commstr
+strdef cwd, tempstr, teststr, tempdir, testdir, tempheader, commstr, rstr, ostr, wstr, filestr, qstr, astr
 strdef maxform, maxnum, maxformvec
 strdef tform, tformvec, vform, vformvec
-strdef trailzero, format, numstr, numhead, powstr, headstr, tailstr, filestr
+strdef trailzero, format, numstr, numhead, powstr, headstr, tailstr
+strdef locstr, sublocstr, BBqstr, BBqstr_left, BBqstr_right
 strdef decpipseclist, crpipseclist, crcurpip, crfirstsec, crstarttip, crremtip, piplistappend
 strdef tokpip, strpipc, secstr, parstr, gparstr, gchstr, stimstr, durstr, delstr, wstr
 strdef upiampqstr, iampqstr, niampqstr, iampqstr_first, iampqstr_next, importqstr, axontypestr
-strdef modestr, recloclistfilestr, iampvecfilestr, vdatfilestr, iampfilestr, iiampfilestr, idelfilestr, idurfilestr, locstimfilestr
-strdef initbitfilestr, runcontrolfilestr, vtplotfilestr, vxplotfilestr, shapeplotfilestr, savedatafilestr, savedatadatafilestr, savedataparamfilestr
+strdef modestr, recloclistfilestr, iampvecfilestr, vdatfilestr, iampfilestr, idelfilestr, idurfilestr, locstimfilestr
+strdef runcontrolfilestr, vtplotfilestr, vxplotfilestr, shapeplotfilestr, savedatafilestr, savedatadatafilestr, savedataparamfilestr, doargfilestr
 strdef na_gatingfilestr, miscparamfilestr
 strdef SOstr, AXstr, DEstr, APstr
 strdef modeltypestr, modstrtype, modstr, moddir, iampstr, iampdir, manstr, mandir
 
-has_data = 0
+idata = 0
+nrec = 0
 mintau0 = 30e-3
 piploc = 1
 stack = 0
@@ -42,10 +44,23 @@ nstack = 500
 countsecflag = 1
 num = 0
 pow = 0
-para = 0
+ll = 0
 chgdelta1 = 0
-uopt = 0
 min_weight = 10
+runtime = 0
+maxtime = 1e9
+overtime = 0
+hourlog = 1
+chkhour = 2
+
+NOMY = 0
+SC = 0
+DC = 0
+DCPARA = 0
+axontypestr = "UNKNOWN"
+paranod = 0
+juxtaparanod = 0
+demy = 0
 // --------------------------------------------------------------------------------
 
 
@@ -69,38 +84,446 @@ func chkcwd() {
 
 
 
-// -------------------------------loadfile-----------------------------------------
-// takes (0) option to reload file = 1 (or load = 0), (1) dir, (2) filename
-// loads filename without changing cwd or combining target dir with filename. 
-// to be used if filename without cwd or default neuron path dirs.
-proc loadfile() {local chk
+// --------------------------------------------------------------------------------
+proc chkin() {local chk
 
 	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
 
-	if (numarg() == 2) {
+	if (chk) {
 
-		chdir($s1)
-		load_file($s2)
-	
-	} else if (numarg() == 3) {
-
-		chdir($s2)
-		load_file($1, $s3)
+		cwd = getcwd()
 	}
-
-	chdir(cwd)
-	if (chk) cwd = ""
 }
 // --------------------------------------------------------------------------------
 
 
 
-// -------------------------------loaddll------------------------------------------
-proc loaddll() {local chk
+// --------------------------------------------------------------------------------
+proc chkout() {
 
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
+	chdir(cwd)
+	sprint(cwd, "%s", "")
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc loadfile() {	
+
+	if (numarg() == 2) {
+
+		chkin()
+		chdir($s1)
+		
+		load_file($s2)
+
+		chkout()
+	
+	} else if (numarg() == 3) {
+
+		chkin()
+		chdir($s2)
+		
+		load_file($1, $s3)
+
+		chkout()
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc run() {
+
+	if (runtime >= maxtime) {
+
+		running_ = 0
+		stoprun = 1
+
+		overtime = 1		
+	
+	} else {
+
+		running_ = 1
+		stdinit()
+		continuerun(tstop)
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc stdinit() {
+
+	cvode_simgraph()
+
+	runtime += realtime
+	
+	realtime = 0
+	setdt()
+	init()
+	initPlot()
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// takes (1) dir, (2) filename
+// outputs first number in filename. Best for massively parallel file access.
+
+func getvar() {local var
+
+	chkin()
+	chdir($s1)
+	
+	getfile.ropen($s2)
+
+	var = getfile.scanvar()
+	
+	getfile.close()
+
+	chkout()
+
+	return var	
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+obfunc getvec() {local var, nvar
+
+	chkin()
+	chdir($s1)
+	
+	getfile.ropen($s2)
+	
+	$o3 = new Vector()
+	
+	while (!getfile.eof) {
+
+		$o3.resize($o3.size+1)
+		$o3.x[$o3.size-1] = getfile.scanvar()
+	}
+	
+	getfile.close()
+
+	chkout()
+
+	return $o3
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+obfunc getvarvec() {
+
+	sprint(rstr, "%s", $o1.label)
+	$o1.resize(0)
+
+	while (strf.len(rstr)) {
+
+		if (sscanf(rstr, "%lf", &num) == 1) {
+
+			$o1.resize($o1.size+1)
+			$o1.x[$o1.size-1] = num
+
+			if (strf.substr(rstr, "\t") > 1) {
+
+				strf.tail(rstr, "\t", rstr)
+			}
+
+			if (strf.substr(rstr, "\n") > 1) {
+
+				strf.tail(rstr, "\n", rstr)
+			}
+		}
+	}
+
+	return $o1	
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+func getnstr() {local nstr
+
+	chkin()
+	chdir($s1)
+
+	nstr = 0
+
+	getfile.ropen($s2)	
+	while (!getfile.eof) {
+
+		if (getfile.scanstr(rstr) > 0) {
+
+			nstr += 1
+		}
+	}
+	getfile.close()
+	
+	chkout()
+	return nstr
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+func getstrlist() {local nstr, strn
+
+	if (nstr = getnstr($s1, $s2)) {
+
+		chkin()
+		chdir($s1)
+
+		$o3 = crveclist(nstr, $o3)
+		
+		strn = 0
+		getfile.ropen($s2)
+		while (strn < nstr) {
+
+			getfile.scanstr(rstr)
+			$o3.o(strn).label(rstr)
+			strn += 1
+		}
+		getfile.close()
+
+		chkout()
+		return $o3.count
+	
+	} else {
+
+		return 0
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+func getnline() {local nline
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) folder path"
+			print "2) file name"
+			print "Returns number of lines in file"
+			stop
+		}
+	}
+
+	chkin()
+	chdir($s1)
+
+	getfile.ropen($s2)
+	nline = 0
+	while (!getfile.eof) {
+
+		// to read the first line as zeroth
+		nline += 1
+		// to advance lines. Reads up to and including the end of the line, 
+		// which includes the newline (\n) character
+		getfile.gets(tempstr)
+	}
+	getfile.close()
+	sprint(tempstr, "%s", "")
+	chkout()
+
+	return nline
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+obfunc getline() {local nline, line, pos localobj tempvec
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) folder path"
+			print "2) file name"
+			print "3) line number"
+			print "Returns a vector with the contents of the specified line number as a string in the vector's label"
+			stop
+		}
+	}	
+
+	nline = getnline($s1, $s2)
+
+	chkin()
+	chdir($s1)
+	
+	getfile.ropen($s2)
+
+	line = 0
+	while (line <= nline && $3 <= nline) {
+
+		if (line == $3) {
+
+			pos = getfile.tell
+			line = nline
+		}
+
+		getfile.gets(rstr)
+		line += 1
+	}
+	getfile.close()
+	strf.head(rstr, "\n", rstr)
+	tempvec = new Vector(1)
+	tempvec.label(rstr)
+	tempvec.x[0] = pos
+
+	chkout()
+
+	return tempvec
+}
+// --------------------------------------------------------------------------------
+
+
+
+// ---------------------------------getstring--------------------------------------
+// takes (1) dir, (2) filename, (3) str
+// outputs first delimited string in filename in str
+
+proc getstring() {
+
+	chkin()
+	chdir($s1)
+
+	getfile.ropen($s2)
+
+	getfile.scanstr($s3)
+
+	getfile.close()
+
+	chkout()
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// takes (1) output dir, (2) filename, (3) str, (4) append (=1) or write new (0)
+
+proc writestr() {
+	
+	chkin()
+	chdir($s1)	
+
+	if (numarg() == 3) {
+
+		writefile.wopen($s2)
+	}
+
+	if (numarg() == 4) {
+
+		if ($4) {
+
+			writefile.aopen($s2)
+		
+		} else {
+
+			writefile.wopen($s2)
+		}
+	}
+
+	writefile.printf($s3)
+
+ 	writefile.close()
+
+	chkout()
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// takes (1) matdir, (2) matfilename, (3) matobj, (4) format, (5) header (optional)
+// saves matobj as matfilename in matdir with format format and optional header.
+
+proc savemat() {
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Enter:"
+			print "1) destination folder"
+			print "2) matrix file name"
+			print "3) matrix object"
+			print "4) content format"
+			print "5) matrix header (optional)"
+			stop
+		}
+	}
+
+	chkin()
+	chdir($s1)
+
+	writefile.wopen($s2)
+
+	if (numarg() == 5 && argtype(5) == 2) {
+
+		if (strf.len($s5)) {
+
+			writefile.printf($s5)
+		}
+	}
+	
+	$o3.fprint(writefile, $s4)
+	writefile.close()
+
+	chkout()
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// takes (1) vecdir, (2) vecfilename, (3) vecobj, (4) format (optional)
+// saves vecobj as vecfilename in vecdir with optional format format.
+
+proc savevec() {
+
+	chkin()
+	chdir($s1)
+	
+	writefile.wopen($s2)
+	
+	if (numarg() == 4) {
+	
+		$o3.printf(writefile, $s4)
+	
+	} else {
+	
+		setmaxformvec()
+		$o3.printf(writefile, maxformvec)
+	}
+	
+	writefile.close()
+
+	chkout()
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc loaddll() {
 
 	if (unix_mac_pc() == 4 || unix_mac_pc() == 2) {
 
@@ -110,16 +533,31 @@ proc loaddll() {local chk
 
 		nrn_load_dll("x86_64/.libs/libnrnmech.so.0")
 	}
-
-	chdir(cwd)
-	if (chk) cwd = ""	
 }
 // --------------------------------------------------------------------------------
 
 
 
 // --------------------------------------------------------------------------------
-// mode, has_data
+func chkpara() {
+	
+	if (llc.nhost == 1) {
+
+		ll = 0
+	
+	} else {
+
+		ll = 1
+	}
+
+	return ll
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// mode_, idata
 proc setfilestr() {
 
 	if ($1 == 0 && $2 == 1) {
@@ -130,10 +568,8 @@ proc setfilestr() {
 		vdatfilestr = "vdat-pas.dat"
 		iampfilestr = "iamp-pas.dat"
 		locstimfilestr = "locstim.dat"
-		iiampfilestr = "iiamp-pas.dat"
 		idelfilestr = "idel-pas.dat"
 		idurfilestr = "idur-pas.dat"
-		initbitfilestr = "initbit-pas.dat"
 		runcontrolfilestr = "runcontrol-pas.ses"
 		vtplotfilestr = "vtplot-pas.ses"
 		vxplotfilestr = "vxplot-pas.ses"
@@ -141,6 +577,7 @@ proc setfilestr() {
 		savedatafilestr = "savedata-pas.ses"
 		savedatadatafilestr = "savedata-pas.ses.fd1"
 		savedataparamfilestr = "savedata-pas.ses.ft1"
+		doargfilestr = "doarg-pas.dat"
 	
 	} else if ($1 == 1 && $2 == 1) {
 
@@ -150,10 +587,8 @@ proc setfilestr() {
 		vdatfilestr = "vdat-act.dat"		
 		iampfilestr = "iamp-act.dat"
 		locstimfilestr = "locstim.dat"
-		iiampfilestr = "iiamp-act.dat"
 		idelfilestr = "idel-act.dat"
 		idurfilestr = "idur-act.dat"
-		initbitfilestr = "initbit-act.dat"
 		runcontrolfilestr = "runcontrol-act.ses"
 		vtplotfilestr = "vtplot-act.ses"
 		vxplotfilestr = "vxplot-act.ses"
@@ -161,6 +596,7 @@ proc setfilestr() {
 		savedatafilestr = "savedata-act.ses"
 		savedatadatafilestr = "savedata-act.ses.fd1"
 		savedataparamfilestr = "savedata-act.ses.ft1"
+		doargfilestr = "doarg-act.dat"
 
 	} else if ($1 == 0 && $2 == 0) {
 
@@ -168,14 +604,13 @@ proc setfilestr() {
 		iampvecfilestr = "iampvec-pas-def.dat"
 		iampfilestr = "iamp-pas-def.dat"
 		locstimfilestr = "locstim-def.dat"
-		iiampfilestr = "iiamp-pas-def.dat"
 		idelfilestr = "idel-pas-def.dat"
 		idurfilestr = "idur-pas-def.dat"
-		initbitfilestr = "initbit-pas-def.dat"
 		runcontrolfilestr = "runcontrol-pas-def.ses"
 		vtplotfilestr = "vtplot-pas-def.ses"
 		vxplotfilestr = "vxplot-pas-def.ses"
 		shapeplotfilestr = "shapeplot-pas-def.ses"
+		doargfilestr = "doarg-pas-def.dat"
 	
 	} else if ($1 == 1 && $2 == 0) {
 
@@ -183,14 +618,13 @@ proc setfilestr() {
 		iampvecfilestr = "iampvec-act-def.dat"
 		iampfilestr = "iamp-act-def.dat"
 		locstimfilestr = "locstim-def.dat"
-		iiampfilestr = "iiamp-act-def.dat"
 		idelfilestr = "idel-act-def.dat"
 		idurfilestr = "idur-act-def.dat"
-		initbitfilestr = "initbit-act-def.dat"
 		runcontrolfilestr = "runcontrol-act-def.ses"
 		vtplotfilestr = "vtplot-act-def.ses"
 		vxplotfilestr = "vxplot-act-def.ses"
 		shapeplotfilestr = "shapeplot-act-def.ses"
+		doargfilestr = "doarg-act-def.dat"
 	}
 }
 // --------------------------------------------------------------------------------
@@ -212,9 +646,10 @@ func getnsigmax() {local nsigmax
 
 
 
-// ------------------------------setmaxform----------------------------------------
+// --------------------------------------------------------------------------------
 // takes no argument.
 // sets maximum precision format based on getnsigmax
+
 proc setmaxform() {
 
 	sprint(maxform, "%s%d%s", "%.", getnsigmax()-1, "le")
@@ -223,9 +658,10 @@ proc setmaxform() {
 
 
 
-// ------------------------------setmaxformvec-------------------------------------
+// --------------------------------------------------------------------------------
 // takes no argument.
 // sets maximum precision format based on getnsigmax for vector output
+
 proc setmaxformvec() {
 
 	sprint(maxformvec, "%s%d%s\t", "%.", getnsigmax()-1, "le")
@@ -234,9 +670,10 @@ proc setmaxformvec() {
 
 
 
-// -------------------------------settform-----------------------------------------
+// --------------------------------------------------------------------------------
 // takes no argument.
 // sets maximum precision format for time values based on nsigt
+
 proc settform() {
 
 	sprint(tform, "%s%d%s", "%.", nsigt-1, "le")
@@ -267,7 +704,7 @@ proc setvform() {
 
 
 
-// ------------------------------setvformvec---------------------------------------
+// --------------------------------------------------------------------------------
 // takes no argument.
 // sets max precision format for voltage values based on nsigv for vector output
 proc setvformvec() {
@@ -279,26 +716,28 @@ proc setvformvec() {
 
 
 // --------------------------------------------------------------------------------
-proc crveclist() {local nvec, k localobj tempmat
-
-	// if (numarg() == 1 && argtype(1) == 2) {
-
-	// 	if (!strcmp($s1, "help")) {
-
-	// 		print "Enter:"
-	// 		print "1) number of desired vectors"
-	// 		print "2) any object"
-	// 		print "output: 1-element (initialized to 0) list of vectors in a new List object"
-	// 		stop
-	// 	}
-	// }
+obfunc crveclist() {local nvec, k localobj tempmat
 
 	nvec = $1
 	$o2 = new List()
 	
 	tempmat = new Matrix(1, nvec)
 	
-	for k = 0, nvec-1 $o2.append(tempmat.getcol(k))
+	for k = 0, nvec-1 {
+
+		$o2.append(tempmat.getcol(k))
+		
+		if (numarg() == 3) {
+
+			$o2.o(k).resize($3)
+
+		} else {
+
+			$o2.o(k).resize(0)
+		}		
+	}
+
+	return $o2
 }
 // --------------------------------------------------------------------------------
 
@@ -411,10 +850,6 @@ func getnsig() {local maxlen, curlen, k localobj tempvec, templist
 
 		return tempvec.max-1
 	}
-
-	tempstr = ""
-	maxnum = ""
-	trailzero = ""
 }
 // --------------------------------------------------------------------------------
 
@@ -423,7 +858,7 @@ func getnsig() {local maxlen, curlen, k localobj tempvec, templist
 // ---------------------------------setnsig----------------------------------------
 // takes (1) any number; (2) nsig
 // sets number to nsig.
-func setnsig() {local k, l, pow
+func setnsig() {local k, l_, pow
 
 	if ($2 > getnsigmax()) {
 
@@ -435,21 +870,16 @@ func setnsig() {local k, l, pow
 	sprint(format, "%s%d%s", "%.", $2-1, "le")
 	sprint(tempstr, format, $1)
 	// get num head in its entirety and length
-	l = strf.head(tempstr, "[e]", numhead)
+	l_ = strf.head(tempstr, "[e]", numhead)
 	// extract its power
 	strf.tail(tempstr, "[e]", powstr)
 	// scan numhead 
-	sprint(format, "%s%d%s", "%", l, "lf")
+	sprint(format, "%s%d%s", "%", l_, "lf")
 	sscanf(numhead, format, &k)
 	// scan power
 	sscanf(powstr, "%lf", &pow)
 	// output the num
 	k *= 10^pow
-
-	format = ""
-	tempstr = ""
-	numhead = ""
-	powstr = ""
 
 	return k
 }
@@ -457,12 +887,12 @@ func setnsig() {local k, l, pow
 
 
 
-// -------------------------------getRMP-------------------------------------------
+// --------------------------------------------------------------------------------
 func getRMP() {local iidel, k localobj tempvec
 
-	if (has_data) {
+	if (idata) {
 
-		iidel = tdatvec.indwhere(">=", getvarp(ses, idelfilestr))
+		iidel = tdatvec.indwhere(">=", getvar(ses, idelfilestr))
 
 		tempvec = new Vector()
 
@@ -472,13 +902,13 @@ func getRMP() {local iidel, k localobj tempvec
 	
 	} else {
 
-		if (mode == 0) {
+		if (mode_ == 0) {
 
 			return 0
 		
-		} else if (mode == 1) {
+		} else if (mode_ == 1) {
 
-			return getvarp(ses, "RMPdef.dat")
+			return getvar(ses, "RMP-def.dat")
 		}
 	}
 }
@@ -486,35 +916,174 @@ func getRMP() {local iidel, k localobj tempvec
 
 
 
-// ------------------------------delzeromat----------------------------------------
-obfunc delzeromat() {local m localobj tempvec, tempmat
+// --------------------------------------------------------------------------------
+// to delete any number that matches the boolean string operator (see indwhere in the
+// NEURON programmer's reference for Vector)
 
-	tempvec = new Vector()
+obfunc delvec() {local ind
 
-	for m = 0, $o1.nrow-1 if (!$o1.getrow(m).contains(0)) tempvec.append(m)
+	while ((ind = $o3.indwhere($s1, $2)) > -1) {
 
-	if (tempvec.size) {
-
-		tempmat = new Matrix(tempvec.size, $o1.ncol)
-		for m = 0, tempmat.nrow-1 tempmat.setrow(m, $o1.getrow(tempvec.x[m]))
-	
-	} else {
-
-		tempmat = new Matrix()
+		$o3.remove(ind)
 	}
 
-	return tempmat	
+	return $o3
 }
 // --------------------------------------------------------------------------------
 
 
 
-// ---------------------------------getmat-----------------------------------------
+// --------------------------------------------------------------------------------
+// to delete 0's from vectors
+
+obfunc delzerovec() {local k, chkzero, ind localobj tempvec
+
+	tempvec = new Vector()
+
+	for k = 0, $o1.size-1 {
+
+		if ($o1.x[k] >= float_epsilon && $o1.x[k] <= float_epsilon) {
+
+			tempvec.resize(tempvec.size+1)
+			tempvec.x[tempvec.size-1] = k
+		}
+	}
+
+	while (tempvec.size) {
+
+		$o1.remove(tempvec.x[tempvec.size-1])
+		tempvec.remove(tempvec.size-1)
+	}
+
+	return $o1
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// see delvec but for matrices
+
+obfunc delmat() {local m localobj templist, tempvec
+
+	templist = new List()
+	tempvec = new Vector()
+
+	for m = 0, $o3.nrow-1 {
+
+		if (delvec($s1, $2, $o3.getrow(m)).size) {
+
+			templist.append(delvec($s1, $2, $o3.getrow(m)))
+
+			tempvec.resize(tempvec.size+1)
+			tempvec.x[tempvec.size-1] = templist.o(templist.count-1).size
+		}
+	}
+
+	if (templist.count && tempvec.size) {
+
+		$o1 = new Matrix(templist.count, tempvec.max)
+
+		for m = 0, $o1.nrow-1 {
+
+			$o1.setrow(m, templist.o(m))
+		}
+	
+	} else {
+
+		$o1 = new Matrix(1, 1)
+	}
+
+	return $o1
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+obfunc delrowmat() {local m localobj templist
+
+	templist = new List()
+
+	if (argtype(1) == 0) {
+
+		for m = 0, $o2.nrow-1 {
+
+			if (m != $1) {
+
+				templist.append($o2.getrow(m))
+			}
+		}
+	
+	} else if (argtype(1) == 1) {
+
+		for m = 0, $o2.nrow-1 {
+
+			if (!$o1.contains(m)) {
+
+				templist.append($o2.getrow(m))
+			}
+		}
+	}
+
+	$o2 = new Matrix(templist.count, templist.o(0).size)
+
+	for m = 0, $o2.nrow-1 {
+
+		$o2.setrow(m, templist.o(m))
+	}
+
+	return $o2
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// see delzerovec but for matrices
+
+obfunc delzeromat() {local m localobj templist, tempvec
+
+	templist = new List()
+	tempvec = new Vector()
+
+	for m = 0, $o1.nrow-1 {
+		
+		if (delzerovec($o1.getrow(m)).size) {
+
+			templist.append(delzerovec($o1.getrow(m)))
+
+			tempvec.resize(tempvec.size+1)
+			tempvec.x[tempvec.size-1] = templist.o(templist.count-1).size
+		}
+	}
+
+	if (templist.count && tempvec.size) {
+
+		$o1 = new Matrix(templist.count, tempvec.max)
+
+		for m = 0, $o1.nrow-1 {
+
+			$o1.setrow(m, templist.o(m))
+		}		
+	
+	} else {
+
+		$o1 = new Matrix(1, 1)
+	}
+
+	return $o1
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
 // takes (1) dir, (2) matfilename, (3) obj. 
 // For compatibility with file.getname(), also supports 2 argument structure with 
 // (1) a combined matdir/matfilename (what file.getname() returns), and (2) matobj.
 // outputs matobj and nrows (matfile input should be from a matrix output)
-func getmat() {local chk, nrows
+func getmat() {local nrows
 
 	if (numarg() == 1 && argtype(1) == 2) {
 
@@ -527,29 +1096,35 @@ func getmat() {local chk, nrows
 		}
 	}
 
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
-
 	if (numarg() == 2) {
 
 		getfile.ropen($s1)
+
 		$o2 = new Matrix()
+
 		$o2.scanf(getfile)
+			
 		getfile.close()
+
 		nrows = $o2.nrow
 	
 	} else if (numarg() == 3) {
 
+		chkin()
 		chdir($s1)
+		
 		getfile.ropen($s2)
+		
 		$o3 = new Matrix()
+		
 		$o3.scanf(getfile)
+			
 		getfile.close()
-		nrows = $o3.nrow	
-	} 
+		
+		nrows = $o3.nrow
 
-	chdir(cwd)
-	if (chk) cwd = ""
+		chkout()		
+	}
 
 	return nrows
 }
@@ -557,45 +1132,160 @@ func getmat() {local chk, nrows
 
 
 
-// --------------------------------savemat-----------------------------------------
-// takes (1) matdir, (2) matfilename, (3) matobj, (4) format, (5) header (optional)
-// saves matobj as matfilename in matdir with format format and optional header.
-proc savemat() {local chk
+// --------------------------------------------------------------------------------
+proc import_recloc_data() {local rec, subloc, BB
 
-	if (numarg() == 1 && argtype(1) == 2) {
+	crveclist(10, recloclist)
 
-		if (!strcmp($s1, "help")) {
+	sprint(tempstr, "%s", "")
+	for rec = 0, recloclist.count-1 {
 
-			print "Enter:"
-			print "1) destination folder"
-			print "2) matrix file name"
-			print "3) matrix object"
-			print "4) content format"
-			print "5) matrix header (optional)"
-			stop
+		if (rec) {
+
+			string_dialog("Please enter the next recording location, if applicable. Example: axon[10](0.5). Return blank when done.", tempstr)
+
+		} else {
+
+			string_dialog("Please enter the injecting/recording location. Currently, only one is supported. Example: soma(0.5)", tempstr)
 		}
-	}	
 
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()	
-	
-	chdir($s1)
-	writefile.wopen($s2)
-	if (numarg() == 5) writefile.printf($s5)
-	$o3.fprint(writefile, $s4)
-	writefile.close()
+		if (strf.len(tempstr) > 0) {
 
-	chdir(cwd)
-	if (chk) cwd = ""
+			recloclist.o(rec).label(tempstr)
+
+		} else {
+
+			break
+		}
+	}
+	sprint(tempstr, "%s", "")
+
+	rec = recloclist.count-1
+	while (rec <= recloclist.count-1) {
+
+		if (!strf.len(recloclist.o(rec).label)) {
+
+			recloclist.remove(rec)
+		
+		} else {
+
+			break
+		}
+
+		rec -= 1
+	}
+	writestr(ses, "locstim.dat", recloclist.o(0).label)
+
+	injvec = new Vector(recloclist.count, 0)
+	injvec.x[0] = 1
+	savevec(ses, "injlist.dat", injvec)
+
+	for rec = 0, recloclist.count-1 {
+
+		sprint(tempstr, "%s%s\n", tempstr, recloclist.o(rec).label)
+	}
+	strf.left(tempstr, strf.len(tempstr)-1)
+	writestr(ses, "recloclist.dat", tempstr)
+	sprint(tempstr, "%s", "")
+
+	// create voltage fit variables from recording locations	
+	sublocvec = new Vector()
+	loclist = crveclist(recloclist.count, loclist)
+
+	for rec = 0, loclist.count-1 {
+		
+		// get recloc including section array and sublocation
+		if (strf.substr(recloclist.o(rec).label, "(") > -1 && strf.substr(recloclist.o(rec).label, ")")) {
+
+			// recloc including section array
+			strf.head(recloclist.o(rec).label, "[(]", locstr)
+			loclist.o(rec).label(locstr)
+
+			// sublocation
+			strf.tail(recloclist.o(rec).label, "[(]", sublocstr)
+			strf.head(sublocstr, "[)]", sublocstr)
+
+			// sscan sublocstr into subloc
+			sscanf(sublocstr, "%g", &subloc)
+
+			// append subloc into sublocvec
+			if (subloc >= 0 && subloc <= 1) {
+
+				sublocvec.append(subloc)
+			
+			} else {
+
+				// in case sublocation badly specified
+				sublocvec.append(0.5)			
+			}
+		}
+	}
+
+	// create fit variables list
+	fitvarlist = crveclist(recloclist.count, fitvarlist)
+
+	print "The following fit variables have been created:"
+
+	for rec = 0, fitvarlist.count-1 {
+
+		sprint(tempstr, "%s%s%g%s", loclist.o(rec).label, ".v(", sublocvec.x[rec], ")")
+		fitvarlist.o(rec).label(tempstr)
+
+		print fitvarlist.o(rec).label
+
+		sprint(tempstr, "%s\n", fitvarlist.o(rec).label)
+	}
+	writestr(ses, "fitvarlist.dat", tempstr)
+	strf.left(tempstr, strf.len(tempstr)-1)
+	sprint(tempstr, "%s", "")
+
+	// Bridge balance of each recording pipette.
+	// Pipettes will be modelled explicity to parse out their biophysical contribution.
+	BBvec = new Vector(recloclist.count, 1e6)
+
+	BBqstr_left = "\nPlease enter bridge balance for pipette at "
+	BBqstr_right = " (MOhm):"
+
+	print "\nRecording pipettes will be modelled explicitly to parse their biophysical contribution out"
+
+	for BB = 0, BBvec.size-1 {
+
+		sprint(BBqstr, "%s%s%s", BBqstr_left, recloclist.o(BB).label, BBqstr_right)
+
+		BBvec.x[BB] = 1e6*xred(BBqstr, 1, 1, 100)
+	}
+	savevec(ses, "BBvec.dat", BBvec)	
 }
 // --------------------------------------------------------------------------------
 
 
 
-// ------------------------------importiamp----------------------------------------
+// --------------------------------------------------------------------------------
+// takes no arguments
+// imports t, v(t) tab-delimited data, either as (t,v) or (t,v1,v2,...,vn)
+proc importdata() {
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Will run importiamp() and importv(). No arguments required."
+			stop
+		}
+	}
+
+	importiamp()
+	importv()
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
 // takes no argument
 // imports iamp into iampvec and saves iampvec.dat
-proc importiamp() {local chk, upiamp, iamp, tempsize, tempnum, firstamp
+
+proc importiamp() {local upiamp, iamp, tempsize, tempnum, firstamp
 
 	if (numarg() == 1 && argtype(1) == 2) {
 
@@ -604,13 +1294,10 @@ proc importiamp() {local chk, upiamp, iamp, tempsize, tempnum, firstamp
 			print "Will import iamp from source iampvec or manual entry. No initial arguments required."
 			stop
 		}
-	}	
+	}
 
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
-
-	mode = getvar(ses, "mode.dat")
-	setfilestr(mode, has_data)
+	mode_ = getvar(ses, "mode.dat")
+	setfilestr(mode_, idata)
 
 	print "Import current clamp injection amplitudes for ", modestr, " recordings:\n"
 	
@@ -621,20 +1308,29 @@ proc importiamp() {local chk, upiamp, iamp, tempsize, tempnum, firstamp
 
 	if (upiamp == 2) {
 
+		chkin()
 		chdir(root)
+		
 		getfile.chooser("r", "Please select dat file with injection amplitudes (nA)", "*.dat", "accept", "cancel", "root")
 		
 		if (getfile.chooser()) {
 
 			getfile.ropen(getfile.getname())
-			while(!getfile.eof) iampvec.append(getfile.scanvar())
+			
+			while (!getfile.eof) {
+
+				iampvec.append(getfile.scanvar())
+			}
+				
 			getfile.close()
 		}
+
+		chkout()
 	
 	} else if (upiamp == 1) {
 
-		niampqstr = "Please enter total number of injections"
-		iampqstr_next = "Please enter next injection amplitude (nA)\n"
+		niampqstr = "\nPlease enter total number of injection protocol(s)"
+		iampqstr_next = "Please enter the next injection amplitude (nA)"
 
 		tempsize = xred(niampqstr, 1, 1, 100)
 		
@@ -647,11 +1343,11 @@ proc importiamp() {local chk, upiamp, iamp, tempsize, tempnum, firstamp
 
 				if (tempsize == 1) {
 
-					iampqstr_first = "Please enter injection amplitude (nA)\n"
+					iampqstr_first = "Please enter the injection amplitude (nA)"
 
 				} else if (tempsize > 1) {
 
-					iampqstr_first = "Please enter first injection amplitude (nA)\n"
+					iampqstr_first = "Please enter the first injection amplitude (nA)"
 				}
 
 				iamp = xred(iampqstr_first, 0.5, -100, 100)
@@ -664,27 +1360,34 @@ proc importiamp() {local chk, upiamp, iamp, tempsize, tempnum, firstamp
 			}
 
 			iampvec.append(iamp)
+			
 			tempnum += 1
 		}
 	}
 
 	setmaxformvec()
-	chdir(ses)
-	writefile.wopen(iampvecfilestr)
-	iampvec.printf(writefile, maxformvec)
-	writefile.close()
-	print iampvecfilestr, " saved in ", ses, "\n"
 
-	chdir(cwd)
-	if (chk) cwd = ""
+	chkin()
+	chdir(ses)
+	
+	writefile.wopen(iampvecfilestr)
+	
+	iampvec.printf(writefile, maxformvec)
+	
+	writefile.close()
+
+	chkout()
+
+	print iampvecfilestr, " saved in ", ses, "\n"
 }
 // --------------------------------------------------------------------------------
 
 
 
-// ------------------------------importv-------------------------------------------
+// --------------------------------------------------------------------------------
 // imports current injection and voltage response data
-proc importv() {local chk, k, rec, import localobj tempmat, vdatvec, tcmpvec
+
+proc importv() {local k, rec, import localobj tempmat, vdatvec, tcmpvec
 
 	if (numarg() == 1 && argtype(1) == 2) {
 
@@ -693,28 +1396,27 @@ proc importv() {local chk, k, rec, import localobj tempmat, vdatvec, tcmpvec
 			print "Will import v from source data files (*.dat). No initial arguments required"
 			stop
 		}
-	}	
-
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
+	}
 
 	nrec = getstrlist(ses, "recloclist.dat", recloclist)
 
 	vdatlist = new List()
-	chdir(root)
 
-	mode = getvar(ses, "mode.dat")
-	setfilestr(mode, has_data)
+	mode_ = getvar(ses, "mode.dat")
+	setfilestr(mode_, idata)
 
 	print "\nImport ", modestr, " voltage responses:\n"
 
-	importqstr = "Please select one of the following:\n(1) Import voltage responses individually for each injection amplitude at each recording location.\n(2) Import all voltage responses for all injection amplitudes at each recording location.\n\n(May be used in conjuction with trcsProcessor. Otherwise, please ensure number of rows and columns are indicated on the first row)"
+	importqstr = "Please select one of the following:\n\n(1) Import voltage responses individually for each injection amplitude at each recording location.\n(2) Import all voltage responses for all injection amplitudes at each recording location.\n\n(Should be used with trcsProcessor to ensure proper formatting)"
+	
 	import = xred(importqstr, 2, 1, 2)
 
 	if (import == 1) {
 
 		// obtain pathlist to vrec, which will also contain nrows.
+		chkin()
 		chdir(root)
+		
 		sprint(tempdir, "%s", root)
 		crveclist(nrec, vpathlist)
 
@@ -723,6 +1425,7 @@ proc importv() {local chk, k, rec, import localobj tempmat, vdatvec, tcmpvec
 			for rec = 0, recloclist.count-1 {
 
 				sprint(tempstr, "%s%g%s%s", "Please select voltage responses for ", iampvec.x[k], " nA at ", recloclist.o(rec).label)
+
 				getfile.chooser("r", tempstr, "*.dat", "accept", "cancel", tempdir)
 
 				if (getfile.chooser()) {
@@ -730,10 +1433,13 @@ proc importv() {local chk, k, rec, import localobj tempmat, vdatvec, tcmpvec
 					sprint(tempstr, "%s", getfile.getname())
 					vpathlist.o(rec).label(tempstr)
 					sprint(tempdir, "%s", getfile.dir())
+					
 					getfile.close()
 				}
 			}
 		}
+
+		chkout()
 
 		// first var in trcsProcessor-formatted mat should be nrows
 		// start with first vrec...
@@ -797,7 +1503,9 @@ proc importv() {local chk, k, rec, import localobj tempmat, vdatvec, tcmpvec
 	if (import == 2) {
 		
 		// obtain pathlist to vrec, which will also contain nrows.
+		chkin()
 		chdir(root)
+		
 		sprint(tempdir, "%s", root)
 		crveclist(nrec, vpathlist)
 		
@@ -811,9 +1519,12 @@ proc importv() {local chk, k, rec, import localobj tempmat, vdatvec, tcmpvec
 				sprint(tempstr, "%s", getfile.getname())
 				vpathlist.o(rec).label(tempstr)
 				sprint(tempdir, "%s", getfile.dir())
+				
 				getfile.close()
 			}
 		}
+
+		chkout()
 
 		// first var in trcsProcessor-formatted mat should be nrows
 		// start with first vrec...
@@ -878,39 +1589,11 @@ proc importv() {local chk, k, rec, import localobj tempmat, vdatvec, tcmpvec
 	nsigv = getnsig(vdatmat.getcol(1))
 	setvformvec()
 	savemat(ses, vdatfilestr, vdatmat, vformvec)
-	writebit(ses, "has_data.dat", 1)
+	writebit(ses, "idata.dat", 1)
 
 	sprint (tempstr, "%s%s", ses, vdatfilestr)
 	print "\nVoltage responses imported and saved as ", tempstr
-
-	writefitdata()
-
-	tempstr = ""
-	tempdir = ""
-
-	chdir(cwd)
-	if (chk) cwd = ""
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------importdata--------------------------------------
-// takes no arguments
-// imports t, v(t) tab-delimited data, either as (t,v) or (t,v1,v2,...,vn)
-proc importdata() {
-
-	if (numarg() == 1 && argtype(1) == 2) {
-
-		if (!strcmp($s1, "help")) {
-
-			print "Will run importiamp() and importv(). No arguments required."
-			stop
-		}
-	}
-
-	importiamp()
-	importv()
+	print "Changes will be reflected in the model at the next open."
 }
 // --------------------------------------------------------------------------------
 
@@ -993,70 +1676,7 @@ proc appenddata() {local k, iapp, iiapp, m, y, f localobj tempmat, newvdatmat
 		savevec(ses, iampvecfilestr, iampvec, maxformvec)
 		savemat(ses, vdatfilestr, vdatmat, vformvec)
 		setstimpanel()
-
-		tempdir = ""
 	}
-}
-// --------------------------------------------------------------------------------
-
-
-
-// ---------------------------------getnstr----------------------------------------
-// takes (1) dir, (2) strlistfile
-// outputs nstr in strlistfile
-func getnstr() {local chk, nstr
-
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
-
-	chdir($s1)
-	getfile.ropen($s2)
-	nstr = 0
-	while(!getfile.eof) if (getfile.scanstr(tempstr) > 0) nstr += 1
-	getfile.close()
-
-	tempstr = ""
-
-	chdir(cwd)
-	if (chk) cwd = ""
-
-	return nstr
-}
-// --------------------------------------------------------------------------------
-
-
-
-// -------------------------------getstrlist---------------------------------------
-// takes (1) dir, (2) strlistfile, (3) listobj
-// outputs strlist in listobj
-func getstrlist() {local chk, strn, nstr
-	
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
-
-	nstr = getnstr($s1, $s2)
-	crveclist(nstr, $o3)
-
-	chdir($s1)
-	getfile.ropen($s2)
-	
-	while (!getfile.eof) {
-	
-		for strn = 0, nstr-1 {
-
-			getfile.scanstr(tempstr)
-			$o3.o(strn).label(tempstr)
-		}
-	}
-
-	getfile.close()
-
-	tempstr = ""
-
-	chdir(cwd)
-	if (chk) cwd = ""
-
-	return nstr
 }
 // --------------------------------------------------------------------------------
 
@@ -1086,9 +1706,10 @@ proc seclist2list() {local countsec, counter
 
 
 
-// ------------------------------loclist2sec---------------------------------------
+// --------------------------------------------------------------------------------
 // takes (1) loclist (i.e. recloclist); (2) obj
 // outputs loc as sec (= no subloc) in objlist (strlist)
+
 proc loclist2sec() {local k
 
 	if (numarg() == 1 && argtype(1) == 2) {
@@ -1110,8 +1731,6 @@ proc loclist2sec() {local k
 		strf.head($o1.o(k).label, "[(]", tempstr)
 		$o2.o(k).label(tempstr)
 	}
-
-	tempstr = ""
 }
 // --------------------------------------------------------------------------------
 
@@ -1130,8 +1749,6 @@ proc loclist2sub() {local k
 		strf.left(tempstr, strf.len(tempstr)-1)
 		$o2.o(k).label(tempstr)
 	}
-
-	tempstr = ""
 }
 // --------------------------------------------------------------------------------
 
@@ -1157,157 +1774,147 @@ func sec2secnum() {local u
 
 
 
-// ---------------------------------getvar-----------------------------------------
-// takes (1) dir, (2) filename
-// outputs first number in filename
-func getvar() {local chk, var
-
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
-
-	chdir($s1)
-	getfile.ropen($s2)
-	var = getfile.scanvar()
-	getfile.close()
-
-	chdir(cwd)
-	if (chk) cwd = ""	
-	
-	return var
-}
 // --------------------------------------------------------------------------------
+proc setcelltype() {
 
+	strdef celltypeqstr
+	sprint(celltypeqstr, "%s", "Please select cell type, beginning with the animal type...\nCurrent choices include:\n0) Non-defined\n1) Rat\n2) Human\t")
+	animaltype = xred(celltypeqstr, 1, 0, 2)
 
+	sprint(celltypeqstr, "%s", "Please continue defining the cell type, with respect to cellular region\nCurrent choices include:\n0) Non-defined region\n1) Primary somatosensory cortex\n2) Temporal association cortex\t")
+	regiontype = xred(celltypeqstr, 1, 0, 2)
 
-// --------------------------------getvarp-----------------------------------------
-// takes (1) dir, (2) filename
-// outputs first number in filename. Best for massively parallel file access.
-func getvarp() {local chk, var
+	sprint(celltypeqstr, "%s", "Please continue defining the cell type, with respect to layer\nCurrent choices include:\n0) Non-defined layer\n1) Layer 5\t")
+	layertype = xred(celltypeqstr, 1, 0, 1)
 
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
+	strdef celltype
+	if (animaltype == 1) {
 
-	chdir($s1)
-	getfile.ropen($s2)
-	getfile.gets(tempstr)
-	getfile.close()
+		sprint(celltype, "%s", "Rn\n")
 
-	sscanf(tempstr, "%lf", &var)
+	} else if (animaltype == 2) {
 
-	tempstr = ""
+		sprint(celltype, "%s", "Hs\n")
 
-	chdir(cwd)
-	if (chk) cwd = ""
-
-	return var
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------getstring---------------------------------------
-// takes (1) dir, (2) filename, (3) str
-// outputs first delimited string in filename in str
-proc getstring() {local chk
-
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
-
-	chdir($s1)
-	getfile.ropen($s2)
-	getfile.scanstr($s3)
-	getfile.close()
-
-	chdir(cwd)
-	if (chk) cwd = ""
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------getnvar-----------------------------------------
-// takes (1) dir, (2) var-containing filename
-// outputs nvar of filename
-func getnvar() {local chk, nvar
-
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
-
-	chdir($s1)
-	getfile.ropen($s2)
-	nvar = 0
-	while(!getfile.eof) { 
-
-		getfile.scanvar()
-		nvar += 1
-	}
-	getfile.close()
-
-	chdir(cwd)
-	if (chk) cwd = ""
-
-	return nvar
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------getvec------------------------------------------
-// takes (1) dir, (2) filename, (3) vecobj
-// returns nvar and vecobj with vec contents
-func getvec() {local chk, var, nvar
-
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()	
-
-	nvar = getnvar($s1, $s2)
-	chdir($s1)
-	getfile.ropen($s2)
-	var = 0
-	$o3 = new Vector()
-	while (!getfile.eof) for var = 0, nvar-1 $o3.append(getfile.scanvar())
-	getfile.close()
-	
-	chdir(cwd)
-	if (chk) cwd = ""
-
-	return nvar
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------savevec-----------------------------------------
-// takes (1) vecdir, (2) vecfilename, (3) vecobj, (4) format (optional)
-// saves vecobj as vecfilename in vecdir with optional format format.
-proc savevec() {local chk
-
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
-	
-	chdir($s1)
-	writefile.wopen($s2)
-	if (numarg() == 4) {
-		$o3.printf(writefile, $s4)
 	} else {
-		setmaxformvec()
-		$o3.printf(writefile, maxformvec)
-	}
-	writefile.close()
 
-	chdir(cwd)
-	if (chk) cwd = ""
+		sprint(celltype, "%s", "ND\n")	
+	}
+
+	if (regiontype == 1) {
+
+		sprint(celltype, "%s%s", celltype, "S1\n")
+
+	} else if (regiontype == 2) {
+
+		sprint(celltype, "%s%s", celltype, "TeAC\n")
+
+	} else {
+
+		sprint(celltype, "%s%s", celltype, "ND\n")	
+	}
+
+	if (layertype == 1) {
+
+		sprint(celltype, "%s%s", celltype, "L5")
+
+	} else {
+
+		sprint(celltype, "%s%s", celltype, "ND")
+	}
+	writestr(ses, "celltype.dat", celltype)
 }
 // --------------------------------------------------------------------------------
 
 
 
-// ------------------------------getaxontype---------------------------------------
+// --------------------------------------------------------------------------------
+obfunc getcelltype() {local nline, k localobj celltypevec, tempvec
+
+	if (chkdir(ses, "\ncelltype.dat\n")) {
+
+		nline = getnline(ses, "celltype.dat")
+		celltypevec = new Vector(nline)
+		strdef celltype
+
+		for k = 0, celltypevec.size-1 {
+
+			tempvec = getline(ses, "celltype.dat", k)
+
+			if (!k) {
+
+				if (!strcmp(tempvec.label, "Rn")) {
+
+					celltypevec.x[k] = 1
+					sprint(celltype, "%s%s", celltype, "Rn-")
+				
+				} else if (!strcmp(tempvec.label, "Hs")) {
+
+					celltypevec.x[k] = 2
+					sprint(celltype, "%s%s", celltype, "Hs-")
+				
+				} else {
+
+					celltypevec.x[k] = 0
+					sprint(celltype, "%s%s", celltype, "NON-DEFINED-")
+				}
+			
+			} else if (k == 1) {
+
+				if (!strcmp(tempvec.label, "S1")) {
+
+					celltypevec.x[k] = 1
+					sprint(celltype, "%s%s", celltype, "S1-")
+				
+				} else if (!strcmp(tempvec.label, "TeAC")) {
+
+					celltypevec.x[k] = 2
+					sprint(celltype, "%s%s", celltype, "TeAC-")
+				
+				} else {
+
+					celltypevec.x[k] = 0
+					sprint(celltype, "%s%s", celltype, "NON-DEFINED-")
+				}
+			
+			} else if (k == 2) {
+
+				if (!strcmp(tempvec.label, "L5")) {
+
+					celltypevec.x[k] = 1
+					sprint(celltype, "%s%s", celltype, "L5")
+				
+				} else {
+
+					celltypevec.x[k] = 0
+					sprint(celltype, "%s%s", celltype, "NON-DEFINED")
+				}
+			}
+		}
+	}
+
+	return celltypevec
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc print_celltype() {
+
+	print "Cell type: ", celltype
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
 // takes (1) optional quiet argument = anything. requires axontype.dat in ses.
 // outputs axontype (1-5) and associated myelin code (nomy, DC, SC, etc)
+
 func getaxontype() {local axontype
 
-	axontype = getvarp(ses, "axontype.dat")
+	axontype = getvar(ses, "axontype.dat")
 	
 	if (axontype == 1) {
 
@@ -1317,7 +1924,10 @@ func getaxontype() {local axontype
 		DCPARA = 0
 		axontypestr = "NOMY"
 
-		if (!numarg()) print "Axon type NOMY"
+		if (!numarg()) {
+
+			print "Axon type: NOMY"
+		}
 	
 	} else if (axontype == 2) {
 
@@ -1327,7 +1937,10 @@ func getaxontype() {local axontype
 		DCPARA = 0
 		axontypestr = "SC"
 
-		if (!numarg()) print "Axon type SC"
+		if (!numarg()) {
+
+			print "Axon type: SC"
+		}
 	
 	} else if (axontype == 3) {
 
@@ -1337,7 +1950,10 @@ func getaxontype() {local axontype
 		DCPARA = 0
 		axontypestr = "DC"
 
-		if (!numarg()) print "Axon type DC"
+		if (!numarg()) {
+
+			print "Axon type: DC"
+		}
 	
 	} else if (axontype == 4) {
 
@@ -1347,7 +1963,10 @@ func getaxontype() {local axontype
 		DCPARA = 1
 		axontypestr = "DCPARA"
 
-		if (!numarg()) print "Axon type DCPARA"
+		if (!numarg()) {
+
+			print "Axon type: DCPARA"
+		}
 	}
 	
 	return axontype
@@ -1356,9 +1975,10 @@ func getaxontype() {local axontype
 
 
 
-// --------------------------------Pipettes----------------------------------------
+// --------------------------------------------------------------------------------
 // takes (1) number of pipettes, (2) listobj for pipseclists
 // outputs that number of pipettes
+
 func createpip() {
 
 	npip = $1
@@ -1371,10 +1991,12 @@ func createpip() {
 	sum_Aj = PI*(0.5^2)*(1e-04)^2 
 
 	for jpip = 1, 5 {
+		
 		sum_Aj += PI*((0.5*(1.4*jpip))^2)*(1e-04)^2
 	}
 
 	for jpip = 6, 199 {
+		
 		sum_Aj += PI*((0.5*0.97*(jpip^1.19))^2)*(1e-04)^2
 	}
 
@@ -1395,10 +2017,18 @@ func createpip() {
 		piploc *= -1
 
 		sprint(crstarttip, "%s%d%s%d%s%d%s%d%s", "pip", ipip+1, "[jpip] {pipette", ipip+1, ".append() diam = 1.4*jpip L = 10 connect pip", ipip+1, "[jpip](0), pip", ipip+1, "[jpip-1](1)}")
-		for jpip = 1, 5 execute(crstarttip)
+		
+		for jpip = 1, 5 {
+
+			execute(crstarttip)
+		}
 
 		sprint(crremtip, "%s%d%s%d%s%d%s%d%s", "pip", ipip+1, "[jpip] {pipette", ipip+1, ".append() diam = 0.97*jpip^1.19 L = 10 connect pip", ipip+1, "[jpip](0), pip", ipip+1, "[jpip-1](1)}")
-		for jpip = 6, 199 execute(crremtip)
+		
+		for jpip = 6, 199 {
+
+			execute(crremtip)
+		}
 
 		sprint(piplistappend, "%s%d%s", "piplist.append(pipette", ipip+1, ")")
 		execute(piplistappend)
@@ -1410,9 +2040,10 @@ func createpip() {
 
 
 
-// -------------------------------conpip-------------------------------------------
+// --------------------------------------------------------------------------------
 // takes (1) strlist of locations
 // connects available pipettes to these.
+
 proc conpip() {local loc, tempnum
 
 	if (npip == $o1.count) { 
@@ -1445,17 +2076,16 @@ proc conpip() {local loc, tempnum
 
 		print "Error: ", npip, "pipettes found for ", $o1.count, "locations"
 	}
-
-	tempstr = ""
 }
 // --------------------------------------------------------------------------------
 
 
 
-// -----------------------------findtrunk------------------------------------------
+// --------------------------------------------------------------------------------
 // takes (1) a first section, in a secref object, and (2) a sectionlist, into which 
 // section children belonging to the trunk defined by the first section will be
 // appended. Note: based on 12 L5 pyramidal cells.
+
 proc findtrunk() {local countsec, lbound, tinyl, ch, gch, cmaxdiam localobj cdiamvec
 
 	lbound = 1.5
@@ -1588,17 +2218,16 @@ proc findtrunk() {local countsec, lbound, tinyl, ch, gch, cmaxdiam localobj cdia
 
 
 
-// ------------------------------getsubloc-----------------------------------------
+// --------------------------------------------------------------------------------
 // takes (1) any string section name with location (i.e. soma(0.5))
 // returns the section sublocation (i.e. 0.5)
+
 func getsubloc() {local subloc
 
 	strf.tail($s1, "[(]", tempstr)
 	strf.head(tempstr, "[)]", tempstr)
 
 	sscanf(tempstr, "%lf", &subloc)
-
-	tempstr = ""
 
 	return subloc
 }
@@ -1607,19 +2236,20 @@ func getsubloc() {local subloc
 
 
 // -------------------------------writebit-----------------------------------------
+// integers only, usually 1 or 0.
 // takes (1) output dir, (2) filename; (3) integer
-proc writebit() {local chk
+proc writebit() {
 
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
-	
+	chkin()
 	chdir($s1)
+	
 	writefile.wopen($s2)
+	
 	writefile.printf("%d", $3)
+	
 	writefile.close()
 
-	chdir(cwd)
-	if (chk) cwd = ""
+	chkout()
 }
 // --------------------------------------------------------------------------------
 
@@ -1627,65 +2257,26 @@ proc writebit() {local chk
 
 // -------------------------------writenum-----------------------------------------
 // takes (1) output dir, (2) filename; (3) some real number, (4) optional format
-proc writenum() {local chk
+proc writenum() {
 
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
-
+	chkin()
 	chdir($s1)
+	
 	writefile.wopen($s2)
+	
 	if (numarg() == 4) {
+	
 		writefile.printf($s4, $3)
+	
 	} else {
+	
 		setmaxform()
 		writefile.printf(maxform, $3)
 	}
+	
 	writefile.close()
 
-	chdir(cwd)
-	if (chk) cwd = ""
-}
-// --------------------------------------------------------------------------------
-
-
-
-// ----------------------------writestring-----------------------------------------
-// takes (1) output dir, (2) filename; (3) str
-proc writestring() {local chk
-	
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
-	
-	chdir($s1)
-	writefile.wopen($s2)
-	if (numarg() > 2) writefile.printf($s3)
-	writefile.close()
-
-	chdir(cwd)
-	if (chk) cwd = ""
-}
-// --------------------------------------------------------------------------------
-
-
-
-// ---------------------------appendstring-----------------------------------------
-// takes (1) output dir, (2) filename; (3) str
-// will append that string to the end of that file on a new line
-proc appendstring() {local chk
-	
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
-	
-	chdir($s1)
-	writefile.aopen($s2)
-	sprint(tempstr, "\n%s", $s3)
-	writefile.printf(tempstr)
-	writefile.close()
-
-	tempstr = ""
-
-	chdir(cwd)
-	if (chk) cwd = ""
+	chkout()
 }
 // --------------------------------------------------------------------------------
 
@@ -1771,13 +2362,14 @@ func secoricmp() {local k, secangavg localobj templist, tempvec
 
 
 
-// ---------------------------------chkdir-----------------------------------------
+// --------------------------------------------------------------------------------
 // Will check for the presence of a folder of filename in a provided  directory. 
 // The directory is provided as a string path, and the checked-for folder  or 
 // filename within as a test string. Either checked for folder or filename can be 
 // a substring.
 // takes (1) dir, (2) str
-func chkdir() {local chk
+
+func chkdir() {
 
 	if (numarg() == 1 && argtype(1) == 2) {
 
@@ -1793,27 +2385,21 @@ func chkdir() {local chk
 
 	if (strf.len($s2) > 0) {
 
-		chk = chkcwd(cwd)
-		if (chk) cwd = getcwd()
-	
+		chkin()
 		chdir($s1)
+
+		sprint(teststr, "%s", "")
 		system("ls", teststr)
 
 		if (strf.substr(teststr, $s2) > -1) {
 
-			teststr = ""
-
-			chdir(cwd)
-			if (chk) cwd = ""
-			
+			chkout()
+				
 			return 1
 
 		} else {
 
-			teststr = ""
-
-			chdir(cwd)
-			if (chk) cwd = ""
+			chkout()
 
 			return 0
 		}
@@ -1821,6 +2407,7 @@ func chkdir() {local chk
 	} else {
 
 		print "Please enter a non-empty folder or filename string to check within ", $s1
+	
 		return 0
 	}
 }
@@ -1828,43 +2415,22 @@ func chkdir() {local chk
 
 
 
-// ---------------------------------chkin------------------------------------------
-proc chkin() {local chk
 
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
-}
 // --------------------------------------------------------------------------------
-
-
-
-// --------------------------------chkout------------------------------------------
-proc chkout() {
-
-	chdir(cwd)
-	cwd = ""
-}
-// --------------------------------------------------------------------------------
-
-
-
-// ---------------------------------sysdir-----------------------------------------
-proc sysdir() {local chk
+proc sysdir() {
 	
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
-
+	chkin()
 	chdir($s1)
+
 	system($s2)
 
-	chdir(cwd)
-	if (chk) cwd = ""
+	chkout()
 }
 // --------------------------------------------------------------------------------
 
 
 
-// --------------------------------getdist-----------------------------------------
+// --------------------------------------------------------------------------------
 func getdist() {
 
 	if (numarg() == 1 && argtype(1) == 2) {
@@ -1878,43 +2444,148 @@ func getdist() {
 			print "4) the desired ending location within the start section (0-1)"
 			stop
 		}
-	}	
+	}
 
-	forsec $s1 distance(0, $2)
-	forsec $s3 return distance($4)
+	forsec $s1 {
+
+		distance(0, $2)
+	}
+	
+	forsec $s3 {
+
+		return distance($4)
+	}
 }
 // --------------------------------------------------------------------------------
 
 
 
-// ---------------------------------crdir------------------------------------------
-proc crdir() {local chk
-
-	chk = chkcwd(cwd)
-	if (chk) cwd = getcwd()
+// --------------------------------------------------------------------------------
+proc crdir() {
 
 	if (!chkdir($s1, $s2)) {
 
+		chkin()
 		chdir($s1)
+		
 		sprint(tempdir, "%s%s", "mkdir ./", $s2)
 		system(tempdir)
-		print "Successfully created directory ", $s2, " in ", $s1
+		print "Directory ", $s2, " created in ", $s1
 
-		tempdir = ""
+		chkout()
 
 	} else {
-		
-		print "Directory ", $s2, " already exists in ", $s1
-		
-		sprint(tempstr, "%s%s", $s2, "_copy")
-		sprint($s2, tempstr)
 
-		tempstr = ""
+		if (numarg() == 3) {
 
-		crdir($s1, $s2)
+			if ($3) {
+		
+				sprint(tempstr, "%s%s", $s2, "_copy")
+				sprint($s2, tempstr)
+
+				crdir($s1, $s2)
+			}
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+obfunc getdirlist() {local nline, line, k localobj tempobj
+
+	sprint(commstr, "%s%s", "ls ", $s1)
+
+	sprint(rstr, "%s", "")
+
+	system(commstr, rstr)
+
+	if (strf.len(rstr)) {
+
+		// number of folders and their names
+		writestr($s1, "templog.dat", rstr, 0)
+
+		nline = getnline($s1, "templog.dat")
+
+		$o2 = crveclist(nline, $o2)
+
+		for line = 1, nline {
+
+			tempobj = getline($s1, "templog.dat", line)
+			$o2.o(line-1).label(tempobj.label)
+		}
+
+		// remove templog
+		rmdir($s1, "templog.dat")
+
+		// clean up dirlist
+		k = $o2.count-1
+		
+		while (k >= 0) {
+
+		if ((strf.substr($o2.o(k).label, ".dat") > -1) || (strf.substr($o2.o(k).label, ".hoc") > -1) || (strf.substr($o2.o(k).label, ".ses") > -1)) {
+
+			$o2.remove(k)
+		}
+
+			k -= 1
+		}
+	
+	} else {
+
+		$o2 = new List()
 	}
 
-	chdir(cwd)
-	if (chk) cwd = ""	
+	return $o2
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc rmdir() {
+
+	if (chkdir($s1, $s2)) {
+
+		chkin()
+		chdir($s1)
+
+		sprint(commstr, "%s%s", "rm -rf ", $s2)
+		system(commstr)
+
+		chkout()
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc set_maxtime() {local maxtime_hours, line localobj templist, tempvec
+
+	sprint(qstr, "%s%g%s", "\nPlease enter the maximum optimization run time (hours):\n(Currently ", maxtime/3600, " hour(s))\t")
+	maxtime = 3600*xred(qstr, 42, 0.25, 42)
+	sprint(qstr, "%s", "")
+
+	if (chkdir(ses, "time.dat")) {
+
+		templist = crveclist(getnline(ses, "time.dat"), templist)
+
+		for line = 0, templist.count-1 {
+
+			tempvec = getline(ses, "time.dat", line)
+			templist.o(line).label(tempvec.label)
+		}
+	}
+
+	sprint(tempstr, "%s%g%s", "maxtime = ", maxtime_hours, "*3600")
+	for line = 1, templist.count-1 {
+
+		sprint(tempstr, "%s\n%s", tempstr, templist.o(line).label)
+	}
+
+	writestr(ses, "time.dat", tempstr)
+	sprint(tempstr, "%s", "")
 }
 // --------------------------------------------------------------------------------

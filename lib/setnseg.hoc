@@ -1,4 +1,4 @@
-// nFit
+// Salto
 // (c) Charles CH Cohen, 2014-present
 // this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
 // International license (CC BY-NC-ND 4.0, in English).
@@ -6,7 +6,7 @@
 
 
 
-proc setnseg() {
+proc setnseg() {local tempnum localobj tempvec
 
 	if (numarg() == 1 && argtype(1) == 0) {
 
@@ -14,10 +14,34 @@ proc setnseg() {
 
 	} else {
 
-		freqm = 1/(2*PI*mintau0)		
+		// provided at setup. default is 1 ms (units in ms).
+		freqm = 1/(2*PI*mintau0)
 	}
 
-	// maximize cellular nseg as a function of max(Ra) = Ri_high
-	forsec cellular Ra = 400
-	forall nseg = int((L/(0.1*lambda_f(5*freqm))+.9)/2)*2 + 1
+	// max Ri to maximize nseg, which lambda_f uses
+	tempvec = new Vector()
+
+	forsec cellular {
+
+		tempvec.resize(tempvec.size+1)
+		tempvec.x[tempvec.size-1] = Ra
+	}
+	
+	forsec cellular {
+	
+		Ra = 400
+	}
+	
+	forall {
+
+		nseg = int((L/(0.1*lambda_f(5*freqm))+.9)/2)*2 + 1
+	}
+
+	tempnum = 0
+
+	forsec cellular {
+
+		Ra = tempvec.x[tempnum]
+		tempnum += 1
+	}
 }

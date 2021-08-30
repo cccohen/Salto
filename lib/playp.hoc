@@ -1,4 +1,4 @@
-// nFit
+// Salto
 // (c) Charles CH Cohen, 2014-present
 // this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
 // International license (CC BY-NC-ND 4.0, in English).
@@ -7,167 +7,58 @@
 
 
 // -------------------------------------Variables-----------------------------------------
-objref playbox, playvec, playmat, templaymat
+objref playbox, playvec, playlist, playveclist
 
 strdef playstr
-
-playvec = new Vector(iampvec.size)
 // ---------------------------------------------------------------------------------------
 
 
 
-// -------------------------------------playopt-------------------------------------------
-proc playopt() {local m localobj tempmat
-
-	while ($o2.x[$1]) {
-
-		if (!$o2.x[$1]) {
-
-			break
-
-		} else {
-
-			getiampdir($1, iampdir)
-			if (iampvec.x[$1] < float_epsilon || iampvec.x[$1] > float_epsilon) {
-				getmat(iampdir, "pmatr.dat", tempmat)
-			} else {
-				getmat(iampdir, "pmatr-all.dat", tempmat)
-			}
-			reseticlamp(iampvec.x[$1])
-
-			print "Playing simulation results from ", moddir
-			
-			for m = 0, tempmat.nrow-1 {
-
-				print "playing simulation ", m, "of ", tempmat.nrow-1, "..."
-				updfitparam(tempmat.getrow(m))
-				
-				FitnessGenerator[0].efun()
-				
-				if (!$o2.x[$1]) {
-
-					break
-				}
-			}
-
-			if (m == tempmat.nrow) $o2.x[$1] = 0
-		}
-	}
-}
 // ---------------------------------------------------------------------------------------
-
-
-
-// -------------------------------------playpmat------------------------------------------
-proc playpmat() {local m, playon
-
-	if (numarg() == 1 && argtype(1) == 2) {
-
-		if (!strcmp($s1, "help")) {
-
-			print "Enter:"
-			print "1) pmat obj"
-			print "2) iamp ind. to reset iclamp delay and duration, use seticlamp() prior to using this function."
-			print "output: plays out the given parameters with given iclamp"
-			stop
-		}
-	}
-
-	reseticlamp(iampvec.x[$2])
-
-	print "Simulation play begins:"
-
-	FitnessGenerator[0].efun()
-
-	playon = 0
-
-	while (!playon) {
-
-		for m = 0, $o1.nrow-1 {
-
-			print "playing simulation ", m, "of ", $o1.nrow-1, "..."
-			updfitparam($o1.getrow(m))
-			FitnessGenerator[0].efun()
-		}
-
-		playon = 1
-	}
-}
-// ---------------------------------------------------------------------------------------
-
-
-
-// -------------------------------------playnsave-----------------------------------------
-proc playnsave() {local m, p, pstart, pend localobj tempmat, playmat, templaymat
-
-	if (numarg() == 1 && argtype(1) == 2) {
-
-		if (!strcmp($s1, "help")) {
-
-			print "Enter:"
-			print "1) pmat file name of interest (must be normalized)."
-			print "2) iamp ind. must correspond to existing pmat saved in outdir/mod/iamp. to reset iclamp delay and duration, use seticlamp()."
-			print "3) pmat row of interest."
-			stop
-		}
-	}
-
-	getiampdir($2, iampdir)
-	getmat(iampdir, $s1, tempmat)
-
-	templaymat = new Matrix(tempmat.getrow($3).size, 1)
-	templaymat.setcol(0, tempmat.getrow($3))
-	templaymat = delzeromat(templaymat)
-
-	playmat = new Matrix(templaymat.nrow/getnp(), getnp())
-	
-	pstart = 0
-	pend = playmat.ncol-1
-
-	for m = 0, playmat.nrow-1 {
-
-		playmat.setrow(m, templaymat.getcol(0).c(pstart, pend))
-
-		pstart = pend+1
-		pend += playmat.ncol
-	}
-
-	playpmat(playmat, $2)
-	saveallerrlogmat()
-}
-// ---------------------------------------------------------------------------------------
-
-
-
-// -----------------------------------setplaypanel----------------------------------------
-proc setplaypanel() {local k
+proc setplay() {local k, iamp, iampind localobj tempmat
 
 	playbox = new VBox(3)
 	playbox.intercept(1)
 	
 	xpanel("")
-	xlabel("Play simulation results")
+	xlabel("Play optimal parameters")
 	xpanel()
 
 	xpanel("")
-	xlabel("Select simulation amplitude:")
+	xlabel("Select injection amplitude:")	
 
 	getmod()
+	dirlist = getdirlist(moddir, dirlist)
 
-	for k = 0, iampvec.size-1 {
-	
-		num = setnsig(iampvec.x[k], 3)
+	if (dirlist.count) {
 		
-		if (iampvec.x[k] > float_epsilon) {
-			sprint(tempstr, "%s%g%s", "+", num*1000, " pA")
-		} else if (iampvec.x[k] < -float_epsilon) {
-			sprint(tempstr, "%g%s", num*1000, " pA")
-		} else {
-			sprint(tempstr, "%g%s", num*1000, " pA")
-		}
+		playvec = new Vector(dirlist.count)
+		playlist = new List()
+		crveclist(dirlist.count, playveclist)
 
-		sprint(playstr, "%s%d%s", "playopt(", k, ", playvec)")
-		xcheckbox(tempstr, &playvec.x[k], playstr)
+		for k = 0, dirlist.count-1 {
+
+			sprint(tempdir, "%s%s%s", moddir, dirlist.o(k).label, "/")
+
+			if (chkdir(tempdir, "pmatr.dat")) {
+
+				getmat(tempdir, "pmatr.dat", tempmat)
+				
+			} else {
+
+				getmat(tempdir, "pmatr-all.dat", tempmat)
+			}
+
+			playlist.append(tempmat)
+			playveclist.o(k).resize(tempmat.nrow)
+			playveclist.o(k).label(tempdir)
+
+			sscanf(dirlist.o(k).label, "%lf", &iamp)
+			iampind = getiampind(iamp)
+
+			sprint(playstr, "%s%d%s%d%s", "playopt(", k, ", ", iampind, ")")
+			xcheckbox(dirlist.o(k).label, &playvec.x[k], playstr)
+		}
 	}
 
 	xpanel()
@@ -176,6 +67,91 @@ proc setplaypanel() {local k
 	xpanel()
 
 	playbox.intercept(0)
-	playbox.map("Play Opt", 285, 634, 305.28, 331.2)
+	playbox.map("Play Opt", 341, 629, 302.4, 251.52)
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ---------------------------------------------------------------------------------------
+proc playopt() {local m, input_row, end_row
+
+	if (numarg() > 2) {
+
+		playvec.x[$1] = 1
+	}
+
+	while (playvec.x[$1]) {
+
+		reseticlamp($2, 1)
+
+		print "\nPlaying optimization results from:"
+		print playveclist.o($1).label, "\n"
+
+		if (numarg() < 3) {
+
+			input_row = 0
+			end_row = playlist.o($1).nrow-1
+
+		} else {
+
+			input_row = $3
+			end_row = input_row
+		}
+
+		for m = input_row, end_row {
+
+			if (playvec.x[$1]) {
+
+				if (!playveclist.o($1).x[m]) {
+
+					print "Playing simulation ", m, "of ", playlist.o($1).nrow-1
+					updfitparam(playlist.o($1).getrow(m))
+					
+					nopelog()
+					FitnessGenerator[0].efun()
+					pelog()
+
+					playveclist.o($1).x[m] = 1
+				}
+			
+			} else {
+
+				print "Play paused...\n"
+				break
+			}
+		}
+
+		if (playveclist.o($1).sum == playveclist.o($1).size) {			
+
+			for m = 0, playveclist.o($1).size-1 {
+
+				playveclist.o($1).x[m] = 0
+			}
+
+			playvec.x[$1] = 0
+		}
+
+		if (numarg() > 2) {
+
+			playvec.x[$1] = 0
+		}
+	}
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ---------------------------------------------------------------------------------------
+proc run() {
+
+	running_ = 1
+	stdinit()
+	continuerun(tstop)
+
+	if (stoprun) {
+
+		stoprun = 0
+	}
 }
 // ---------------------------------------------------------------------------------------

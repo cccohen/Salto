@@ -1,4 +1,4 @@
-// nFit
+// Salto
 // (c) Charles CH Cohen, 2014-present
 // this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
 // International license (CC BY-NC-ND 4.0, in English).
@@ -9,7 +9,7 @@
 // -------------------------------Variables----------------------------------------
 objref cellular, somatic, basal, apical, axonal
 objref aptrunk, praxonal, collateral, AIS
-objref internodal, paranodal, interparanodal, nodal, axbleb
+objref internodal, paranodal, interparanodal, juxtaparanodal, interjuxtaparanodal, nodal, axbleb
 objref apic0, axon0, praxlist, prankvec, intlist
 
 axbleb_exists = 0
@@ -36,12 +36,10 @@ proc bigsecl() {local countBas, countApic, countAxon
 
 			countBas += 1
 		}
-
 		ifsec "apic" {
 
 			countApic += 1
 		}
-
 		ifsec "axon" {
 
 			countAxon += 1
@@ -82,7 +80,7 @@ proc bigsecl() {local countBas, countApic, countAxon
 
 
 // -----------------------Smaller-purpose sectionlists-----------------------------
-proc lilsecl() {
+proc lilsecl() {localobj templist, tempseclist
 
 	// aptrunk sectionlist to exclude from sps application
 	apic[0] apic0 = new SectionRef()
@@ -93,6 +91,7 @@ proc lilsecl() {
 	// number of times required to rerecall findtrunk beyond its in-built recursion
 	// due to nstack overflow
 	ftcount = 0
+	
 	while (ftec) {
 
 		if (!ftcount) {
@@ -110,12 +109,17 @@ proc lilsecl() {
 	collateral = new SectionList()
 
 	// secref for axon
-	axon[0] axon0 = new SectionRef()
+	axon[0] {
+
+		axon0 = new SectionRef()
+	}
+	
 	// findtrunk exit code
 	ftec = 1
 	// number of times required to rerecall findtrunk beyond its in-built recursion
 	// due to nstack overflow
 	ftcount = 0
+	
 	while (ftec) {
 
 		if (!ftcount) {
@@ -129,8 +133,14 @@ proc lilsecl() {
 	}
 
 	// define collateral as axonal without praxonal
-	forsec axonal collateral.append()
-	collateral.remove(praxonal)
+	forsec axonal {
+
+		collateral.append()
+	}
+	forsec praxonal {
+
+		collateral.remove()
+	}
 
 	// store praxonal as strseclist
 	praxlist = new List()
@@ -138,67 +148,102 @@ proc lilsecl() {
 
 	// AIS
 	AIS = new SectionList()
-	forsec praxlist.o(0).label AIS.append()
+	forsec praxlist.o(0).label {
+
+		AIS.append()
+	}
 
 	// does a non-myelinated primary axon end bleb exist?
 	// initialize the corresponding endflag to 0
 	endflag = 0
-	axbleb_exists = getvarp(ses, "axbleb_exist.dat")
+	axbleb_exists = getvar(ses, "axbleb_exist.dat")
+
 	if (axbleb_exists) {
 
 		strdef axblebstr
 		getstring(ses, "axbleb_loc.dat", axblebstr)
 		axbleb = new SectionList()
-		forsec praxlist.o(praxlist.count-1).label axbleb.append()
+	
+		forsec praxlist.o(praxlist.count-1).label {
+
+			axbleb.append()
+		}
+	
 		endflag = 1
 	}
 
 	axontype = getaxontype(0)
-		
 	internodal = new SectionList()
 	nodal = new SectionList()
 
 	// minimum internode to node length ratio
-	mintnod = getvarp(ses, "mintnod.dat")
+	mintnod = getvar(ses, "mintnod.dat")
 
 	// find nodes and internodes (excluding AIS and end section)
 	for section = 1, praxlist.count-2 {
 
-		forsec praxlist.o(section-1).label pre = L
-		forsec praxlist.o(section).label cur = L
-		forsec praxlist.o(section+1).label post = L
+		forsec praxlist.o(section-1).label {
+
+			pre = L
+		}
+		forsec praxlist.o(section).label {
+
+			cur = L
+		}
+		forsec praxlist.o(section+1).label {
+
+			post = L
+		}
 
 		if (section == 1) {
 
-			if (cur/post > mintnod) {
+			if ((cur/post) > mintnod) {
 
-				forsec praxlist.o(section).label internodal.append()
+				forsec praxlist.o(section).label {
+
+					internodal.append()
+				}
 
 			} else {
 
-				forsec praxlist.o(section).label nodal.append()
+				forsec praxlist.o(section).label {
+
+					nodal.append()
+				}
 			}			
 		
-		} else if (endflag && section == praxlist.count-2) {
+		} else if (endflag && (section == praxlist.count-2)) {
 				
-			if (cur/pre > mintnod) {
+			if ((cur/pre) > mintnod) {
 
-				forsec praxlist.o(section).label internodal.append()
+				forsec praxlist.o(section).label {
+
+					internodal.append()
+				}
 
 			} else {
 
-				forsec praxlist.o(section).label nodal.append()
+				forsec praxlist.o(section).label {
+
+					nodal.append()
+				}
 			}
 		
 		} else {
 
-			if (cur/pre > mintnod && cur/post > mintnod) {
+			if ((cur/pre) > mintnod && (cur/post) > mintnod) {
 
-				forsec praxlist.o(section).label internodal.append()
+				forsec praxlist.o(section).label {
 
-			} else if (cur/pre < mintnod && cur/post < mintnod) {
+					internodal.append()
+				}
 
-				forsec praxlist.o(section).label nodal.append()
+			} else if ((cur/pre) < mintnod && (cur/post) < mintnod) {
+
+				forsec praxlist.o(section).label {
+
+					nodal.append()
+				}
 			}			
 		}
 	}
@@ -206,97 +251,277 @@ proc lilsecl() {
 	// check if end is nodal or internodal...
 	if (!endflag) {
 
-		forsec praxlist.o(praxlist.count-2).label pre = L
-		forsec praxlist.o(praxlist.count-1).label cur = L
+		forsec praxlist.o(praxlist.count-2).label {
 
-		if (cur/pre > mintnod) {
+			pre = L
+		}
+		forsec praxlist.o(praxlist.count-1).label {
 
-			forsec praxlist.o(praxlist.count-1).label internodal.append()
+			cur = L
+		}
+		if ((cur/pre) > mintnod) {
+
+			forsec praxlist.o(praxlist.count-1).label {
+
+				internodal.append()
+			}
 
 		} else {
 
-			forsec praxlist.o(praxlist.count-1).label nodal.append()
+			forsec praxlist.o(praxlist.count-1).label {
+
+				nodal.append()
+			}
 		}
 	}
 
-	// if paranodes...
-	paranod = getvarp(ses, "paranod.dat")
+	// if paranodes or juxtaparanodes...
+	paranodal = new SectionList()
+	juxtaparanodal = new SectionList()
 
-	if (paranod) {
+	paranod = getvar(ses, "paranode.dat")
+	juxtaparanod = getvar(ses, "juxtaparanode.dat")
 
-		// implies that edge nodal sections, adjacent to internodes, are paranodal.
-		// applies to such edge nodal sections only.
-		paranodal = new SectionList()		
-		
+	if (paranod && !juxtaparanod) {
+
+		// implies that each currently labelled nodal section, if immediately adjacent to an internode, is actually paranodal.
 		preIntflag = 0
 		postIntflag = 0
 
 		for section = 1, praxlist.count-2 forsec praxlist.o(section).label ifsec nodal {
 
-			forsec praxlist.o(section-1).label ifsec internodal preIntflag = 1
-			forsec praxlist.o(section+1).label ifsec internodal postIntflag = 1
+			forsec praxlist.o(section-1).label {
 
-			if (preIntflag || postIntflag) forsec praxlist.o(section).label paranodal.append()
+				ifsec internodal {
+
+					preIntflag = 1
+				}
+			}
+			forsec praxlist.o(section+1).label {
+
+				ifsec internodal {
+
+					postIntflag = 1
+				}
+			}
+
+			if (preIntflag || postIntflag) {
+
+				forsec praxlist.o(section).label {
+
+					paranodal.append()
+				}
+			}
+
+			preIntflag = 0
+			postIntflag = 0
+		}	
+	}
+
+	if (paranod && juxtaparanod) {
+
+		// implies that each currently labelled nodal section, if immediately adjacent to an internode, is actually juxtaparanodal.
+		preIntflag = 0
+		postIntflag = 0
+
+		for section = 1, praxlist.count-2 forsec praxlist.o(section).label ifsec nodal {
+
+			forsec praxlist.o(section-1).label {
+
+				ifsec internodal {
+
+					preIntflag = 1
+				}
+			}
+
+			forsec praxlist.o(section+1).label {
+
+				ifsec internodal {
+
+					postIntflag = 1
+				}
+			}
+
+			if (preIntflag || postIntflag) {
+
+				forsec praxlist.o(section).label {
+
+					juxtaparanodal.append()
+				}
+
+				if (preIntflag) {
+
+					forsec praxlist.o(section+1).label {
+
+						paranodal.append()
+					}
+				}
+				
+				if (postIntflag) {
+
+					forsec praxlist.o(section-1).label {
+
+						paranodal.append()
+					}
+				}
+			}
 
 			preIntflag = 0
 			postIntflag = 0
 		}
-
-		// check if end is paranodal...
-		if (!endflag) forsec praxlist.o(praxlist.count-1).label ifsec nodal {
-
-			forsec praxlist.o(praxlist.count-2).label ifsec internodal preIntflag = 1
-			
-			if (preIntflag) {
-
-				forsec praxlist.o(praxlist.count-2).label pre = L
-				forsec praxlist.o(praxlist.count-1).label cur = L
-
-				if (cur/pre < mintnod) forsec praxlist.o(praxlist.count-1).label paranodal.append()
-			}
-		}
 	}
 		
 	// cleanup:
-	// create interparanodal sectionlist and add those sections between paranodes (within the internode) in it
-	interparanodal = new SectionList()
-	forsec internodal interparanodal.append()
-	// add paranodes to internodal sectionlist, by definition.
-	forsec paranodal internodal.append()
-	// remove paranodal from nodal.
-	nodal.remove(paranodal)
-	// check for unusual remaining sections and add them if necessary
-	templist = new SectionList()
-	forsec AIS templist.append()
-	forsec internodal templist.append()
-	forsec nodal templist.append()
-	if (endflag) forsec axbleb templist.append()
-	tempseclist = new SectionList()
-	forsec praxonal tempseclist.append()
-	tempseclist.remove(templist)
-	forsec tempseclist nodal.append()
-	// check total subsection numbers
-	praxcount = 0
-	forsec AIS praxcount += 1
-	forsec internodal praxcount += 1
-	forsec nodal praxcount += 1
-	if (endflag) praxcount += 1
+	// add paranodal to internodal
+	forsec paranodal {
 
-	if (praxcount != praxlist.count) print "Error: primary axon sub-sectionlists incomplete"
+		internodal.append()
+	}
+	// create interparanodal sectionlist
+	interparanodal = new SectionList()
+	forsec internodal {
+
+		interparanodal.append()
+	}	
+	forsec paranodal {
+
+		interparanodal.remove()
+	}
+
+	// remove paranodal from nodal (which may have been included  due to the size of these sections).
+	forsec nodal {
+
+		ifsec paranodal {
+
+			nodal.remove()
+		}
+	}
+
+	// do the same for juxtaparanodes
+	// add juxtaparanodal to internodal and interparanodal
+	forsec juxtaparanodal {
+		
+		internodal.append()
+		interparanodal.append()
+	}
+
+	// create interjuxtaparanodal sectionlist
+	interjuxtaparanodal = new SectionList()
+	forsec interparanodal {
+
+		interjuxtaparanodal.append()
+	}
+	forsec juxtaparanodal {
+
+		interjuxtaparanodal.remove()
+	}
+
+	// remove juxtaparanodal from nodal (which may have been included  due to the size of these sections)
+	forsec nodal {
+
+		ifsec juxtaparanodal {
+
+			nodal.remove()
+		}
+	}
+
+	// cleanup continued:
+	// check for unusual, small, remaining sections and add them to nodal
+	// add AIS, internodal, nodal and axbleb to templist
+	templist = new SectionList()
+	forsec AIS {
+
+		templist.append()
+	}
+	forsec internodal {
+
+		templist.append()
+	}
+	forsec nodal {
+
+		templist.append()
+	}
+
+	if (endflag) {
+
+		forsec axbleb {
+
+			templist.append()
+		}
+	}
+	
+	// add praxonal to another templist, where praxonal would contain such small, remaining sections.
+	tempseclist = new SectionList()
+	forsec praxonal {
+
+		tempseclist.append()
+	}
+	forsec templist {
+
+		ifsec tempseclist {
+
+			tempseclist.remove()
+		}
+	}
+	forsec tempseclist {
+
+		nodal.append()
+	}
 
 	// order internodal sections
 	tempseclist = new SectionList()
+	forsec praxonal {
 
-	forsec praxonal tempseclist.append()
+		tempseclist.append()
+	}
+	forsec AIS {
 
-	tempseclist.remove(AIS)
-	tempseclist.remove(nodal)
-	if (axbleb_exists) tempseclist.remove(axbleb)
+		tempseclist.remove()
+	}
+	forsec nodal {
+
+		tempseclist.remove()
+	}
+
+	if (axbleb_exists) {
+
+		forsec axbleb {
+
+			tempseclist.remove()
+		}
+	}
 
 	internodal = new SectionList()
-	forsec tempseclist internodal.append()
 
-	objref templist, tempseclist	
+	forsec tempseclist {
+
+		internodal.append()
+	}
+	
+	// check total subsection numbers
+	praxcount = 0
+	forsec AIS {
+
+		praxcount += 1
+	}
+	forsec internodal {
+
+		praxcount += 1
+	}
+	forsec nodal {
+
+		praxcount += 1
+	}
+	
+	if (endflag) {
+
+		praxcount += 1
+	}
+
+	if (praxcount != praxlist.count) {
+
+		print "Error: primary axon sub-sectionlists incomplete"
+	}
 }
 // --------------------------------------------------------------------------------
 
@@ -305,56 +530,109 @@ proc lilsecl() {
 // ---------------------------------crintlist--------------------------------------
 func crintlist() {local k, m, q localobj tempseclist, templist
 
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Create list of internode sections (including paranodes or juxtaparanodes, if present) and return number of internodes."
+			stop
+		}
+	}	
+
 	intlist = new List()
 	crveclist(100, intlist)
-	for k = 0, intlist.count-1 intlist.o(k).x[0] = -1
+	
+	for k = 0, intlist.count-1 {
+
+		intlist.o(k).x[0] = -1
+	}
 	
 	tempseclist = new SectionList()
+	forsec praxonal {
 
-	forsec praxonal tempseclist.append()
+		tempseclist.append()
+	}
+	forsec AIS {
 
-	tempseclist.remove(AIS)
-	tempseclist.remove(nodal)
+		tempseclist.remove()
+	}
+	forsec nodal {
+
+		tempseclist.remove()
+	}
 
 	templist = new List()
 	seclist2list(tempseclist, templist)
+	
+	forsec paranodal {
 
-	tempseclist.remove(paranodal)
-	if (axbleb_exists) tempseclist.remove(axbleb)
+		tempseclist.remove()
+	}
+
+	if (axbleb_exists) {
+
+		forsec axbleb {
+
+			tempseclist.remove()
+		}
+	}
 
 	m = -1
 
 	if (paranod) {
 
 		k = 0
+		
 		while (k < templist.count) {
 
-			forsec templist.o(k).label ifsec paranodal {
+			forsec templist.o(k).label {
 
-				m += 1
-				intlist.o(m).x[0] = sec2secnum(templist.o(k).label)
-				k += 1
-				intlist.o(m).resize(intlist.o(m).size+1)				
-				intlist.o(m).x[1] = sec2secnum(templist.o(k).label)
-					
-				q = 0
-				while (q < templist.count-k) {
+				ifsec paranodal {
 
+					m += 1
+					intlist.o(m).x[0] = sec2secnum(templist.o(k).label)
 					k += 1
-					forsec templist.o(k).label ifsec paranodal {
+					intlist.o(m).resize(intlist.o(m).size+1)				
+					intlist.o(m).x[1] = sec2secnum(templist.o(k).label)
+					q = 0
+					
+					while (q < templist.count-k) {
 
-						intlist.o(m).resize(intlist.o(m).size+1)
-						intlist.o(m).x[intlist.o(m).size-1] = sec2secnum(templist.o(k).label)
-						q = templist.count-k
-					}
+						k += 1
 
-					if (axbleb_exists) forsec templist.o(k).label ifsec axbleb q = templist.count-k
+						forsec templist.o(k).label {
 
-					forsec templist.o(k).label ifsec tempseclist {
-						print "impossible"
-						intlist.o(m).resize(intlist.o(m).size+1)
-						intlist.o(m).x[intlist.o(m).size-1] = sec2secnum(templist.o(k).label)
-						q += 1
+								ifsec paranodal {
+
+									intlist.o(m).resize(intlist.o(m).size+1)
+									intlist.o(m).x[intlist.o(m).size-1] = sec2secnum(templist.o(k).label)			
+									q = templist.count-k
+							}
+						}
+
+						if (axbleb_exists) {
+
+							forsec templist.o(k).label {
+
+								ifsec axbleb {
+
+									q = templist.count-k
+
+									forsec templist.o(k).label {
+
+										ifsec tempseclist {
+											
+											print "Impossible sectionlist assignment"
+											
+											intlist.o(m).resize(intlist.o(m).size+1)
+											intlist.o(m).x[intlist.o(m).size-1] = sec2secnum(templist.o(k).label)
+											
+											q += 1
+										}
+									}
+								}
+							}
+						}
 					}
 				}
 			}
@@ -363,9 +641,15 @@ func crintlist() {local k, m, q localobj tempseclist, templist
 		}
 	}
 
-	k = intlist.count-1 
+	k = intlist.count-1
+
 	while (k >= 0) {
-		if (intlist.o(k).x[0] == -1) intlist.remove(k)
+		
+		if (intlist.o(k).x[0] == -1) {
+
+			intlist.remove(k)
+		}
+
 		k -= 1
 	}
 
@@ -373,4 +657,32 @@ func crintlist() {local k, m, q localobj tempseclist, templist
 }
 // -----------------------------------------------------------------------------------
 
+
+
+// -----------------------------------------------------------------------------------
+proc chkax() {
+
+	countPrax = 0
+	countNod = 0
+	countCol = 0
+
+	forsec praxonal {
+
+		countPrax += 1
+	}
+
+	forsec nodal {
+
+		countNod += 1
+	}
+
+	forsec collateral {
+
+		countCol += 1
+	}
+
+	print "countPrax = ", countPrax
+	print "countNod = ", countNod
+	print "countCol = ", countCol
+}
 // -------------------------------End defsec------------------------------------------

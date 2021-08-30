@@ -1,0 +1,198 @@
+// Salto
+// (c) Charles CH Cohen, 2014-present
+// this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
+// International license (CC BY-NC-ND 4.0, in English).
+// for any questions, please email c.cohen@gmx.com
+
+
+
+// ---------------------------------------------------------------------------------------
+proc extract() {local k, xopt, ans localobj dirlist
+
+	getmod()
+	dirlist = getdirlist(moddir, dirlist)
+
+	if (dirlist.count) {
+
+		for k = 0, dirlist.count-1 {
+
+			sprint(tempdir, "%s%s%s", moddir, dirlist.o(k).label, "/")
+
+			print "Extracting optimization data from folder:"
+			print tempdir
+
+			sprint(qstr, "%s", "\nPlease select one of the following two options:\n1) Extract error, parameter, exit code, and time data (required for further optimization)?, or \n2) Extract voltage, error log and parameter log data (may take more time and not required for further optimizations)?")
+			ans = xred(qstr, 1, 1, 2)
+
+			if (ans == 1) {
+
+				extract_log(tempdir, "fe")
+				extract_log(tempdir, "fp")
+				extract_log(tempdir, "eq")
+				extract_log(tempdir, "pq")				
+				extract_log(tempdir, "t")
+				extract_log(tempdir, "exit")	
+			}
+
+			if (ans == 2) {
+
+				extract_log(tempdir, "v")
+				extract_log(tempdir, "e")
+				extract_log(tempdir, "p")
+			}
+		}
+	
+	} else {
+
+		print "No optimization directories found in ", moddir
+	}
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ---------------------------------------------------------------------------------------
+proc extract_log() {local nline, line, nrows, k, f, qstart, q, exitcount localobj tempvec, tempobj, tempmat, rvec
+
+	sprint(logstr, "%s%s", $s2, "log")
+	sprint(testdir, "%s\n", logstr)
+
+	if (chkdir($s1, testdir)) {
+
+		geteheader()
+		getpheader()
+		getvheader(getscount()+1)
+
+		sprint(tempheader, "%s", "")
+		sprint(logmatstr, "%s%s", $s2, "mat.dat")
+		sprint(format, "%s", maxformvec)
+
+		if (!strcmp($s2, "fe")) {
+
+			sprint(tempheader, "%s", eheader)
+			sprint(logmatstr, "%s", "emat.dat")
+			
+			sprint(format, "%s", vformvec)
+		}
+
+		if (!strcmp($s2, "fp")) {
+
+			sprint(tempheader, "%s", pheader)
+			sprint(logmatstr, "%s", "pmat.dat")
+		}
+
+		if (!strcmp($s2, "eq")) {
+
+			sprint(format, "%s", vformvec)			
+		}	
+
+		if (!strcmp($s2, "t")) {
+			
+			sprint(format, "%s", tformvec)
+		}
+
+		if (!strcmp($s2, "v")) {
+
+			sprint(tempheader, "%s", vheader)
+			sprint(format, "%s", vformvec)
+		}
+
+		if (!strcmp($s2, "e")) {
+
+			sprint(logmatstr, "%s", "elogmat.dat")
+			sprint(format, "%s", vformvec)
+		}
+		
+		if (!strcmp($s2, "p")) {
+
+			sprint(logmatstr, "%s", "plogmat.dat")
+		}
+
+		if (chkdir($s1, logmatstr)) {
+
+			print "Extracting ", logstr, "..."
+
+			sprint(logdir, "%s%s%s", $s1, logstr, "/")
+			sprint(commstr, "%s%s%s", "ls", " ", logdir)
+
+			sprint(outstr, "%s", "")
+			system(commstr, outstr)
+
+			strf.left(outstr, strf.len(outstr)-1)
+
+			writestr($s1, "templog.dat", outstr, 0)
+
+			nline = getnline($s1, "templog.dat")
+
+			tempvec = new Vector(nline)
+
+			for line = 0, nline-1 {
+
+				tempobj = getline($s1, "templog.dat", line)
+				sscanf(tempobj.label, "%lf", &tempvec.x[line])
+			}
+
+			rmdir($s1, "templog.dat")
+
+			nrows = getmat($s1, logmatstr, tempmat)
+
+			for k = 0, tempvec.size-1 {
+
+				sprint(filestr, "%g%s", tempvec.x[k], ".dat")
+				tempobj = getvarvec(tempobj = getline(logdir, filestr, 0))
+
+				if (tempobj.size) {
+
+					if (strcmp($s2, "v")) {
+
+						if (tempobj.size > tempmat.ncol) {
+
+							tempmat.resize(nrows, tempobj.size)
+						}
+
+						tempmat.setrow(tempvec.x[k], tempobj)
+				
+					} else {
+
+						for f = 0, nf-1 {
+
+							qstart = f*nrows
+			
+							for q = 0, nrows-1 {
+
+								tempmat.x[q][nf*tempvec.x[k]+f+1] = tempobj.x[qstart+q]
+							}
+						}
+					}
+				}
+			}
+
+			if (!strcmp($s2, "exit")) {
+				
+				sprint(format, "%s", "%g\t")
+				exitcount = 0
+
+				for k = 0, tempmat.nrow-1 {
+
+					if (tempmat.x[k][0] && tempmat.x[k][1]) {
+
+						exitcount += 1
+					}
+				}
+
+				print exitcount, "\noptimizations of ", tempmat.nrow, "completed both fast and slow components of the NU algorithm."
+				print "Therefore, ", tempmat.nrow-exitcount, "cores are required for the next round of optimizations.\n"
+			}			
+
+			savemat($s1, logmatstr, tempmat, format, tempheader)
+
+			print "...Extraction completed for ", logstr
+
+		} else {
+
+			saveopt($s1, getscount())
+			extract_log($s1, $s2)
+		}
+	}
+}
+// ---------------------------------------------------------------------------------------

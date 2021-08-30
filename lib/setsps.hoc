@@ -7,7 +7,7 @@
 
 
 // apply sps defined in defsps
-proc setsps() {local iNseg, seg, l, pos
+proc setsps() {local iNseg, seg, l_, pos
 
 	// get number of spines
 	nsp = (lbas_sp + lapic_sp)*dens_sp
@@ -23,18 +23,19 @@ proc setsps() {local iNseg, seg, l, pos
 		iNseg = nseg
 		for seg = 1,iNseg {
 			soma distance(0, 0.5)
-			l = distance((2*seg-1)/(2*iNseg))
-			if (l > distbas_sp) {
+			l_ = distance((2*seg-1)/(2*iNseg))
+			if (l_ > distbas_sp) {
 				
 				g_pas((2*seg-1)/(2*iNseg)) *= sps
 				cm((2*seg-1)/(2*iNseg)) *= sps
 
-				if (mode == 1) {
+				if (mode_ == 1) {
 
 					gbar_na((2*seg-1)/(2*iNseg)) *= sps
 					gbar_kv1((2*seg-1)/(2*iNseg)) *= sps
 					gbar_kv7((2*seg-1)/(2*iNseg)) *= sps
 					gbar_kv((2*seg-1)/(2*iNseg)) *= sps
+					gbar_kca((2*seg-1)/(2*iNseg)) *= sps
 					gbar_ca((2*seg-1)/(2*iNseg)) *= sps
 					gbar_it2((2*seg-1)/(2*iNseg)) *= sps
 					gbar_ih((2*seg-1)/(2*iNseg)) *= sps
@@ -51,19 +52,20 @@ proc setsps() {local iNseg, seg, l, pos
 			for seg = 1,iNseg {
 				
 				soma distance(0, 0.5)
-				l = distance((2*seg-1)/(2*iNseg))
+				l_ = distance((2*seg-1)/(2*iNseg))
 				
-				if (l > distaptrunk_sp) {
+				if (l_ > distaptrunk_sp) {
 				
 					g_pas((2*seg-1)/(2*iNseg)) *= sps
 					cm((2*seg-1)/(2*iNseg)) *= sps
 
-					if (mode == 1) {
+					if (mode_ == 1) {
 
 						gbar_na((2*seg-1)/(2*iNseg)) *= sps
 						gbar_kv1((2*seg-1)/(2*iNseg)) *= sps
 						gbar_kv7((2*seg-1)/(2*iNseg)) *= sps
 						gbar_kv((2*seg-1)/(2*iNseg)) *= sps
+						gbar_kca((2*seg-1)/(2*iNseg)) *= sps
 						gbar_ca((2*seg-1)/(2*iNseg)) *= sps
 						gbar_it2((2*seg-1)/(2*iNseg)) *= sps
 						gbar_ih((2*seg-1)/(2*iNseg)) *= sps
@@ -78,23 +80,24 @@ proc setsps() {local iNseg, seg, l, pos
 			for seg = 1,iNseg {
 				
 				soma distance(0, 0.5)
-				l = distance((2*seg-1)/(2*iNseg))
+				l_ = distance((2*seg-1)/(2*iNseg))
 				
-				if (l > distapic_sp) {
+				if (l_ > distapic_sp) {
 				
 					g_pas((2*seg-1)/(2*iNseg)) *= sps
 					cm((2*seg-1)/(2*iNseg)) *= sps
 
-					if (mode == 1) {
+					if (mode_ == 1) {
 
 						gbar_na((2*seg-1)/(2*iNseg)) *= sps
 						gbar_kv1((2*seg-1)/(2*iNseg)) *= sps
 						gbar_kv7((2*seg-1)/(2*iNseg)) *= sps
 						gbar_kv((2*seg-1)/(2*iNseg)) *= sps
+						gbar_kca((2*seg-1)/(2*iNseg)) *= sps
 						gbar_ca((2*seg-1)/(2*iNseg)) *= sps
 						gbar_it2((2*seg-1)/(2*iNseg)) *= sps
 						gbar_ih((2*seg-1)/(2*iNseg)) *= sps
-					}					
+					}
 				}
 			}
 		}
