@@ -1,4 +1,4 @@
-nFit v1.1
+Salto v1.0
 ------------------------------------------------------------------------------------------------------------------------------
 Automated generation and optimization of neuron models
 ------------------------------------------------------------------------------------------------------------------------------
@@ -59,10 +59,18 @@ startopt.hoc
 	- May be run in parallel at the NSG (https://www.nsgportal.org/) or properly configured machines.
 	- Saves simulation results in an "outdir", in a subfolder entitled *modeltype*
 
+extractopt.hoc
+	- Extract optimized solutions returned by startopt.hoc.
+	- Based on current model setup and matching solution set.
+	- Required to finish unfinished optimizations due to lack of simulation time.
+	- Note 1: operation may require substantial time. A powerful machine is recommended.
+	- Note 2: unfinished optimizations due to lack of simulation time may also be finished first by adding simulation time. This is usually set at setup, but may also be changed thereafter in /ses/time.dat by increasing maxtime (time unit is s).
+
 rankopt.hoc
 	- Rank optimized model solutions. 
-	- To be used only after startopt.hoc has returned solutions.
+	- To be used only after startopt.hoc has returned solutions and extractopt has been run.
 	- Based on current model setup and matching solution set.
+	- Note: operation may require substantial time. A powerful machine is recommended.
 
 playopt.hoc
 	- Play optimized and ranked solutions of current model setup.

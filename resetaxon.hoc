@@ -19,38 +19,39 @@ sprint(out, "%s%s", root, "outdir/")
 load_file("stdgui.hoc")
 chdir(lib)
 load_file("startlib.hoc")
+loadfile(ses, "time.dat")
 loadfile(ses, "morph.hoc")
-mode = getvarp(ses, "mode.dat")
+mode_ = getvar(ses, "mode.dat")
 setmaxform()
 setmaxformvec()
-has_data = getvarp(ses, "has_data.dat")
-setfilestr(mode, has_data)
+idata = getvar(ses, "idata.dat")
+setfilestr(mode_, idata)
 loaddll()
 
-if (has_data) {
-
-	getvec(ses, iampvecfilestr, iampvec)
+if (idata) {
+	
+	iampvec = getvec(ses, iampvecfilestr, iampvec)
 	nrows = getmat(ses, vdatfilestr, vdatmat)
 	tdatvec = new Vector()
 	tdatvec.append(vdatmat.getcol(0))
 	nsigt = getnsig(tdatvec)
 	settform()
 	settformvec()
-	temprec = getvarp(ses, "temprec.dat")
-	mintau0 = getvarp(ses, "mintau0.dat")
-	getvec(ses, "BBvec.dat", BBvec)
+	temprec = getvar(ses, "temprec.dat")
+	mintau0 = getvar(ses, "mintau0.dat")
+	BBvec = getvec(ses, "BBvec.dat", BBvec)
 	createpip(nrec = getstrlist(ses, recloclistfilestr, recloclist))
 	conpip(recloclist)
-	getvec(ses, "injlist.dat", injvec)
+	injvec = getvec(ses, "injlist.dat", injvec)
 
 } else {
 
-	getvec(ses, iampvecfilestr, iampvec)
+	iampvec = getvec(ses, iampvecfilestr, iampvec)
 	nsigt = 6
 	settform()
 	settformvec()	
-	temprec = getvarp(ses, "temprec-def.dat")
-	mintau0 = getvarp(ses, "mintau0-def.dat")
+	temprec = getvar(ses, "temprec-def.dat")
+	mintau0 = getvar(ses, "mintau0-def.dat")
 	nrec = getstrlist(ses, recloclistfilestr, recloclist)
 }
 
@@ -63,12 +64,17 @@ setnseg(mintau0)
 load_file("defparam.hoc")
 load_file("setparam.hoc")
 axontype = getaxontype(0)
+// setparamopt()
 setparam()
 load_file("defsps.hoc")
+celltypevec = getcelltype()
+defdens_sp()
+defasp()
+defdist_sp()
 defsps()
 load_file("setsps.hoc")
 setsps()
-load_file("setmy.hoc")
+load_file("setmyelin.hoc")
 setmy()
 load_file("setstim.hoc")
 seticlamp()
@@ -105,12 +111,12 @@ axontype = xred(axonqstr, axontype, 1, 4)
 
 writebit(ses, "axontype.dat", axontype)
 setparam()
-if (mode == 0) {
+if (mode_ == 0) {
 	// pas inj in pA
-	writevxplot(0.001 * getvarp(ses, "iamp-pas.dat"))
-} else if (mode == 1) {
+	writevxplot(0.001 * getvar(ses, "iamp-pas.dat"))
+} else if (mode_ == 1) {
 	// act inj in nA
-	writevxplot(getvarp(ses, "iamp-act.dat"))
+	writevxplot(getvar(ses, "iamp-act.dat"))
 }
 
 if (axontype == 1) {

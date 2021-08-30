@@ -33,13 +33,19 @@ ans = sred(modqstr, "y", "ny")
 
 if (ans) {
 
-	if (unix_mac_pc() == 4 || unix_mac_pc() == 1 || unix_mac_pc() == 2) {
+	if (unix_mac_pc() != 3) {
 
 		print "\nUNIX/LINUX detected...\n"
 
 		system("ls", tempstr)
-		if ((strf.substr(tempstr, "x86_64\n")) > - 1) system("rm -rf x86_64")
+
+		if (strf.substr(tempstr, "x86_64\n") > - 1) {
+
+			system("rm -rf x86_64")
+		}
+		
 		system("nrnivmodl")
+		
 		print "\nPlease restart the model"
 	}
 

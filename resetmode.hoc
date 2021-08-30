@@ -23,58 +23,58 @@ load_file("stdgui.hoc")
 chdir(lib)
 load_file("startlib.hoc")
 loadfile(ses, "morph.hoc")
-has_data = getvar(ses, "has_data.dat")
+idata = getvar(ses, "idata.dat")
 load_file("setstim.hoc")
 // --------------------------------------------------------------------------------
 
 
 
-print "\nReset Mode to Active or Passive"
+print "\nReset mode_ to Active or Passive"
 
-mode = getvar(ses, "mode.dat")
+mode_ = getvar(ses, "mode.dat")
 
 strdef modeqstr, sesqstr
 modeqstr = "\nEnter 0 for changing to Passive, 1 for Active [0/1]"
 
-if (mode == 0) {
+if (mode_ == 0) {
 
-	print "\nCurrent mode = Passive (0)"
+	print "\nCurrent mode_ = Passive (0)"
 	ans = xred(modeqstr, 1, 0, 1)
 
 	if (ans == 0) {
 
-		print "Mode unchanged"
+		print "mode_ unchanged"
 	
 	} else if (ans == 1) {
 
-		print "\nChanging mode to Active...\n"
-		mode = 1
-		writebit(ses, "mode.dat", mode)
-		print "Mode changed to Active"
+		print "\nChanging mode_ to Active...\n"
+		mode_ = 1
+		writebit(ses, "mode.dat", mode_)
+		print "mode_ changed to Active"
 	}
 
-} else if (mode == 1) {
+} else if (mode_ == 1) {
 
-	print "\nCurrent mode = Active (1)"
+	print "\nCurrent mode_ = Active (1)"
 	ans = xred(modeqstr, 0, 0, 1)
 
 	if (ans == 1) {
 
-		print "Mode unchanged"
+		print "mode_ unchanged"
 
 	} else if (ans == 0) {
 
-		print "\nChanging mode to Passive...\n"
-		mode = 0
-		writebit(ses, "mode.dat", mode)
-		print "Mode changed to Passive"
+		print "\nChanging mode_ to Passive...\n"
+		mode_ = 0
+		writebit(ses, "mode.dat", mode_)
+		print "mode_ changed to Passive"
 	}
 }
 
 
 print "\nPlease confirm starting IClamp:\n"
-setfilestr(mode, has_data)
-getvec(ses, iampvecfilestr, iampvec)
+setfilestr(mode_, idata)
+iampvec = getvec(ses, iampvecfilestr, iampvec)
 changeiclamp()
 
 print "\nYou may now restart the model"
