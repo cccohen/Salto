@@ -1,6 +1,6 @@
 Salto v1.0
 ------------------------------------------------------------------------------------------------------------------------------
-Automated generation and optimization of neuron models
+Automated generation, GUI-based exploration, and multiscale optimization of neuron models
 ------------------------------------------------------------------------------------------------------------------------------
 To run a model for the first time:
 	- Download and install NEURON (https://github.com/neuronsimulator/).
