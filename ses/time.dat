@@ -1,0 +1,6 @@
+maxtime = 60
+
+runtime = 0
+overtime = 0
+hourlog = 1
+chkhour = 2

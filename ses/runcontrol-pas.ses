@@ -4,8 +4,8 @@ objectvar ocbox_, ocbox_list_, scene_, scene_list_
 {ocbox_list_ = new List()  scene_list_ = new List()}
 {
 xpanel("RunControl", 0)
-v_init = -8.9527249e-04
-xvalue("Init","v_init", 1,"stdinit()", 1, 1 )
+v_init = -5.9037687e-04
+xvalue("Init", "v_init", 1,"stdinit()", 1, 1)
 xbutton("Init & Run","run()")
 xbutton("Stop","stoprun=1")
 runStopAt = 9.375000e+01
