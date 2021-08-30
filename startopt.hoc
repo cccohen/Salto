@@ -7,8 +7,7 @@
 
 
 load_file("openmodel.hoc")
-load_file("genopt.hoc")
 setgen()
-parac = new ParallelContext()
-parac.runworker()
-parallex(0, 0)
+
+llc.runworker()
+parallex(1, 1)
