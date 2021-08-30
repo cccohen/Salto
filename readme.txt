@@ -1,6 +1,11 @@
 Salto v1.0
 ------------------------------------------------------------------------------------------------------------------------------
+(c) Charles CH Cohen, 2014-present
+The contents of this package are released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International license (CC BY-NC-ND 4.0, in English).
+------------------------------------------------------------------------------------------------------------------------------
+
 Automated generation, GUI-based exploration, and multiscale optimization of neuron models
+
 ------------------------------------------------------------------------------------------------------------------------------
 To run a model for the first time:
 	- Download and install NEURON (https://github.com/neuronsimulator/).
