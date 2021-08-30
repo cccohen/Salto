@@ -1,0 +1,155 @@
+Ri_doarg = 0
+Ri_uselog = 0
+
+rpa_doarg = 0
+rpa_uselog = 0
+
+parafact_doarg = 0
+parafact_uselog = 0
+
+Rm_doarg = 0
+Rm_uselog = 0
+
+Rmy_doarg = 0
+Rmy_uselog = 0
+
+Cm_doarg = 0
+Cm_uselog = 0
+
+Cmy_doarg = 0
+Cmy_uselog = 0
+
+Cpip_doarg = 0
+Cpip_uselog = 0
+
+RmN_doarg = 0
+RmN_uselog = 0
+
+RmA_doarg = 0
+RmA_uselog = 0
+
+RmI_doarg = 0
+RmI_uselog = 0
+
+RiA_doarg = 0
+RiA_uselog = 0
+
+per_int_doarg = 0
+exp_doarg = 0
+
+
+Na_so_doarg = 0
+Na_so_uselog = 0
+
+lc_Na_de_doarg = 0
+lc_Na_de_uselog = 0
+
+Na_prox_doarg = 0
+Na_prox_uselog = 0
+
+Na_ais_doarg = 0
+Na_ais_uselog = 0
+
+Na_int_doarg = 0
+Na_int_uselog = 0
+
+Na_nod_doarg = 0
+Na_nod_uselog = 0
+
+Na_end_doarg = 0
+Na_end_uselog = 0
+
+Na_col_doarg = 0
+Na_col_uselog = 0
+
+
+Nap_ais_doarg = 0
+Nap_ais_uselog = 0
+
+Nap_int_doarg = 0
+Nap_int_uselog = 0
+
+Nap_nod_doarg = 0
+Nap_nod_uselog = 0
+
+Nap_end_doarg = 0
+Nap_end_uselog = 0
+
+
+Kv1_so_doarg = 0
+Kv1_so_uselog = 0
+
+lc_Kv_Kv1_de_doarg = 0
+lc_Kv_Kv1_de_uselog = 0
+
+Kv1_prox_doarg = 0
+Kv1_prox_uselog = 0
+
+Kv1_ais_doarg = 0
+Kv1_ais_uselog = 0
+
+Kv1_int_doarg = 0
+Kv1_int_uselog = 0
+
+Kv1_nod_doarg = 0
+Kv1_nod_uselog = 0
+
+Kv1_end_doarg = 0
+Kv1_end_uselog = 0
+
+Kv1_col_doarg = 0
+Kv1_col_uselog = 0
+
+
+Kv_so_doarg = 0
+Kv_so_uselog = 0
+
+
+Kv7_de_doarg = 0
+Kv7_de_uselog = 0
+
+Kv7_so_doarg = 0
+Kv7_so_uselog = 0
+
+Kv7_prox_doarg = 0
+Kv7_prox_uselog = 0
+
+Kv7_ais_doarg = 0
+Kv7_ais_uselog = 0
+
+Kv7_int_doarg = 0
+Kv7_int_uselog = 0
+
+Kv7_nod_doarg = 0
+Kv7_nod_uselog = 0
+
+Kv7_end_doarg = 0
+Kv7_end_uselog = 0
+
+Kv7_col_doarg = 0
+Kv7_col_uselog = 0
+
+
+KCa_doarg = 0
+KCa_uselog = 0
+
+
+Ca_doarg = 0
+Ca_uselog = 0
+
+It2_doarg = 0
+It2_uselog = 0
+
+
+H_so_doarg = 0
+H_so_uselog = 0
+
+tc_H_de_doarg = 0
+tc_H_de_uselog = 0
+
+H_ax_doarg = 0
+H_ax_uselog = 0
+
+
+Kv1_juxta_doarg = 0
+Kv1_juxta_uselog = 0
