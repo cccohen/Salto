@@ -28,46 +28,50 @@ idata = getvar(ses, "idata.dat")
 setfilestr(mode_, idata)
 loaddll()
 
+iampvec = getvec(ses, iampvecfilestr, iampvec)
+temprec = getvar(ses, temprecfilestr)
+nrec = getstrlist(ses, recloclistfilestr, recloclist)
+injvec = getvec(ses, "injlist.dat", injvec)
+
 if (idata) {
 	
-	iampvec = getvec(ses, iampvecfilestr, iampvec)
 	nrows = getmat(ses, vdatfilestr, vdatmat)
 	tdatvec = new Vector()
 	tdatvec.append(vdatmat.getcol(0))
 	nsigt = getnsig(tdatvec)
-	settform()
-	settformvec()
-	temprec = getvar(ses, "temprec.dat")
-	mintau0 = getvar(ses, "mintau0.dat")
 	BBvec = getvec(ses, "BBvec.dat", BBvec)
-	createpip(nrec = getstrlist(ses, recloclistfilestr, recloclist))
-	conpip(recloclist)
-	injvec = getvec(ses, "injlist.dat", injvec)
+	
+	if (mode_ == 0) {
+
+		createpip(nrec)
+		conpip(recloclist)	
+	}
 
 } else {
-
-	iampvec = getvec(ses, iampvecfilestr, iampvec)
+	
 	nsigt = 6
-	settform()
-	settformvec()	
-	temprec = getvar(ses, "temprec-def.dat")
-	mintau0 = getvar(ses, "mintau0-def.dat")
-	nrec = getstrlist(ses, recloclistfilestr, recloclist)
 }
 
-loclist2sec(recloclist, recseclist)
+settform()
+settformvec()
+
+recseclist = loclist2seclist(recloclist, recseclist)
 load_file("defsec.hoc")
+axbleb_exists = getvar(ses, "axbleb_exists.dat")
 bigsecl()
+axontype = getaxontype()
+celltypevec = getcelltype()
 lilsecl()
 load_file("setnseg.hoc")
-setnseg(mintau0)
+setnseg(mode_, idata, fracl, minmaxnseg)
 load_file("defparam.hoc")
+defparam()
 defAISpts()
 load_file("setparam.hoc")
-axontype = getaxontype(0)
-setparam()
+initpvecs()
+getmodeltype(mode_, idata)
+setparam(mode_, idata)
 load_file("defsps.hoc")
-celltypevec = getcelltype()
 defmorph_sp()
 defdist_sp()
 defsps()
@@ -80,33 +84,26 @@ seticlamp()
 load_file("getparam.hoc")
 load_file("writeses.hoc")
 
-setpname(mode_)
-getpdef()
-getp()
-getpnormdef()
-getpnorm()
-getplow()
-getphi()
-getdoarg()
-getuselog()
-
 steps_per_ms = getsteps()
 setdt()
+tstop = gettstop(mode_, idata)
 
 if (idata) {
 
 	dt = setnsig(dt, nsigt)
 	bess = getvar(ses, "bessfil.dat")
 	nsigv = getnsig(vdatmat.getcol(1))
-	setvform()
-	setvformvec()
-	nf = getnf()
-	tstop = gettstop()
+	nf = getnf()	
+	
 	if ((num = iampvec.indwhere("==", stim.amp)) != -1) {
+	
 		tol = settol(num)
+	
 	} else {
+	
 		tol = settol(0)
 	}
+	
 	maxstepsize = setmaxstepsize(tol)
 
 } else {
@@ -114,15 +111,15 @@ if (idata) {
 	dt = 0.01
 	bess = 100
 	nsigv = 6
-	setvform()
-	setvformvec()
-	tstop = gettstop()
 }
+
+setvform()
+setvformvec()
 
 if (!chkpara()) {
 
-	writecontrol()
-	writevtplot(stim.amp)
+	writecontrol(mode_, idata)
+	writevtplot(mode_, idata, stim.amp)
 	writevxplot(stim.amp)
 	writeshape(stim.amp)
 }
@@ -152,26 +149,26 @@ loadfile(ses, savedatafilestr)
 finitialize(v_init)
 initPlot()
 setstimpanel()
-setparampanel()
+setparampanel(mode_, idata)
 
-load_file("getfit.hoc")	
+load_file("getfit.hoc")
 
 adj_injbound(mode_)
-getmodeltype(mode_, idata, 0)
+print_modeltype(mode_, idata)
 print_celltype()
-getaxontype()
-writemodeltype()
+print_axontype()
+write_modeltype()
 updrfp()
-getoptsoln(mode_, "all")
+getoptsoln(mode_, idata)
 setoptpanel()
 showdom()
 pelog(-1, -1)
 
-load_file("initialize.hoc")
+load_file("init.hoc")
 load_file("genopt.hoc")
 load_file("petextract.hoc")
 load_file("perank.hoc")
 
-initfit()
+initfit(mode_, idata)
 
 init()

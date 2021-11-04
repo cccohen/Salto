@@ -59,7 +59,7 @@ if (idata) {
 	writenum(ses, "bessfil.dat", bess)
 	
 	// Recording location data
-	import_recloc_data()
+	importreclocdata()
 
 	// Passive or active data?
 	strdef modeqstr
@@ -174,10 +174,8 @@ if (idata) {
 
 // --------------------------------------------------------------------------------
 // Morphological detail
-strdef mintauqstr
-mintauqstr = "\nPlease enter minimum expected tau_m across recording locations (ms):\n(Used for setting nseg via d_lambda rule)\t"
-mintau0 = (1e-3)*xred(mintauqstr, 1, 1e-3, 1e3)
-writenum(ses, "mintau0.dat", mintau0)
+// get AIS sections
+importaisloc()
 
 // Define axon type
 strdef axonqstr
@@ -192,26 +190,19 @@ if (axontype > 1) {
 	gr = xred(grqstr, 0.7, 0.001, 0.999)
 	writenum(ses, "gr.dat", gr)
 
-	strdef mintnodqstr
-	mintnodqstr = "\nPlease enter minimum expected internode to node length ratio:\t"
-	mintnod = xred(mintnodqstr, 10, 2, 100)
-	writenum(ses, "mintnod.dat", mintnod)
+	strdef mintqstr
+	mintqstr = "\nPlease enter minimum internode length:\t"
+	mint = xred(mintqstr, 15, 10, 500)
+	writenum(ses, "mint.dat", mint)
 
-	strdef paranodqstr
-	paranodqstr = "\nPlease indicate whether paranodes are included in the morphological reconstruction:\t[y/n]"
-	paranod = sred(paranodqstr, "y", "ny")
-	writebit(ses, "paranode.dat", paranod)
+	strdef blebqstr
+	blebqstr = "\nPlease indicate whether the final section of the principal axon is myelinated:\t[y/n]"
+	bleb = sred(blebqstr, "y", "ny")
+	writebit(ses, "axbleb_exists.dat", bleb)
 
-	if (paranod) {
+	if (bleb) {
 
-		strdef juxtaparanodqstr
-		juxtaparanodqstr = "\nIn addition, please indicate whether JUXTAparanodes are included in the morphological reconstruction:\t[y/n]"
-		juxtaparanod = sred(juxtaparanodqstr, "y", "ny")
-		writebit(ses, "juxtaparanode.dat", juxtaparanod)
-	
-	} else {
-
-		writebit(ses, "juxtaparanode.dat", 0)
+		importblebdata()
 	}
 }
 

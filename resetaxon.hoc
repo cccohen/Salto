@@ -1,4 +1,4 @@
-// nFit
+// Salto
 // (c) Charles CH Cohen, 2014-present
 // this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
 // International license (CC BY-NC-ND 4.0, in English).
@@ -12,7 +12,7 @@ strdef root, lib, ses, out
 root = getcwd()
 sprint(lib, "%s%s", root, "lib/")
 sprint(ses, "%s%s", root, "ses/")
-sprint(out, "%s%s", root, "outdir/")
+sprint(out, "%s%s", root, "out/")
 // --------------------------------------------------------------------------------
 
 
@@ -28,48 +28,48 @@ idata = getvar(ses, "idata.dat")
 setfilestr(mode_, idata)
 loaddll()
 
+iampvec = getvec(ses, iampvecfilestr, iampvec)
+temprec = getvar(ses, temprecfilestr)
+mintau0 = getvar(ses, mintau0filestr)
+nrec = getstrlist(ses, recloclistfilestr, recloclist)
+injvec = getvec(ses, "injlist.dat", injvec)
+
 if (idata) {
 	
-	iampvec = getvec(ses, iampvecfilestr, iampvec)
 	nrows = getmat(ses, vdatfilestr, vdatmat)
 	tdatvec = new Vector()
 	tdatvec.append(vdatmat.getcol(0))
 	nsigt = getnsig(tdatvec)
-	settform()
-	settformvec()
-	temprec = getvar(ses, "temprec.dat")
-	mintau0 = getvar(ses, "mintau0.dat")
 	BBvec = getvec(ses, "BBvec.dat", BBvec)
-	createpip(nrec = getstrlist(ses, recloclistfilestr, recloclist))
-	conpip(recloclist)
-	injvec = getvec(ses, "injlist.dat", injvec)
+	createpip(nrec)
+	conpip(recloclist)	
 
 } else {
-
-	iampvec = getvec(ses, iampvecfilestr, iampvec)
+	
 	nsigt = 6
-	settform()
-	settformvec()	
-	temprec = getvar(ses, "temprec-def.dat")
-	mintau0 = getvar(ses, "mintau0-def.dat")
-	nrec = getstrlist(ses, recloclistfilestr, recloclist)
 }
 
-loclist2sec(recloclist, recseclist)
+settform()
+settformvec()
+
+recseclist = loclist2seclist(recloclist, recseclist)
 load_file("defsec.hoc")
+axbleb_exists = getvar(ses, "axbleb_exists.dat")
 bigsecl()
+axontype = getaxontype()
 lilsecl()
 load_file("setnseg.hoc")
 setnseg(mintau0)
 load_file("defparam.hoc")
+defparam()
+defAISpts()
 load_file("setparam.hoc")
-axontype = getaxontype(0)
-// setparamopt()
-setparam()
+initpvecs()
+getmodeltype(mode_, idata)
+setparam(mode_, idata)
 load_file("defsps.hoc")
 celltypevec = getcelltype()
-defdens_sp()
-defasp()
+defmorph_sp()
 defdist_sp()
 defsps()
 load_file("setsps.hoc")
@@ -110,14 +110,6 @@ axonqstr = "\nPlease select one from the following axon types:\n1 = no myelin\n2
 axontype = xred(axonqstr, axontype, 1, 4)
 
 writebit(ses, "axontype.dat", axontype)
-setparam()
-if (mode_ == 0) {
-	// pas inj in pA
-	writevxplot(0.001 * getvar(ses, "iamp-pas.dat"))
-} else if (mode_ == 1) {
-	// act inj in nA
-	writevxplot(getvar(ses, "iamp-act.dat"))
-}
 
 if (axontype == 1) {
 
