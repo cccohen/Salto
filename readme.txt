@@ -1,22 +1,24 @@
 Salto v1.0
-------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------
 (c) Charles CH Cohen, 2014-present
 The contents of this package are released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International license (CC BY-NC-ND 4.0, in English).
-------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------
 
 Automated generation, GUI-based exploration, and multiscale optimization of neuron models
 
-------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------
+
 To run a model for the first time:
-	- Download and install NEURON (https://github.com/neuronsimulator/).
+	- Download and install NEURON (github.com/neuronsimulator).
+	- Download Salto (github.com/cccohen/Salto).
 	- Import cellular morphology via getmorph.hoc.
-	- Load morphology with loadmorph.hoc to identify recorded sections
+	- Load morphology and identify recorded sections with loadmorph.hoc.
 	- Run setup.hoc
 	- This process should be performed once per cell
 	- Once setup.hoc is completed, the model may be opened with openmodel.hoc
 
 
-Startup options:
+-------------------------------Contents-------------------------------
 getmorph.hoc
 	- Import cellular morphology (in ASCII format or other)
 
