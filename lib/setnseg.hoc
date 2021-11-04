@@ -6,42 +6,328 @@
 
 
 
-proc setnseg() {local tempnum localobj tempvec
+// -------------------------------Variables----------------------------------------
+// minimum tau_m, AKA tau_0
+mintau0 = 1e-3
+// fraction of lambda_f function
+fracl = 0.2
+// fraction by which to modify fraction of lambda_f function
+fracfracl = 0.01
+// an approximate threshold of total segments above which simulations involving active
+// neuronal properties take more than 20s (real time) per run on today's (c. 2010-2020) 
+// typical desktop processors
+minmaxnseg = 2000
+// for storing distances from recording sites
+objref distvec
+// --------------------------------------------------------------------------------
 
-	if (numarg() == 1 && argtype(1) == 0) {
 
-		freqm = 1/(2*PI*$1)
 
-	} else {
+// --------------------------------------------------------------------------------
+func getfreq0() {
 
-		// provided at setup. default is 1 ms (units in ms).
-		freqm = 1/(2*PI*mintau0)
-	}
+	return 1/(2*PI*mintau0)
+}
+// --------------------------------------------------------------------------------
 
-	// max Ri to maximize nseg, which lambda_f uses
-	tempvec = new Vector()
 
-	forsec cellular {
 
-		tempvec.resize(tempvec.size+1)
-		tempvec.x[tempvec.size-1] = Ra
-	}
-	
-	forsec cellular {
-	
-		Ra = 400
-	}
-	
+// --------------------------------------------------------------------------------
+obfunc getmaxminfracl() {local countseg, tempseg, tempRa, tempcm, row, bigd, lambdaf, lambdafdef localobj tempvec, tempobj, tempmat
+
+	fracl = $1
+
+	tempvec = getshortint()
+	tempobj = new Vector()
+
 	forall {
 
-		nseg = int((L/(0.1*lambda_f(5*freqm))+.9)/2)*2 + 1
+		countseg += nseg
 	}
 
-	tempnum = 0
+	if (tempvec.size || countseg > $2) {
+
+		// 0: internode number
+		// 1: axon section number
+		// 2: axon section length
+		// 3: axon section nseg
+		tempseg = tempvec.x[3]
+		paral = setparal()
+		
+		axon[tempvec.x[1]] {
+
+			tempRa = Ra
+			tempcm = cm
+			
+			Ra = 400
+			cm = 1
+		}
+
+		while (fracl > 0 && tempvec.x[2]/(2*tempseg) > 0.5*paral) {
+
+			fracl -= fracfracl
+
+			axon[tempvec.x[1]] {
+
+				tempseg = int((tempvec.x[2]/(fracl*lambda_f(5*getfreq0()))+.999)/2)*2+1
+			}
+		}
+
+		axon[tempvec.x[1]] {
+
+			lambdaf = lambda_f(5*getfreq0())
+
+			Ra = tempRa
+			cm = tempcm
+		}
+
+		if (fracl <= 0) {
+
+			fracl = fracfracl
+			fracfracl /= 10				
+			fracl -= fracfracl
+
+			tempobj.resize(1)
+			tempobj.x[0] = fracl
+
+			tempobj = getmaxminfracl(fracl)
+		}
+
+		if (tempseg > tempvec.x[3] || countseg > $2) {
+
+			tempobj.resize(2)
+			tempobj.x[0] = fracl
+
+			if (tempseg > tempvec.x[3]) {
+
+				tempobj.x[1] = lambdaf	
+			}
+
+		if (countseg > $2) {
+
+				tempmat = new Matrix(1, 3)
+				row = 1
+
+				forsec somatic {
+
+					tempmat.x[row-1][0] = Ra
+					tempmat.x[row-1][1] = cm
+					tempmat.x[row-1][2] = diam
+					row += 1
+					tempmat.resize(row, 3)
+
+					Ra = 400
+					cm = 1
+				}
+
+				row = 0
+				bigd = tempmat.getcol(2).max
+
+				forsec somatic {
+
+					if (diam == bigd) {
+
+						lambdafdef = lambda_f(5*getfreq0())
+					}
+
+					Ra = tempmat.x[row][0]
+					cm = tempmat.x[row][1]
+					row += 1		
+				}
+
+				tempobj.x[1] = lambdafdef
+			}			
+		}
+	}
+
+	return tempobj
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+func setparal() {
+
+	if (!celltypevec.x[0] || celltypevec.x[0] == 1) {
+
+		// measured by EM (Cohen et al. 2020)
+		paral = 2.3
+	}
+
+	if (celltypevec.x[0] == 2) {
+
+		// measured by paranodin/Caspr aggregates (Coman et al. 2006)
+		paral = 2.7
+	}
+
+	return paral
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc setnseg() {local k, row localobj tempmat
+
+	if (!$1 && $2) {
+
+		for k = 0, piplist.count-1 {
+
+			forsec piplist.o(k) {
+
+				nseg = 1
+			}
+		}
+	}
+
+	// max Ri to maximize nseg in cellular, which lambda_f uses
+	tempmat = new Matrix(1, 2)
+	row = 1
 
 	forsec cellular {
+		
+		tempmat.x[row-1][0] = Ra
+		tempmat.x[row-1][1] = cm
+		row += 1
+		tempmat.resize(row, 2)
 
-		Ra = tempvec.x[tempnum]
-		tempnum += 1
+		Ra = 400
+		cm = 1
+	}
+	
+	forsec cellular {
+	
+		// $3 = fracl
+		nseg = int((L/($3*lambda_f(5*getfreq0()))+.999)/2)*2+1
+	}
+
+	chknseg($3, $4)
+
+	row = 0
+	forsec cellular {
+
+		Ra = tempmat.x[row][0]
+		cm = tempmat.x[row][1]
+		row += 1
+	}	
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc chknseg() {localobj tempvec
+
+	tempvec = getmaxminfracl($1, $2)
+
+	if (tempvec.size) {
+
+		fixnseg(tempvec.x[0], tempvec.x[1])
 	}
 }
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc fixnseg() {local row, k, dist_, out_lambdaf_radius localobj tempmat, tempseclist, distvec
+
+	// max Ri to maximize nseg in cellular, which lambda_f uses
+	tempmat = new Matrix(1, 2)
+	row = 1
+
+	getcoremodeltype()
+
+	if (SOAX) {		
+
+		forsec somatic {
+
+			tempmat.x[row-1][0] = Ra
+			tempmat.x[row-1][1] = cm
+			row += 1
+			tempmat.resize(row, 2)
+
+			Ra = 400
+			cm = 1
+
+			nseg = int((L/($1*lambda_f(5*getfreq0()))+.999)/2)*2+1			
+		}
+
+		forsec praxonal {
+			
+			tempmat.x[row-1][0] = Ra
+			tempmat.x[row-1][1] = cm
+			row += 1
+			tempmat.resize(row, 2)
+
+			Ra = 400
+			cm = 1
+
+			nseg = int((L/($1*lambda_f(5*getfreq0()))+.999)/2)*2+1
+		}
+
+		tempseclist = new SectionList()
+
+		forsec cellular {
+
+			tempseclist.append()
+		}
+
+		forsec tempseclist {
+
+			ifsec somatic {
+
+				tempseclist.remove()
+			}			
+
+			ifsec praxonal {
+
+				tempseclist.remove()
+			}
+		}
+
+		distvec = new Vector(recseclist.count)
+
+		forsec tempseclist {
+
+			tempmat.x[row-1][0] = Ra
+			tempmat.x[row-1][1] = cm
+			row += 1
+			tempmat.resize(row, 2)
+
+			Ra = 400
+			cm = 1
+
+			out_lambdaf_radius = 0
+
+			for k = 0, recseclist.count-1 {
+
+				distvec.x[k] = getdist(secname(), 0.5, recseclist.o(k).label, 0.5)
+				
+				if (distvec.x[k] > $2) {
+
+					out_lambdaf_radius += 1
+				}
+			}
+
+			if (out_lambdaf_radius == recseclist.count) {
+				
+				nseg = int((L/($1*(distvec.min/$2)*lambda_f(5*getfreq0()))+.999)/2)*2+1				
+
+			} else {
+				
+				nseg = int((L/($1*lambda_f(5*getfreq0()))+.999)/2)*2+1
+			}
+		}
+		
+		row = 0
+		forsec cellular {
+
+			Ra = tempmat.x[row][0]
+			cm = tempmat.x[row][1]
+			row += 1
+		}
+	}
+}
+// --------------------------------------------------------------------------------

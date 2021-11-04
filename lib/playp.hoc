@@ -34,7 +34,7 @@ proc setplay() {local k, iamp, iampind localobj tempmat
 		
 		playvec = new Vector(dirlist.count)
 		playlist = new List()
-		crveclist(dirlist.count, playveclist)
+		crveclist(playveclist, dirlist.count)
 
 		for k = 0, dirlist.count-1 {
 
@@ -83,7 +83,7 @@ proc playopt() {local m, input_row, end_row
 
 	while (playvec.x[$1]) {
 
-		reseticlamp($2, 1)
+		reseticlamp(mode_, idata, $2, 0)
 
 		print "\nPlaying optimization results from:"
 		print playveclist.o($1).label, "\n"

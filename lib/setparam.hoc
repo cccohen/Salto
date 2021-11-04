@@ -15,13 +15,15 @@ objref parambox, paramoptvec, miscbox
 
 // --------------------------------------------------------------------------------
 // initial parameter distribution. see setmy() and setsps()
-proc setparam() {local BB, k, m
+proc setparam() {local nint, BB, k, m, seg, pos, dist_
 
 	forall {
 
 		secondorder = order
 		celsius = temprec
-		insert pas e_pas = v_init
+		
+		insert pas 
+			e_pas = v_init
 	}
 
 	forsec cellular {
@@ -35,101 +37,125 @@ proc setparam() {local BB, k, m
 
 		if (DC || DCPARA) {
 
-			if (!issection("internodal")) {
+			insert extracellular
 
-	 			insert extracellular
+			xraxial[0] = rext
+			xg[0] = 1/Rext
+			xc[0] = Cext
 
-					xraxial[0] = rext
-					xg[0] = 1/Rext
-					xc[0] = Cext
-
-					e_extracellular = eext
-			}
+			e_extracellular = eext
 		}
+
+		if (RmA_doarg) {
+
+			g_pas = 1/(RmA_norm * RmA_low)
+		}
+
+		if (RiA_doarg) {
+
+			Ra = RiA_norm * RiA_low
+		}	
 	}
 
-	forsec internodal {
-			
+	if (nint = crintlist()) {
+
 		if (DC || DCPARA) {
 
-			insert extracellular
-			
-				xraxial[0] = rpa_norm * rpa_low
-				xg[0] = 1/(Rmy_norm * Rmy_low)
-				xc[0] = Cmy_norm * Cmy_low
-
-			if (DCPARA) {
-
-				ifsec paranodal {
-
-					xraxial[0] *= parafact_norm * parafact_low
-				}
-			}
-		}
-
-		if (SC) {
-		
-			g_pas = 1/((Rm_norm * Rm_low) + (Rmy_norm * Rmy_low))
-			cm = (Cm_norm * Cm_low * Cmy_norm * Cmy_low)/((Cm_norm * Cm_low) + (Cmy_norm * Cmy_low))
-		}
-
-		if (exp_doarg) {
-
-			if (SC) {
-
-				g_pas = 1/((Rm_norm * Rm_low) + (Rm_norm * 20 * Rmy_low))
-				cm = (Cm_norm * Cm_low * (Cm_norm/20) * Cm_low)/((Cm_norm * Cm_low) + ((Cm_norm/20) * Cm_low))
-			}
-		}
-	}
-
-	if (RmN_doarg) {
-
-		forsec nodal g_pas = 1/(RmN_norm * RmN_low)
-	}
-
-	if (RmA_doarg) {
-
-		forsec praxonal g_pas = 1/(RmA_norm * RmA_low)
-
-		if (SC) forsec internodal g_pas = 1/((RmA_norm * RmA_low) + (Rmy_norm * Rmy_low))
-	}
-
-	if (RmI_doarg) {
-
-		if (SC) {
-
-			forsec internodal g_pas = 1/((RmI_norm * RmI_low) + (Rmy_norm * Rmy_low))
-		}
-	}
-
-	if (RiA_doarg) {
-
-		forsec praxonal Ra = RiA_norm * RiA_low
-	}
-
-	if (per_int_doarg) {
-
-		if (SC) {
-
-			for k = 0, intlist.count-1 {
+			for k = 0, nint-1 {
 
 				for m = 0, intlist.o(k).size-1 {
 
 					axon[intlist.o(k).x[m]] {
 
-						sprint(tempstr, "%s%d%s%d%s", "~g_pas = 1/((Rm_norm * Rm_low) + (Rmy_", k+1, "_norm * Rmy_", k+1, "_low))")
-						execute(tempstr)
+						xraxial[0] = rpa_norm * rpa_low
+						xg[0] = 1/(Rmy_norm * Rmy_low)
+						xc[0] = Cmy_norm * Cmy_low
 
-						sprint(tempstr, "%s%d%s%d%s%d%s%d%s", "~cm = (Cm_norm * Cm_low * Cmy_", k+1, "_norm * Cmy_", k+1, "_low)/((Cm_norm * Cm_low) + (Cmy_", k+1, "_norm * Cmy_", k+1, "_low))")
-						execute(tempstr)
+						if (DCPARA) {							
+
+							if (m == 0) {								
+
+								for seg = 1, nseg {
+									
+									pos = (2*seg-1)/(2*nseg)
+									dist_ = getdist(secname(), 0, secname(), pos)
+
+									if (dist_ <= paral) {
+
+										xraxial[0](pos) *= parafact_norm * parafact_low
+									}
+								}
+							}
+
+							if (m == intlist.o(k).size-1) {
+
+								for seg = 1, nseg {
+
+									pos = (2*seg-1)/(2*nseg)
+									dist_ = getdist(secname(), pos, secname(), 1)
+
+									if (dist_ <= paral) {
+
+										xraxial[0](pos) *= parafact_norm * parafact_low
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}		
+
+		if (SC) {
+
+			for k = 0, nint-1 {
+
+				for m = 0, intlist.o(k).size-1 {
+
+					axon[intlist.o(k).x[m]] {
+		
+						g_pas = 1/((Rm_norm * Rm_low) + (Rmy_norm * Rmy_low))
+						cm = (Cm_norm * Cm_low * Cmy_norm * Cmy_low)/((Cm_norm * Cm_low) + (Cmy_norm * Cmy_low))
+
+						if (exp_doarg) {
+
+							g_pas = 1/((Rm_norm * Rm_low) + (Rm_norm * 20 * Rmy_low))
+							cm = (Cm_norm * Cm_low * (Cm_norm/20) * Cm_low)/((Cm_norm * Cm_low) + ((Cm_norm/20) * Cm_low))
+						}
+
+						if (RmA_doarg) {
+
+							g_pas = 1/((RmA_norm * RmA_low) + (Rmy_norm * Rmy_low))
+						}
+
+						if (RmI_doarg) {
+							
+							g_pas = 1/((RmI_norm * RmI_low) + (Rmy_norm * Rmy_low))
+						}
+
+						if (per_int_doarg) {
+
+							sprint(tempstr, "%s%d%s%d%s", "~g_pas = 1/((Rm_norm * Rm_low) + (Rmy_", k+1, "_norm * Rmy_", k+1, "_low))")
+							execute(tempstr)
+
+							sprint(tempstr, "%s%d%s%d%s%d%s%d%s", "~cm = (Cm_norm * Cm_low * Cmy_", k+1, "_norm * Cmy_", k+1, "_low)/((Cm_norm * Cm_low) + (Cmy_", k+1, "_norm * Cmy_", k+1, "_low))")
+							execute(tempstr)
+						}
 					}
 				}
 			}
 		}
 	}
 
-	if (idata) {
+	if (RmN_doarg) {
+
+		forsec nodal {
+
+			g_pas = 1/(RmN_norm * RmN_low)
+		}
+	}
+
+	if (!$1 && $2) {
 
 		for BB = 0, BBvec.size-1 {
 
@@ -147,7 +173,7 @@ proc setparam() {local BB, k, m
 		}
 	}
 
-	if (mode_ == 1) {
+	if ($1 == 1) {
 
 		setions()
 	}
@@ -156,7 +182,9 @@ proc setparam() {local BB, k, m
 
 
 
-// ---------------------------------setnp------------------------------------------
+// --------------------------------------------------------------------------------
+// more general than what is allowed under modeltype; maximizes parameter numbers based
+// on mode_ and idata only.
 func setnp() {local np
 
 	if (numarg() == 1 && argtype(1) == 2) {
@@ -165,6 +193,7 @@ func setnp() {local np
 
 			print "Enter:"
 			print "1) mode_"
+			print "2) idata"
 			print "Outputs:"
 			print "Number of optimizable parameters for given mode_"
 			print "Note: does not change mode_"
@@ -193,9 +222,13 @@ func setnp() {local np
 			np += 1
 		}
 		// add parafact, if applicable
-		if (axontype == 4) np += 1
-		// add Cpip, if applicable
-		if (idata) {
+		if (axontype == 4) {
+
+			np += 1
+		}
+		// add Cpip, if applicable (dependent on
+		// iclamp data, or idata)
+		if ($2) {
 
 			np += 1
 		}
@@ -210,14 +243,16 @@ func setnp() {local np
 
 	} else if ($1 == 1) {
 		
-		np = setnp(0) + 35
-		
-		if (juxtaparanod) {
+		np = setnp(0, 0) + 35
+
+		// juxta
+		if (axontype == 4) {
+
 			np += 1
 		}
-	}
+	}	
 
-	return np
+	return np	
 }
 // --------------------------------------------------------------------------------
 
@@ -226,13 +261,11 @@ func setnp() {local np
 // --------------------------------------------------------------------------------
 proc setpname() {local k, tempnum
 
-	crveclist(setnp(mode_), pnamelist)
+	crveclist(pnamelist, setnp($1, $2))
 		
 	pnamelist.o(0).label("Ri")
 	pnamelist.o(1).label("Rm")
 	pnamelist.o(2).label("Cm")
-
-	getaxontype(0)
 
 	if (axontype > 1) {
 
@@ -257,34 +290,64 @@ proc setpname() {local k, tempnum
 	if (axontype > 2 && !per_int_doarg) {
 
 		pnamelist.o(5).label("rpa")
-		if (axontype == 4) pnamelist.o(6).label("parafact")
+		
+		if (axontype == 4) {
+
+			pnamelist.o(6).label("parafact")
+		}
 	
 	} else if (axontype > 2 && per_int_doarg) {
 
 		pnamelist.o(6+intlist.count-1).label("rpa")
-		if (axontype == 4) pnamelist.o(6+intlist.count).label("parafact")
+		
+		if (axontype == 4) {
+
+			pnamelist.o(6+intlist.count).label("parafact")
+		}
 	}
 
-	tempnum = setnp(0)
-	setnp(mode_)
-	if (RmN_doarg) pnamelist.o(tempnum-2).label("RmN")
-	if (RmA_doarg) pnamelist.o(tempnum-2).label("RmA")
-	if (RmI_doarg) pnamelist.o(tempnum-2).label("RmI")
+	tempnum = setnp(0, $2)
+	
+	if (RmN_doarg) {
+
+		pnamelist.o(tempnum-2).label("RmN")
+	}
+
+	if (RmA_doarg) {
+
+		pnamelist.o(tempnum-2).label("RmA")
+	}
+
+	if (RmI_doarg) {
+
+		pnamelist.o(tempnum-2).label("RmI")
+	}
+	
 	if (RmI_doarg && RmN_doarg) {
+	
 		pnamelist.o(tempnum-3).label("RmI")
 		pnamelist.o(tempnum-2).label("RmN")
 	}
-	if (RiA_doarg) pnamelist.o(tempnum-2).label("RiA")
-	if (idata) pnamelist.o(tempnum-1).label("Cpip")
+
+	if (RiA_doarg) {
+
+		pnamelist.o(tempnum-2).label("RiA")
+	}
+
+	if (!$1 && $2) {
+
+		pnamelist.o(tempnum-1).label("Cpip")
+	}
 
 	if ($1 == 1) {
-
+		
+		tempnum = setnp(0, 0)	
+		
 		// Genetic parameter selection:
-		// selected for SOAX
 		pnamelist.o(0+tempnum).label("Na_so")
 		// dependent on Na_so
 		pnamelist.o(1+tempnum).label("lc_Na_de")
-		// dependent on Na_so
+		// selected for SOAX
 		pnamelist.o(2+tempnum).label("Na_prox")
 		// selected for SOAX
 		pnamelist.o(3+tempnum).label("Na_ais")
@@ -292,7 +355,6 @@ proc setpname() {local k, tempnum
 		pnamelist.o(4+tempnum).label("Na_int")
 		// selected for SOAX
 		pnamelist.o(5+tempnum).label("Na_nod")
-		// selected for SOAX
 		pnamelist.o(6+tempnum).label("Na_end")
 		pnamelist.o(7+tempnum).label("Na_col")
 		
@@ -301,10 +363,10 @@ proc setpname() {local k, tempnum
 		pnamelist.o(10+tempnum).label("Nap_nod")
 		pnamelist.o(11+tempnum).label("Nap_end")
 		
-		// selected for SOAX
 		pnamelist.o(12+tempnum).label("Kv1_so")
 		// dependent on Kv_so and Kv1_so
 		pnamelist.o(13+tempnum).label("lc_Kv_Kv1_de")
+		// selected for SOAX
 		pnamelist.o(14+tempnum).label("Kv1_prox")
 		// selected for SOAX
 		pnamelist.o(15+tempnum).label("Kv1_ais")
@@ -312,11 +374,9 @@ proc setpname() {local k, tempnum
 		pnamelist.o(16+tempnum).label("Kv1_int")
 		// selected for SOAX
 		pnamelist.o(17+tempnum).label("Kv1_nod")
-		// selected for SOAX
 		pnamelist.o(18+tempnum).label("Kv1_end")
 		pnamelist.o(19+tempnum).label("Kv1_col")
 		
-		// selected for SOAX
 		pnamelist.o(20+tempnum).label("Kv_so")
 		
 		pnamelist.o(21+tempnum).label("Kv7_so")
@@ -337,18 +397,19 @@ proc setpname() {local k, tempnum
 		// dependent on H_so
 		pnamelist.o(33+tempnum).label("tc_H_de")
 		pnamelist.o(34+tempnum).label("H_ax")
-		
-		if (juxtaparanod) {
-			// selected for SOAX
+
+		// selected for SOAX
+		if (axontype == 4) {
+
 			pnamelist.o(35+tempnum).label("Kv1_juxta")
-		}
+		}		
 	}
 }
 // --------------------------------------------------------------------------------
 
 
 
-// -------------------------------setpnorm-----------------------------------------
+// --------------------------------------------------------------------------------
 proc setpnorm() {
 	
 	sprint(format, "%s%s", "%s%s%s", maxform)
@@ -359,10 +420,10 @@ proc setpnorm() {
 
 
 
-// ------------------------------setparampanel-------------------------------------
+// --------------------------------------------------------------------------------
 proc setparampanel() {local k, height
 
-	if (idata) {
+	if ($2) {
 	
 		parambox = new VBox(3,1)
 		parambox.intercept(1)
@@ -398,7 +459,7 @@ proc setparampanel() {local k, height
 		
 		parambox.intercept(0)
 
-		if (mode_ == 0) {
+		if ($1 == 0) {
 			height = 288
 		} else {
 			height = 553.92
@@ -421,12 +482,18 @@ proc updpnorm() {local p, i
 		// looks like: pnorm'vec, range_low, range_high
 		if (numarg() == 3) {
 
-			for p = $2, $3 setpnorm(p, $o1.x[p])
+			for p = $2, $3 {
+
+				setpnorm(p, $o1.x[p])
+			}
 
 		// update all pnormvec with pnorm'vec
 		} else {
 
-			for p = 0, $o1.size-1 setpnorm(p, $o1.x[p])
+			for p = 0, $o1.size-1 {
+
+				setpnorm(p, $o1.x[p])
+			}
 		}
 	
 	// feeding a number, or a comma separated list of numbers, that are pnorm's, that must
@@ -440,7 +507,10 @@ proc updpnorm() {local p, i
 
 		} else {
 
-			for i = 1, numarg() setpnorm(i-1, $i)
+			for i = 1, numarg() {
+
+				setpnorm(i-1, $i)
+			}
 		}
 	}
 }
@@ -532,34 +602,20 @@ proc setions() {
 		insert ih		
 	}
 
-	forsec internodal {
+	forsec internodal {		
 
+		// non-uniformly distributed at juxtaparanodes and paranodes (see distions())
+		insert kv1ax gbar_kv1ax = Kv1_int_norm * Kv1_int_low
+		
+		// uniformly distributed except at paranodes (see distions())
 		insert nax gbar_nax = Na_int_norm * Na_int_low
 		insert nap gbar_nap = Nap_int_norm * Nap_int_low
-		insert kv1ax gbar_kv1ax = Kv1_int_norm * Kv1_int_low
 		insert kv7 gbar_kv7 = Kv7_int_norm * Kv7_int_low
 		insert kca gbar_kca = KCa_norm * KCa_low
 		insert ca gbar_ca = Ca_norm * Ca_low
 		insert it2 gbar_it2 = It2_norm * It2_low
 		insert ih gbar_ih = H_ax_norm * H_ax_low
-
-		if (DCPARA) {
-
-			ifsec paranodal {
-
-				gbar_nax = 0
-				gbar_nap = 0
-				gbar_kv1ax = 0
-				gbar_kv7 = 0
-				gbar_kca = 0
-				gbar_ca = 0
-				gbar_it2 = 0
-				gbar_ih = 0
-			}
-
-			ifsec juxtaparanodal gbar_kv1ax = Kv1_juxta_norm * Kv1_juxta_low
-		}
-	}
+	}	
 
 	forsec nodal {
 
@@ -634,11 +690,11 @@ proc setions() {
 
 
 
-// -------------------------------distions-----------------------------------------
+// --------------------------------------------------------------------------------
 // Distance-dependent distributions for dendritic Ih (Kole et al 2006), Na, Kv 
 // and Kv1 (Keren et al., 2009, JPhysiol and Stuart, Schiller and Sakmann, 1997).
 // built with section numbers that (roughly) increase from the soma out.
-proc distions() {local seg, pos, dist_ localobj tempvec
+proc distions() {local seg, pos, dist_, nint, k, m localobj tempvec
 
 	forsec apical {
 
@@ -716,6 +772,1475 @@ proc distions() {local seg, pos, dist_ localobj tempvec
 				gbar_kv1ax(pos) = Kv1_prox_norm * Kv1_prox_low + (Kv1_ais_norm * Kv1_ais_low - Kv1_prox_norm * Kv1_prox_low)/(1 + exp(-0.6 * (dist_ - Kv1_ais_midpoint)))
 				gbar_kv7(pos) = Kv7_prox_norm * Kv7_prox_low + (Kv7_ais_norm * Kv7_ais_low - Kv7_prox_norm * Kv7_prox_low)/(1 + exp(-dist_ + Kv7_ais_midpoint)^(1/5))
 			}
+		}
+	}
+
+	if (nint = crintlist()) {
+
+		paral = setparal()
+		juxtal = setjuxtal()
+
+		for k = 0, nint-1 {
+
+			for m = 0, intlist.o(k).size-1 {
+
+				axon[intlist.o(k).x[m]] {					
+
+					if (m == 0) {
+
+						for seg = 1, nseg {
+
+							pos = (2*seg-1)/(2*nseg)
+							dist_ = getdist(secname(), 0, secname(), pos)
+
+							if (dist_ <= paral) {
+
+								gbar_nax(pos) = 0
+								gbar_nap(pos) = 0
+								gbar_kv1ax(pos) = 0
+								gbar_kv7(pos) = 0
+								gbar_kca(pos) = 0
+								gbar_ca(pos) = 0
+								gbar_it2(pos) = 0
+								gbar_ih(pos) = 0
+							}
+
+							if (dist_ > paral && dist_ <= paral+juxtal) {
+
+								gbar_kv1ax(pos) = Kv1_juxta_norm * Kv1_juxta_low
+							}
+						}
+					}
+
+					if (m == intlist.o(k).size-1) {
+
+						for seg = 1, nseg {
+
+							pos = (2*seg-1)/(2*nseg)
+							dist_ = getdist(secname(), 1, secname(), pos)
+
+							if (dist_ <= paral+juxtal && dist_ > paral) {
+
+								gbar_kv1ax(pos) = Kv1_juxta_norm * Kv1_juxta_low
+							}							
+
+							if (dist_ <= paral) {
+
+								gbar_nax(pos) = 0
+								gbar_nap(pos) = 0
+								gbar_kv1ax(pos) = 0
+								gbar_kv7(pos) = 0
+								gbar_kca(pos) = 0
+								gbar_ca(pos) = 0
+								gbar_it2(pos) = 0
+								gbar_ih(pos) = 0
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+func setjuxtal() {
+
+	if (!celltypevec.x[0] || celltypevec.x[0] == 1) {
+
+		// measured by Kv1.1 immunostaining (Nie et al. 2003)
+		juxtal = 8
+	}
+
+	if (celltypevec.x[0] == 2) {
+
+		// measured by Kv1.2 aggregates (Coman et al. 2006)
+		juxtal = 4.6
+	}
+
+	return juxtal	
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc print_modeltype() {
+
+	if (numarg() == 3 && argtype(3) == 0) {
+
+		if ($3) {
+
+			print reclocstr
+		}
+	}
+	
+	print "Model type: ", modeltypestr
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc getmodeltype() {local rec, SOf, AXf, DEf
+
+	sprint(modeltypestr, "%s", "")
+	sprint(reclocstr, "%s", "")
+	DEFAULT = 0
+
+	// count locations
+	SOf = 0
+	AXf = 0
+	DEf = 0
+
+	sprint(SOstr, "%s", "soma")
+	sprint(AXstr, "%s", "axon")
+	sprint(DEstr, "%s", "dend")
+	sprint(APstr, "%s", "apic")
+
+	// define number and location of recordings
+	if (nrec) {
+
+		for rec = 0, nrec-1 {
+
+			if (strf.substr(recloclist.o(rec).label, SOstr) > -1) {
+			
+				SOf += 1
+			
+			} else if (strf.substr(recloclist.o(rec).label, AXstr) > -1) {
+			
+				AXf += 1
+			
+			} else if ((strf.substr(recloclist.o(rec).label, DEstr) > -1) || (strf.substr(recloclist.o(rec).label, APstr) > -1)) {
+
+				DEf += 1
+			}
+		}
+	}
+
+	// labels for combination of fit variables
+	SOAX = 0
+	SODE = 0
+	SO = 0
+	AX = 0
+	DE = 0
+
+	// Establish model type as a function of fit variable locations
+	if (SOf > 0 && AXf > 0 && DEf == 0) {
+
+		SOAX = 1
+		modeltypestr = "SOAX"
+
+		if ($1 == 0) {
+
+			Ri_doarg = 1
+			Ri_uselog = 1
+
+			Rm_doarg = 1
+			Rm_uselog = 1
+
+			Cm_doarg = 1
+			Cm_uselog = 1
+
+			Cpip_doarg = 1
+			Cpip_uselog = 1
+
+			if (axontype > 1) {
+
+				Rmy_doarg = 1
+				Rmy_uselog = 1
+				
+				Cmy_doarg = 1
+				Cmy_uselog = 1
+
+				if (axontype > 2) {
+
+					rpa_doarg = 1
+					rpa_uselog = 1
+
+					if (axontype == 4) {
+
+						parafact_doarg = 1
+						parafact_uselog = 1
+					}
+				}
+			
+			} else {
+
+				Rmy_doarg = 0
+				Rmy_uselog = 0
+				
+				Cmy_doarg = 0
+				Cmy_uselog = 0
+
+				rpa_doarg = 0
+				rpa_uselog = 0
+
+				parafact_doarg = 0
+				parafact_uselog = 0
+			}
+
+			
+			Na_so_doarg = 0
+			Na_so_uselog = 0
+
+			lc_Na_de_doarg = 0
+			lc_Na_de_uselog = 0
+
+			Na_prox_doarg = 0
+			Na_prox_uselog = 0
+
+			Na_ais_doarg = 0
+			Na_ais_uselog = 0
+
+			Na_int_doarg = 0
+			Na_int_uselog = 0
+
+			Na_nod_doarg = 0
+			Na_nod_uselog = 0
+
+			Na_end_doarg = 0
+			Na_end_uselog = 0
+
+			Na_col_doarg = 0
+			Na_col_uselog = 0
+
+
+			Nap_ais_doarg = 0
+			Nap_ais_uselog = 0
+
+			Nap_int_doarg = 0
+			Nap_int_uselog = 0
+
+			Nap_nod_doarg = 0
+			Nap_nod_uselog = 0
+
+			Nap_end_doarg = 0
+			Nap_end_uselog = 0
+
+
+			Kv1_so_doarg = 0
+			Kv1_so_uselog = 0
+
+			lc_Kv_Kv1_de_doarg = 0
+			lc_Kv_Kv1_de_uselog = 0
+
+			Kv1_prox_doarg = 0
+			Kv1_prox_uselog = 0
+
+			Kv1_ais_doarg = 0
+			Kv1_ais_uselog = 0
+
+			Kv1_int_doarg = 0
+			Kv1_int_uselog = 0
+
+			Kv1_nod_doarg = 0
+			Kv1_nod_uselog = 0
+
+			Kv1_end_doarg = 0
+			Kv1_end_uselog = 0
+
+			Kv1_col_doarg = 0
+			Kv1_col_uselog = 0
+
+
+			Kv_so_doarg = 0
+			Kv_so_uselog = 0
+
+
+			Kv7_de_doarg = 0
+			Kv7_de_uselog = 0
+
+			Kv7_so_doarg = 0
+			Kv7_so_uselog = 0
+
+			Kv7_prox_doarg = 0
+			Kv7_prox_uselog = 0
+
+			Kv7_ais_doarg = 0
+			Kv7_ais_uselog = 0
+
+			Kv7_int_doarg = 0
+			Kv7_int_uselog = 0
+
+			Kv7_nod_doarg = 0
+			Kv7_nod_uselog = 0
+
+			Kv7_end_doarg = 0
+			Kv7_end_uselog = 0
+
+			Kv7_col_doarg = 0
+			Kv7_col_uselog = 0
+
+
+			KCa_doarg = 0
+			KCa_uselog = 0
+
+
+			Ca_doarg = 0
+			Ca_uselog = 0
+
+			It2_doarg = 0
+			It2_uselog = 0
+
+
+			H_so_doarg = 0
+			H_so_uselog = 0
+
+			tc_H_de_doarg = 0
+			tc_H_de_uselog = 0
+
+			H_ax_doarg = 0
+			H_ax_uselog = 0
+
+
+			Kv1_juxta_doarg = 0
+			Kv1_juxta_uselog = 0
+		}
+
+		if ($1 == 1) {
+
+			Ri_doarg = 0
+			Ri_uselog = 0
+			
+			rpa_doarg = 0
+			rpa_uselog = 0
+			
+			parafact_doarg = 0
+			parafact_uselog = 0
+			
+			Rm_doarg = 0
+			Rm_uselog = 0
+
+			Rmy_doarg = 0
+			Rmy_uselog = 0
+			
+			Cm_doarg = 0
+			Cm_uselog = 0
+			
+			Cmy_doarg = 0
+			Cmy_uselog = 0
+			
+			Cpip_doarg = 0
+			Cpip_uselog = 0
+
+			
+			Na_so_doarg = 1
+			Na_so_uselog = 1
+
+			lc_Na_de_doarg = 1
+			lc_Na_de_uselog = 1
+
+			Na_prox_doarg = 1
+			Na_prox_uselog = 1
+
+			Na_ais_doarg = 1
+			Na_ais_uselog = 1
+
+			Na_int_doarg = 1
+			Na_int_uselog = 1
+
+			Na_nod_doarg = 1
+			Na_nod_uselog = 1
+
+			Na_end_doarg = 1
+			Na_end_uselog = 1
+
+			Na_col_doarg = 1
+			Na_col_uselog = 1
+
+
+			Nap_ais_doarg = 1
+			Nap_ais_uselog = 1
+
+			Nap_int_doarg = 1
+			Nap_int_uselog = 1
+
+			Nap_nod_doarg = 1
+			Nap_nod_uselog = 1
+
+			Nap_end_doarg = 1
+			Nap_end_uselog = 1
+
+
+			Kv1_so_doarg = 1
+			Kv1_so_uselog = 1
+
+			lc_Kv_Kv1_de_doarg = 1
+			lc_Kv_Kv1_de_uselog = 1
+
+			Kv1_prox_doarg = 1
+			Kv1_prox_uselog = 1
+
+			Kv1_ais_doarg = 1
+			Kv1_ais_uselog = 1
+
+			Kv1_int_doarg = 1
+			Kv1_int_uselog = 1
+
+			Kv1_nod_doarg = 1
+			Kv1_nod_uselog = 1
+
+			Kv1_end_doarg = 1
+			Kv1_end_uselog = 1
+
+			Kv1_col_doarg = 1
+			Kv1_col_uselog = 1
+
+
+			Kv_so_doarg = 1
+			Kv_so_uselog = 1
+
+
+			Kv7_de_doarg = 1
+			Kv7_de_uselog = 1
+
+			Kv7_so_doarg = 1
+			Kv7_so_uselog = 1
+
+			Kv7_prox_doarg = 1
+			Kv7_prox_uselog = 1
+
+			Kv7_ais_doarg = 1
+			Kv7_ais_uselog = 1
+
+			Kv7_int_doarg = 1
+			Kv7_int_uselog = 1
+
+			Kv7_nod_doarg = 1
+			Kv7_nod_uselog = 1
+
+			Kv7_end_doarg = 1
+			Kv7_end_uselog = 1
+
+			Kv7_col_doarg = 1
+			Kv7_col_uselog = 1
+
+
+			KCa_doarg = 1
+			KCa_uselog = 1
+
+
+			Ca_doarg = 1
+			Ca_uselog = 1
+
+			It2_doarg = 1
+			It2_uselog = 1
+
+
+			H_so_doarg = 1
+			H_so_uselog = 1
+
+			tc_H_de_doarg = 1
+			tc_H_de_uselog = 1
+
+			H_ax_doarg = 1
+			H_ax_uselog = 1
+
+			if (axontype == 4) {
+
+				Kv1_juxta_doarg = 1
+				Kv1_juxta_uselog = 1
+			}
+		}
+
+		sprint(reclocstr, "%d%s%d%s", SOf, " somatic and ", AXf, " axonal recording locations found")
+	}
+
+	if (SOf > 0 && DEf > 0 && AXf == 0) {
+
+		SODE = 1
+		modeltypestr = "SODE"
+
+		if ($1 == 0) {
+
+			Ri_doarg = 1
+			Ri_uselog = 1
+			
+			rpa_doarg = 0
+			rpa_uselog = 0
+			
+			parafact_doarg = 0
+			parafact_uselog = 0
+			
+			Rm_doarg = 1
+			Rm_uselog = 1
+
+			Rmy_doarg = 0
+			Rmy_uselog = 0
+			
+			Cm_doarg = 1
+			Cm_uselog = 1
+			
+			Cmy_doarg = 0
+			Cmy_uselog = 0
+			
+			Cpip_doarg = 1
+			Cpip_uselog = 1
+
+			
+			Na_so_doarg = 0
+			Na_so_uselog = 0
+
+			lc_Na_de_doarg = 0
+			lc_Na_de_uselog = 0
+
+			Na_prox_doarg = 0
+			Na_prox_uselog = 0
+
+			Na_ais_doarg = 0
+			Na_ais_uselog = 0
+
+			Na_int_doarg = 0
+			Na_int_uselog = 0
+
+			Na_nod_doarg = 0
+			Na_nod_uselog = 0
+
+			Na_end_doarg = 0
+			Na_end_uselog = 0
+
+			Na_col_doarg = 0
+			Na_col_uselog = 0
+
+
+			Nap_ais_doarg = 0
+			Nap_ais_uselog = 0
+
+			Nap_int_doarg = 0
+			Nap_int_uselog = 0
+
+			Nap_nod_doarg = 0
+			Nap_nod_uselog = 0
+
+			Nap_end_doarg = 0
+			Nap_end_uselog = 0
+
+
+			Kv1_so_doarg = 0
+			Kv1_so_uselog = 0
+
+			lc_Kv_Kv1_de_doarg = 0
+			lc_Kv_Kv1_de_uselog = 0
+
+			Kv1_prox_doarg = 0
+			Kv1_prox_uselog = 0
+
+			Kv1_ais_doarg = 0
+			Kv1_ais_uselog = 0
+
+			Kv1_int_doarg = 0
+			Kv1_int_uselog = 0
+
+			Kv1_nod_doarg = 0
+			Kv1_nod_uselog = 0
+
+			Kv1_end_doarg = 0
+			Kv1_end_uselog = 0
+
+			Kv1_col_doarg = 0
+			Kv1_col_uselog = 0
+
+
+			Kv_so_doarg = 0
+			Kv_so_uselog = 0
+
+
+			Kv7_de_doarg = 0
+			Kv7_de_uselog = 0
+
+			Kv7_so_doarg = 0
+			Kv7_so_uselog = 0
+
+			Kv7_prox_doarg = 0
+			Kv7_prox_uselog = 0
+
+			Kv7_ais_doarg = 0
+			Kv7_ais_uselog = 0
+
+			Kv7_int_doarg = 0
+			Kv7_int_uselog = 0
+
+			Kv7_nod_doarg = 0
+			Kv7_nod_uselog = 0
+
+			Kv7_end_doarg = 0
+			Kv7_end_uselog = 0
+
+			Kv7_col_doarg = 0
+			Kv7_col_uselog = 0
+
+
+			KCa_doarg = 0
+			KCa_uselog = 0
+
+
+			Ca_doarg = 0
+			Ca_uselog = 0
+
+			It2_doarg = 0
+			It2_uselog = 0
+
+
+			H_so_doarg = 0
+			H_so_uselog = 0
+
+			tc_H_de_doarg = 0
+			tc_H_de_uselog = 0
+
+			H_ax_doarg = 0
+			H_ax_uselog = 0
+
+
+			Kv1_juxta_doarg = 0
+			Kv1_juxta_uselog = 0
+		}
+
+		if ($1 == 1) {
+
+			Ri_doarg = 0
+			Ri_uselog = 0
+			
+			rpa_doarg = 0
+			rpa_uselog = 0
+			
+			parafact_doarg = 0
+			parafact_uselog = 0
+			
+			Rm_doarg = 0
+			Rm_uselog = 0
+
+			Rmy_doarg = 0
+			Rmy_uselog = 0
+			
+			Cm_doarg = 0
+			Cm_uselog = 0
+			
+			Cmy_doarg = 0
+			Cmy_uselog = 0
+			
+			Cpip_doarg = 0
+			Cpip_uselog = 0
+
+			
+			Na_so_doarg = 1
+			Na_so_uselog = 1
+
+			lc_Na_de_doarg = 1
+			lc_Na_de_uselog = 1
+
+			Na_prox_doarg = 1
+			Na_prox_uselog = 1
+
+			Na_ais_doarg = 1
+			Na_ais_uselog = 1
+
+			Na_int_doarg = 0
+			Na_int_uselog = 0
+
+			Na_nod_doarg = 0
+			Na_nod_uselog = 0
+
+			Na_end_doarg = 0
+			Na_end_uselog = 0
+
+			Na_col_doarg = 0
+			Na_col_uselog = 0
+
+
+			Nap_ais_doarg = 1
+			Nap_ais_uselog = 1
+
+			Nap_int_doarg = 0
+			Nap_int_uselog = 0
+
+			Nap_nod_doarg = 0
+			Nap_nod_uselog = 0
+
+			Nap_end_doarg = 0
+			Nap_end_uselog = 0
+
+
+			Kv1_so_doarg = 1
+			Kv1_so_uselog = 1
+
+			lc_Kv_Kv1_de_doarg = 1
+			lc_Kv_Kv1_de_uselog = 1
+
+			Kv1_prox_doarg = 1
+			Kv1_prox_uselog = 1
+
+			Kv1_ais_doarg = 1
+			Kv1_ais_uselog = 1
+
+			Kv1_int_doarg = 0
+			Kv1_int_uselog = 0
+
+			Kv1_nod_doarg = 0
+			Kv1_nod_uselog = 0
+
+			Kv1_end_doarg = 0
+			Kv1_end_uselog = 0
+
+			Kv1_col_doarg = 0
+			Kv1_col_uselog = 0
+
+
+			Kv_so_doarg = 1
+			Kv_so_uselog = 1
+
+
+			Kv7_de_doarg = 1
+			Kv7_de_uselog = 1
+
+			Kv7_so_doarg = 1
+			Kv7_so_uselog = 1
+
+			Kv7_prox_doarg = 1
+			Kv7_prox_uselog = 1
+
+			Kv7_ais_doarg = 1
+			Kv7_ais_uselog = 1
+
+			Kv7_int_doarg = 0
+			Kv7_int_uselog = 0
+
+			Kv7_nod_doarg = 0
+			Kv7_nod_uselog = 0
+
+			Kv7_end_doarg = 0
+			Kv7_end_uselog = 0
+
+			Kv7_col_doarg = 0
+			Kv7_col_uselog = 0
+
+
+			KCa_doarg = 1
+			KCa_uselog = 1
+
+
+			Ca_doarg = 1
+			Ca_uselog = 1
+
+			It2_doarg = 1
+			It2_uselog = 1
+
+
+			H_so_doarg = 1
+			H_so_uselog = 1
+
+			tc_H_de_doarg = 1
+			tc_H_de_uselog = 1
+
+			H_ax_doarg = 0
+			H_ax_uselog = 0
+
+			Kv1_juxta_doarg = 0
+			Kv1_juxta_uselog = 0
+		}
+		
+		sprint(reclocstr, "%d%s%d%s", SOf, " somatic and ", DEf, " dendritic recording locations found")
+	}
+
+	if (SOf > 0 && AXf == 0 && DEf == 0) {
+
+		SO = 1
+		modeltypestr = "SO"
+
+		if ($1 == 0) {
+
+			Ri_doarg = 1
+			Ri_uselog = 1
+			
+			rpa_doarg = 0
+			rpa_uselog = 0
+			
+			parafact_doarg = 0
+			parafact_uselog = 0
+			
+			Rm_doarg = 1
+			Rm_uselog = 1
+
+			Rmy_doarg = 0
+			Rmy_uselog = 0
+			
+			Cm_doarg = 1
+			Cm_uselog = 1
+			
+			Cmy_doarg = 0
+			Cmy_uselog = 0
+			
+			Cpip_doarg = 1
+			Cpip_uselog = 1
+
+			
+			Na_so_doarg = 0
+			Na_so_uselog = 0
+
+			lc_Na_de_doarg = 0
+			lc_Na_de_uselog = 0
+
+			Na_prox_doarg = 0
+			Na_prox_uselog = 0
+
+			Na_ais_doarg = 0
+			Na_ais_uselog = 0
+
+			Na_int_doarg = 0
+			Na_int_uselog = 0
+
+			Na_nod_doarg = 0
+			Na_nod_uselog = 0
+
+			Na_end_doarg = 0
+			Na_end_uselog = 0
+
+			Na_col_doarg = 0
+			Na_col_uselog = 0
+
+
+			Nap_ais_doarg = 0
+			Nap_ais_uselog = 0
+
+			Nap_int_doarg = 0
+			Nap_int_uselog = 0
+
+			Nap_nod_doarg = 0
+			Nap_nod_uselog = 0
+
+			Nap_end_doarg = 0
+			Nap_end_uselog = 0
+
+
+			Kv1_so_doarg = 0
+			Kv1_so_uselog = 0
+
+			lc_Kv_Kv1_de_doarg = 0
+			lc_Kv_Kv1_de_uselog = 0
+
+			Kv1_prox_doarg = 0
+			Kv1_prox_uselog = 0
+
+			Kv1_ais_doarg = 0
+			Kv1_ais_uselog = 0
+
+			Kv1_int_doarg = 0
+			Kv1_int_uselog = 0
+
+			Kv1_nod_doarg = 0
+			Kv1_nod_uselog = 0
+
+			Kv1_end_doarg = 0
+			Kv1_end_uselog = 0
+
+			Kv1_col_doarg = 0
+			Kv1_col_uselog = 0
+
+
+			Kv_so_doarg = 0
+			Kv_so_uselog = 0
+
+
+			Kv7_de_doarg = 0
+			Kv7_de_uselog = 0
+
+			Kv7_so_doarg = 0
+			Kv7_so_uselog = 0
+
+			Kv7_prox_doarg = 0
+			Kv7_prox_uselog = 0
+
+			Kv7_ais_doarg = 0
+			Kv7_ais_uselog = 0
+
+			Kv7_int_doarg = 0
+			Kv7_int_uselog = 0
+
+			Kv7_nod_doarg = 0
+			Kv7_nod_uselog = 0
+
+			Kv7_end_doarg = 0
+			Kv7_end_uselog = 0
+
+			Kv7_col_doarg = 0
+			Kv7_col_uselog = 0
+
+
+			KCa_doarg = 0
+			KCa_uselog = 0
+
+
+			Ca_doarg = 0
+			Ca_uselog = 0
+
+			It2_doarg = 0
+			It2_uselog = 0
+
+
+			H_so_doarg = 0
+			H_so_uselog = 0
+
+			tc_H_de_doarg = 0
+			tc_H_de_uselog = 0
+
+			H_ax_doarg = 0
+			H_ax_uselog = 0
+
+
+			Kv1_juxta_doarg = 0
+			Kv1_juxta_uselog = 0
+		}
+
+		if ($1 == 1) {
+
+			Ri_doarg = 0
+			Ri_uselog = 0
+			
+			rpa_doarg = 0
+			rpa_uselog = 0
+			
+			parafact_doarg = 0
+			parafact_uselog = 0
+			
+			Rm_doarg = 0
+			Rm_uselog = 0
+
+			Rmy_doarg = 0
+			Rmy_uselog = 0
+			
+			Cm_doarg = 0
+			Cm_uselog = 0
+			
+			Cmy_doarg = 0
+			Cmy_uselog = 0
+			
+			Cpip_doarg = 0
+			Cpip_uselog = 0
+
+			
+			Na_so_doarg = 1
+			Na_so_uselog = 1
+
+			lc_Na_de_doarg = 1
+			lc_Na_de_uselog = 1
+
+			Na_prox_doarg = 1
+			Na_prox_uselog = 1
+
+			Na_ais_doarg = 1
+			Na_ais_uselog = 1
+
+			Na_int_doarg = 0
+			Na_int_uselog = 0
+
+			Na_nod_doarg = 0
+			Na_nod_uselog = 0
+
+			Na_end_doarg = 0
+			Na_end_uselog = 0
+
+			Na_col_doarg = 0
+			Na_col_uselog = 0
+
+
+			Nap_ais_doarg = 1
+			Nap_ais_uselog = 1
+
+			Nap_int_doarg = 0
+			Nap_int_uselog = 0
+
+			Nap_nod_doarg = 0
+			Nap_nod_uselog = 0
+
+			Nap_end_doarg = 0
+			Nap_end_uselog = 0
+
+
+			Kv1_so_doarg = 1
+			Kv1_so_uselog = 1
+
+			lc_Kv_Kv1_de_doarg = 1
+			lc_Kv_Kv1_de_uselog = 1
+
+			Kv1_prox_doarg = 1
+			Kv1_prox_uselog = 1
+
+			Kv1_ais_doarg = 1
+			Kv1_ais_uselog = 1
+
+			Kv1_int_doarg = 0
+			Kv1_int_uselog = 0
+
+			Kv1_nod_doarg = 0
+			Kv1_nod_uselog = 0
+
+			Kv1_end_doarg = 0
+			Kv1_end_uselog = 0
+
+			Kv1_col_doarg = 0
+			Kv1_col_uselog = 0
+
+
+			Kv_so_doarg = 1
+			Kv_so_uselog = 1
+
+
+			Kv7_de_doarg = 1
+			Kv7_de_uselog = 1
+
+			Kv7_so_doarg = 1
+			Kv7_so_uselog = 1
+
+			Kv7_prox_doarg = 1
+			Kv7_prox_uselog = 1
+
+			Kv7_ais_doarg = 1
+			Kv7_ais_uselog = 1
+
+			Kv7_int_doarg = 0
+			Kv7_int_uselog = 0
+
+			Kv7_nod_doarg = 0
+			Kv7_nod_uselog = 0
+
+			Kv7_end_doarg = 0
+			Kv7_end_uselog = 0
+
+			Kv7_col_doarg = 0
+			Kv7_col_uselog = 0
+
+
+			KCa_doarg = 1
+			KCa_uselog = 1
+
+
+			Ca_doarg = 1
+			Ca_uselog = 1
+
+			It2_doarg = 1
+			It2_uselog = 1
+
+
+			H_so_doarg = 1
+			H_so_uselog = 1
+
+			tc_H_de_doarg = 1
+			tc_H_de_uselog = 1
+
+			H_ax_doarg = 0
+			H_ax_uselog = 0
+
+			Kv1_juxta_doarg = 0
+			Kv1_juxta_uselog = 0
+		}
+
+		sprint(reclocstr, "%d%s", SOf, " somatic recording location(s) found")
+	}
+
+	if (SOf == 0 && AXf == 0 && DEf == 0) {
+
+		DEFAULT = 1
+		modeltypestr = "DEFAULT"
+
+		sprint(reclocstr, "%s", "No recording locations found")
+	}
+
+	if ($1 == 0) {
+
+		sprint(modeltypestr, "%s%s%s", "pas", "-", modeltypestr)
+	}
+
+	if ($1 == 1) {
+
+		sprint(modeltypestr, "%s%s%s", "act", "-", modeltypestr)
+	}
+
+	if (!Ri_doarg) {
+
+		// Cohen et al. 2020
+		Ri_def = 1.5464819841E+02
+	}
+
+	if (!Rm_doarg) {
+
+		// Cohen et al. 2020
+		Rm_def = 2.4603614141E+04
+	}
+
+	if (!Cm_doarg) {
+
+		// Cohen et al. 2020
+		Cm_def = 1.1478965068E+00
+	}
+
+	if (!Cpip_doarg) {
+
+		// Cohen et al. 2020
+		Cpip_def = 5.5195171802E-05
+	}
+
+	if (DCPARA) {
+
+		if (!Rmy_doarg) {
+
+			// Cohen et al. 2020
+			Rmy_def = 2.3965099892E+05
+		}
+
+		if (!Cmy_doarg) {
+
+			// Cohen et al. 2020
+			Cmy_def = 3.7906668425E-02
+		}
+
+		if (!rpa_doarg) {
+
+			// Cohen et al. 2020
+			rpa_def = 1.2494013007E+05
+		}
+
+		if (!parafact_doarg) {
+
+			parafact_def = 1.8152775323E+01
+		}
+	}
+
+	if (DC) {
+
+		if (!Rmy_doarg) {
+
+			// Cohen et al. 2020
+			Rmy_def = 7.8320037656E+04
+		}
+
+		if (!Cmy_doarg) {
+
+			// Cohen et al. 2020
+			Cmy_def = 1.6947461000E-02
+		}
+
+		if (!rpa_doarg) {
+
+			// Cohen et al. 2020
+			rpa_def = 5.0560001429E+05
+		}
+	}
+
+	// to modify from defaults, and take into account extra parameters, if any.
+	loadfile(1, ses, doargfilestr)
+	// update parameter initializations
+	defparam()
+
+	if (RmN_doarg) {
+
+		sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "RmN")
+	}
+	
+	if (RmA_doarg) {
+
+		sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "RmA")
+	}
+
+	if (RmI_doarg) {
+
+		sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "RmI")
+	}
+
+	if (RiA_doarg) {
+
+		sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "RiA")
+	}
+
+	if (per_int_doarg) {
+	
+		sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "perint")
+		initperint()
+	}
+
+	setpname($1, $2)
+	// update the p-vectors
+	getpdef()
+	getp()
+	getpnormdef()
+	getpnorm()
+	getplow()
+	getphi()
+	getdoarg()
+	getuselog()
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc initpvecs() {
+
+	pdefvec = new Vector()
+	pvec = new Vector()
+	pnormdefvec = new Vector()
+	pnormvec = new Vector()
+	plowvec = new Vector()
+	phivec = new Vector()
+	doargvec = new Vector()
+	uselogvec = new Vector()
+}
+// --------------------------------------------------------------------------------
+
+
+
+
+// --------------------------------------------------------------------------------
+proc getpdef() {local k
+
+	if (!pdefvec.size) {
+
+		for k = 0, pnamelist.count-1 {
+			
+			sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_def")
+			execute(tempstr)
+
+			pdefvec.resize(pdefvec.size+1)
+			pdefvec.x[pdefvec.size-1] = num
+		}
+	
+	} else {
+
+		for k = 0, pnamelist.count-1 {
+
+			sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_def")
+			execute(tempstr)
+			
+			pdefvec.x[k] = num
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// gets current p (parameters) in pvec
+proc getp() {local k
+
+	if (!pvec.size) {
+
+		for k = 0, pnamelist.count-1 {
+			
+			sprint(tempstr, "%s%s", "num = ", pnamelist.o(k).label)
+			execute(tempstr)
+
+			pvec.resize(pvec.size+1)
+			pvec.x[pvec.size-1] = num
+		}
+
+	} else {
+
+		for k = 0, pnamelist.count-1 {
+
+			sprint(tempstr, "%s%s", "num = ", pnamelist.o(k).label)
+			execute(tempstr)
+			
+			pvec.x[k] = num
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// gets current pnormdef in pnormdefvec
+proc getpnormdef() {local k
+
+	if (!pnormdefvec.size) {
+
+		for k = 0, pnamelist.count-1 {
+			
+			sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_norm_def")
+			execute(tempstr)
+
+			pnormdefvec.resize(pnormdefvec.size+1)
+			pnormdefvec.x[pnormdefvec.size-1] = num
+		}
+	
+	} else {
+
+		for k = 0, pnamelist.count-1 {
+
+			sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_norm_def")
+			execute(tempstr)
+
+			pnormdefvec.x[k] = num
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc getpnorm() {local k
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		if (!strcmp($s1, "help")) {
+
+			print "Takes no arguments. Gets/updates current pnorm (_norm, AKA RunFitParm variables) in pnormvec."
+			print "Note: pnormvec does not track current pnorm, but what should be those sent for optimization."
+			stop
+		}
+	}
+
+	if (!numarg()) {
+
+		if (!pnormvec.size) {
+		
+			for k = 0, pnamelist.count-1 {
+				
+				sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_norm")
+				execute(tempstr)
+
+				pnormvec.resize(pnormvec.size+1)
+				pnormvec.x[pnormvec.size-1] = num
+			}
+
+		} else {
+
+			for k = 0, pnamelist.count-1 {
+
+				sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_norm")
+				execute(tempstr)
+
+				pnormvec.x[k] = num
+			}
+		}
+	}
+
+	if (numarg() == 2 && argtype(1) == 0 && argtype(2) == 0) {
+
+		pnormvec.x[$1] = $2
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// gets current plow in plowvec
+proc getplow() {local k
+
+	if (!plowvec.size) {
+
+		for k = 0, pnamelist.count-1 {
+			
+			sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_low")
+			execute(tempstr)
+
+			plowvec.resize(plowvec.size+1)
+			plowvec.x[plowvec.size-1] = num
+		}
+	
+	} else {
+
+		for k = 0, pnamelist.count-1 {
+
+			sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_low")
+			execute(tempstr)
+
+			plowvec.x[k] = num
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// gets current phi in phivec
+proc getphi() {local k
+
+	if (!phivec.size) {
+
+		for k = 0, pnamelist.count-1 {
+			
+			sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_high")
+			execute(tempstr)
+
+			phivec.resize(phivec.size+1)
+			phivec.x[phivec.size-1] = num
+		}
+	
+	} else {
+
+		for k = 0, pnamelist.count-1 {
+
+			sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_high")
+			execute(tempstr)
+			
+			phivec.x[k] = num
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// gets current parameter doarg in doargvec
+proc getdoarg() {local k
+
+	if (!doargvec.size) {
+
+		for k = 0, pnamelist.count-1 {
+
+			sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_doarg")
+			execute(tempstr)
+
+			doargvec.resize(doargvec.size+1)
+			doargvec.x[doargvec.size-1] = num
+		}
+	
+	} else {
+
+		for k = 0, pnamelist.count-1 {
+
+			sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_doarg")
+			execute(tempstr)
+
+			doargvec.x[k] = num
+		}		
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// gets current parameter uselog in uselogvec
+proc getuselog() {local k
+
+	if (!uselogvec.size) {
+
+		for k = 0, pnamelist.count-1 {
+
+			sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_uselog")
+			execute(tempstr)
+
+			uselogvec.resize(uselogvec.size+1)
+			uselogvec.x[uselogvec.size-1] = num
+		}
+	
+	} else {
+
+		for k = 0, pnamelist.count-1 {
+
+			sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_uselog")
+			execute(tempstr)
+			
+			uselogvec.x[k] = num
 		}
 	}
 }

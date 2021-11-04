@@ -35,11 +35,11 @@ proc writecontrol() {
 	writefile.printf(vform, v_init)
 	writefile.printf("%s", "\nxvalue(\"Init\", \"v_init\", 1,\"stdinit()\", 1, 1)\nxbutton(\"Init & Run\",\"run()\")")
 	writefile.printf("%s", "\nxbutton(\"Stop\",\"stoprun=1\")\nrunStopAt = ")
-	writefile.printf(tform, gettstop())
+	writefile.printf(tform, gettstop($1, $2))
 	writefile.printf("%s", "\nxvalue(\"Continue til\",\"runStopAt\", 1,\"{continuerun(runStopAt) stoprun=1}\", 1, 1 )\nrunStopIn = 0.1")
 	writefile.printf("%s", "\nxvalue(\"Continue for\",\"runStopIn\", 1,\"{continuerun(t + runStopIn) stoprun=1}\", 1, 1 )\nxbutton(\"Single Step\",\"steprun()\")\nt = 0")
 	writefile.printf("%s",	"\nxvalue(\"t\",\"t\", 2 )\ntstop = ")
-	writefile.printf(tform, gettstop())
+	writefile.printf(tform, gettstop($1, $2))
 	writefile.printf("%s", "\nxvalue(\"Tstop\",\"tstop\", 1,\"tstop_changed()\", 0, 1 )\ndt = ")
 	setdt()
 	dt = setnsig(dt, nsigt)
@@ -70,13 +70,13 @@ proc writevtplot() {local ev, rec, iamp
 		}
 	}
 
-	if (numarg() == 1 && argtype(1) == 0) {
+	if (numarg() == 3 && argtype(1) == 0 && argtype(2) == 0 && argtype(3) == 0) {
 	
-		iamp = $1
+		iamp = $3
 	
 	} else {
 		
-		iamp = getvar(ses, iampfilestr)
+		iamp = getvar(ses, iampfilestr)		
 	}
 
 	chkin()
@@ -84,17 +84,17 @@ proc writevtplot() {local ev, rec, iamp
 	chdir(ses)
 	writefile.wopen(vtplotfilestr)
 	writefile.printf("%s", "objectvar save_window_, rvp_\nobjectvar scene_vector_[5]\nobjectvar ocbox_, ocbox_list_, scene_, scene_list_\n{ocbox_list_ = new List()  scene_list_ = new List()}")	
-	tstop = gettstop()
 	crvvarlist(recloclist, vvarlist)
 
 	for rec = 0, nrec-1 {
 	
 		writefile.printf("%s", "\n{")
 		writefile.printf("%s", "\nsave_window_ = new Graph(0)\nsave_window_.size(-2, ")
+		tstop = gettstop($1, $2)
 		writefile.printf(tform, tstop)
 		writefile.printf("%s", ", ")
 		
-		if (mode_ == 0) {
+		if ($1 == 0) {
 			
 			ev = getev(iamp, recseclist.o(rec).label, getsubloc(recloclist.o(rec).label))
 
@@ -111,7 +111,7 @@ proc writevtplot() {local ev, rec, iamp
 				writefile.printf(vform, ev)
 			}
 
-		} else if (mode_ == 1) {
+		} else if ($1 == 1) {
 			
 			writefile.printf("%s", "-80, 40")
 		}
@@ -122,7 +122,7 @@ proc writevtplot() {local ev, rec, iamp
 		writefile.printf("%s", "] = save_window_")
 		writefile.printf("%s", "\n{save_window_.view(-2, ")
 		
-		if (mode_ == 0) {
+		if ($1 == 0) {
 
 			if (ev < 0) {
 
@@ -140,7 +140,7 @@ proc writevtplot() {local ev, rec, iamp
 				writefile.printf(vform, ev)
 			}
 
-		} else if (mode_ == 1) {
+		} else if ($1 == 1) {
 
 			writefile.printf("%s", "-80, ")
 			writefile.printf(tform, tstop+2)
@@ -155,7 +155,7 @@ proc writevtplot() {local ev, rec, iamp
 		writefile.printf("%s", vvarlist.o(rec).label)
 		writefile.printf("%s", "\", 1, 1, 0.660318, ")
 
-		if (mode_ == 0) {
+		if ($1 == 0) {
 	
 			if (ev < 0) {
 
@@ -166,7 +166,7 @@ proc writevtplot() {local ev, rec, iamp
 				writefile.printf("%s", "0.966103")
 			}
 
-		} else if (mode_ == 1) {
+		} else if ($1 == 1) {
 
 			writefile.printf("%s", "0.141322")
 		}
@@ -293,7 +293,7 @@ proc writevxplot() {local ev, dist_, distsoma, ystart, ext
 	writefile.printf("%s", "\nrvp_.origin(0)")
 	writefile.printf("%s", "\nsave_window_.addobject(rvp_, 2, 1, 0.146864, 0.629207)")
 
-	ext = getaxontype(0)
+	ext = axontype
 
 	if (ext > 2) {
 

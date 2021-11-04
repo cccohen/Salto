@@ -25,7 +25,6 @@ paracount = 0
 // to account for myelin dimensions (i.e. extra radius over that of the axon core)
 // and the extra surface area that affords to the myelin structure to accordingly 
 // scale any myelin-specific parameters in axon types involving myelin.
-
 proc setmy() {local k, m, seg, pos, dist_, Kv7_ais_distal
 
 	forsec internodal {
@@ -37,14 +36,14 @@ proc setmy() {local k, m, seg, pos, dist_, Kv7_ais_distal
 
 			if (demy) {
 
-				sprint(secstr, secname())
+				sprint(secstr, "%s", secname())
 
 				for k = 0, demyvec.size-1 {
 
 					for m = 0, intlist.o(demyvec.x[k]).size-1 {
 
 						strdef strint
-						sprint (strint, "%s%g%s", ".*[", intlist.o(demyvec.x[k]).x[m], "].*")						
+						sprint(strint, "%s%g%s", ".*[", intlist.o(demyvec.x[k]).x[m], "].*")						
 					
 						if (issection(strint)) {
 
@@ -53,97 +52,100 @@ proc setmy() {local k, m, seg, pos, dist_, Kv7_ais_distal
 							xc[0] = 0
 							xraxial[0] = rext
 							
-							// 1st internode, into which there will be leakage of high density Kv7 channels from the AIS (Hamada and Kole 2015).
-							// That leakage is quantified as an effective increase in AIS length by a factor of 35/23 (Hamada and Kole 2015).
-							if (demyvec.x[k] == 0) {
+			// 				// 1st internode, where there is a greater proportion of Kv7 channels in the region of the first paranode and juxtaparanode (Hamada and Kole 2015).
+			//				// diffusion of Kv1 from juxtaparanodes into paranodes (Nie et al. 2003)
+			// 				// diffusion of NaV from AIS/nodes into at least both paranodes; size of NaV cluster 3x greater in MS demyelinated plaques (Coman et al. 2006).
+			// 				// AIS onset moves back by 2 um (from 4 in WT - Hamada et al. 2015).
+			// 				// NaV length almost doubles at nodes, Kv7.3 about 1.5 at nodes (Hamada et al. 2015)
+			// 				if (demyvec.x[k] == 0) {
 								
-								if (mode_ == 1) {							
+			// 					if (mode_ == 1) {							
 									
-									strdef strais
-									forsec AIS sprint(strais, "%s", secname())
-									leak_dist = ais_length * ((35/23) - 1)
+			// 						strdef strais
+			// 						forsec AIS sprint(strais, "%s", secname())
+			// 						leak_dist = ais_length * ((35/23) - 1)
 									
-									forsec AIS {
+			// 						forsec AIS {
 
-										for seg = 1, nseg {
+			// 							for seg = 1, nseg {
 
-											pos = (2*seg-1)/(2*nseg)											
-											Kv7_ais_distal = gbar_kv7(pos)
-										}
-									}
+			// 								pos = (2*seg-1)/(2*nseg)											
+			// 								Kv7_ais_distal = gbar_kv7(pos)
+			// 							}
+			// 						}
 
-									forsec secstr {
+			// 						forsec secstr {
 
-										for seg = 1, nseg {
+			// 							for seg = 1, nseg {
 
-											pos = (2*seg-1)/(2*nseg)
-											dist_ = getdist(strais, 1, secstr, pos)
+			// 								pos = (2*seg-1)/(2*nseg)
+			// 								dist_ = getdist(strais, 1, secstr, pos)
 
-											if (dist_ < leak_dist) {
+			// 								if (dist_ < leak_dist) {
 
-												gbar_kv7(pos) = Kv7_ais_distal
+			// 									gbar_kv7(pos) = Kv7_ais_distal
 											
-											} else {
+			// 								} else {
 
-												// the position is beyond but is within the downstream paranode...
-												// take into account Nav and Kv7 leakage from the downstream node into this demyelinated paranode (Hamada and Kole 2015).
-												ifsec paranodal {
+			// 									// the position is beyond but is within the downstream paranode...
+			// 									// take into account Nav and Kv7 leakage from the downstream node into this demyelinated paranode (Hamada and Kole 2015).
+			// 									ifsec paranodal {
 
-													gbar_nax = Na_nod_norm * Na_nod_low
-													gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
-												}												
-											}
-										}
-									}
-								}
+			// 										gbar_nax = Na_nod_norm * Na_nod_low
+			// 										gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
+			// 									}												
+											// }
+										// }
+									// }
+								// }
 							
-							} else if (demyvec.x[k] > 0 && demyvec.x[k] < intlist.count-1) {
+			// 				} else if (demyvec.x[k] > 0 && demyvec.x[k] < intlist.count-1) {
 
-								if (mode_ == 1) {
+			// 					if (mode_ == 1) {
 									
-									// any other internode.
-									// there will be only be leakage of Nav and Kv7 into a given paranode if the internode containing that paranode is demyelinated (Hamada and Kole 2015).
-									ifsec paranodal {
+			// 						// any other internode.
+			// 						// there will be only be leakage of Nav and Kv7 into a given paranode if the internode containing that paranode is demyelinated (Hamada and Kole 2015).
+			// 						ifsec paranodal {
 
-										gbar_nax = Na_nod_norm * Na_nod_low
-										gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
-									}
-								}
+			// 							gbar_nax = Na_nod_norm * Na_nod_low
+			// 							gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
+			// 						}
+			// 					}
 							
-							} else if (demyvec.x[k] == intlist.count-1) {
+			// 				} else if (demyvec.x[k] == intlist.count-1) {
 
-								if (mode_ == 1) {
+			// 					if (mode_ == 1) {
 
-									if (!axbleb_exists) {
+			// 						if (!axbleb_exists) {
 
-										ifsec paranodal {
+			// 							ifsec paranodal {
 
-											gbar_nax = Na_nod_norm * Na_nod_low
-											gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
-										}
+			// 								gbar_nax = Na_nod_norm * Na_nod_low
+			// 								gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
+			// 							}
 									
-									} else {
+			// 						} else {
 
-										ifsec paranodal {
+			// 							ifsec paranodal {
 
-											paracount += 1
+			// 								paracount += 1
 
-											if (paracount == 1) {
+			// 								if (paracount == 1) {
 
-												gbar_nax = Na_nod_norm * Na_nod_low
-												gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
+			// 									gbar_nax = Na_nod_norm * Na_nod_low
+			// 									gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
 											
-											} else if (paracount == 2) {
+			// 								} else if (paracount == 2) {
 
-												gbar_nax = Na_end_norm * Na_end_low
-												gbar_kv7 = Kv7_end_norm * Kv7_end_low
+			// 									gbar_nax = Na_end_norm * Na_end_low
+			// 									gbar_kv7 = Kv7_end_norm * Kv7_end_low
 
-												paracount = 0
-											}
-										}
-									}
-								}
-							}
+			// 									paracount = 0
+			// 								}
+			// 							}
+			// 						}
+			// 					}
+			// 				}
 						}
 					}
 				}
@@ -202,18 +204,28 @@ proc demyelinate() {local i
 
 		if (!strcmp($s1, "help")) {
 
-			print "Enter number corresponding to each internode to demyelinate, starting at 1 (separate by commas)."
-			print "To discover the number of internodes, try nint()."
+			print "Enter number corresponding to each internode to demyelinate, starting at 1 (separated by commas)."
+			print "To discover the number of internodes, try nint(). To demyelinate all internodes, try demyall()."
 			stop
 		}
-	}
+	}	
 
 	crintlist()
 
 	demyvec = new Vector()
-	for i = 1, numarg() demyvec.append($i-1)
+	
+	for i = 1, numarg() {
+
+		demyvec.resize(demyvec.size+1)
+		demyvec.x[demyvec.size-1] = $i-1
+	}
 		
-	print "Demyelinating..."
+	print "Demyelinating the following internodes:"
+	
+	for i = 1, numarg() {
+
+		print $i
+	}
 	
 	demy = 1
 	init()
@@ -225,21 +237,16 @@ proc demyelinate() {local i
 // --------------------------------------------------------------------------------
 proc remyelinate() {
 
-	print "Remyelinating..."	
+	print "Remyelinating all internodes..."	
 	
 	demy = 0
 	init()
 }
 // --------------------------------------------------------------------------------
-proc temp_() {local k localobj tempvec
-	
-	tempvec=new Vector()
-	tempvec.append(261.41, 25238, 1.3716, 578600, 0.0076935, 141024, 25.222, 3.4474e-06, 778.745, 153.56, 1469.43, 10000, 203.097, 13359.4, 665.328, 81.2534, 0.825793, 0.0486485, 0.860195, 2.81808, 76.9301, 322.897, 144.934, 3043.07, 1175.35, 330.394, 44.8813, 662.046, 376.883, 7.47497, 15, 25.4779, 122.233, 157.238, 3.3044, 141.321, 31.919, 12.2709, 0.00412862, 0.00102773, 2.30221, 0.000104181, 0.000165713)
-	for k=0,tempvec.size-1 tempvec.x[k]/=plowvec.x[k]
-	updfitparam(tempvec)
-	init()
-}
 
+
+
+// --------------------------------------------------------------------------------
 proc demyall() {
 
 	forsec internodal {
@@ -249,3 +256,4 @@ proc demyall() {
 		xraxial[0] = rext		
 	}
 }
+// --------------------------------------------------------------------------------

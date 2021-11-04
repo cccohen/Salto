@@ -7,15 +7,13 @@
 
 
 // -------------------------------------Variables-----------------------------------------
-objref pmatr, ematr, ematrp
-objref pmatr_nn, pmat_nn
-objref temppmat, tempemat, temppemat
+objref temppmat, tempemat
 // ---------------------------------------------------------------------------------------
 
 
 
 // ---------------------------------------------------------------------------------------
-proc rank() {local k, m localobj dirlist, tempmat, tempvec, tempobj
+proc rankopt() {local k, ans localobj dirlist
 
 	getmod()
 	dirlist = getdirlist(moddir, dirlist)
@@ -35,67 +33,134 @@ proc rank() {local k, m localobj dirlist, tempmat, tempvec, tempobj
 
 		for k = 0, dirlist.count-1 {
 
-			sprint(tempdir, "%s%s%s", moddir, dirlist.o(k).label, "/")
+			sprint(tempdir, "%s%s%s", moddir, dirlist.o(k).label, "/")			
 
-			print "\nOptimization folder: ", tempdir
+			print "\nRanking error and parameter matrices in optimization folder:"
+			print tempdir
 
-			tstat(tempdir)
+			sprint(qstr, "%s", "\nDo you wish to...\n1) Rank error and parameter matrices in this optimization folder? Or \n2) Skip ranking this folder?")
+			ans = xred(qstr, 1, 1, 2)
 
-			if (chkdir(tempdir, "\nemat.dat\n") && chkdir(tempdir, "\npmat.dat\n")) {
+			if (ans == 1) {
 
-				// rank emat
-				getmat(tempdir, "emat.dat", tempmat)
-				tempmat = delzeromat(tempmat)
+				tstat(tempdir)
+				rank(tempdir)
+			}			
+		}
+	}
+}
+// ---------------------------------------------------------------------------------------
 
-				tempvec = new Vector(tempmat.getcol(nf).size)
 
-				for m = 0, tempvec.size-1 {
 
-					tempvec.x[m] = tempmat.getcol(nf).sortindex.x[m]
-				}
+// ---------------------------------------------------------------------------------------
+proc rank() {local k, m localobj dirlist, tempmat, tempvec, tempobj	
 
-				tempobj = new Matrix(tempmat.nrow, tempmat.ncol)
+	if (chkdir($s1, "emat.dat\n") && chkdir($s1, "pmat.dat\n")) {
 
-				for m = 0, tempobj.nrow-1 {
+		// rank emat
+		getmat($s1, "emat.dat", tempmat)
+		tempmat = delzeromat(tempmat)
 
-					tempobj.setrow(m, tempmat.getrow(tempvec.x[m]))
-				}
-				
-				savemat(tempdir, "ematr-all.dat", tempobj, vformvec, eheader)
+		tempvec = new Vector(tempmat.getcol(nf).size)
 
-				// rank pmat
-				getmat(tempdir, "pmat.dat", tempmat)
-				tempmat = delzeromat(tempmat)
-				
-				tempobj = new Matrix(tempmat.nrow, tempmat.ncol)
-				
-				for m = 0, tempobj.nrow-1 {
+		for m = 0, tempvec.size-1 {
 
-					tempobj.setrow(m, tempmat.getrow(tempvec.x[m]))
-				}
-
-				savemat(tempdir, "pmatr-all.dat", tempobj, maxformvec, pheader)
-
-				// save tempvec as esortivec
-				tempmat = new Matrix(tempvec.size, 1)
-				tempmat.setcol(0, tempvec)
-				savemat(tempdir, "esortivec.dat", tempmat, "%g\t")
-
-				print "Optimization rank completed for ", tempdir
-
-				// keepopt($s1)
-				// combineper?
-			
-			} else {
-
-				print "Required error and parameter matrices not present"
-			}
+			tempvec.x[m] = tempmat.getcol(nf).sortindex.x[m]
 		}
 
+		tempobj = new Matrix(tempmat.nrow, tempmat.ncol)
+
+		for m = 0, tempobj.nrow-1 {
+
+			tempobj.setrow(m, tempmat.getrow(tempvec.x[m]))
+		}
+		
+		savemat($s1, "ematr-all.dat", tempobj, vformvec, eheader)
+
+		// rank pmat
+		getmat($s1, "pmat.dat", tempmat)
+		tempmat = delzeromat(tempmat)
+		
+		tempobj = new Matrix(tempmat.nrow, tempmat.ncol)
+		
+		for m = 0, tempobj.nrow-1 {
+
+			tempobj.setrow(m, tempmat.getrow(tempvec.x[m]))
+		}
+
+		savemat($s1, "pmatr-all.dat", tempobj, maxformvec, pheader)
+
+		// save tempvec as esortivec
+		tempmat = new Matrix(tempvec.size, 1)
+		tempmat.setcol(0, tempvec)
+		savemat($s1, "esortivec.dat", tempmat, "%g\t")
+
+		print "\nOptimization rank completed for ", $s1
+
+		nnopt($s1)
+		// keepopt($s1)
+		// combineper?
+	
 	} else {
 
-		print "No optimization directories found in ", moddir
+		print "Required error and parameter matrices not present"
 	}
+}
+// ---------------------------------------------------------------------------------------
+
+
+
+// ---------------------------------------------------------------------------------------
+proc nnopt() {local m, p localobj tempmat, temppmat
+
+	// pmat (must exist given where nnopt is called)
+	getmat($s1, "pmat.dat", tempmat)
+
+	temppmat = new Matrix(tempmat.nrow, tempmat.ncol)
+
+	for m = 0, tempmat.nrow-1 {
+		
+		for p = 0, tempmat.ncol-1 {
+
+			temppmat.x[m][p] = tempmat.x[m][p] * plowvec.x[p]
+		}
+	}
+
+	getpnnheader()
+	savemat($s1, "pmat-nn.dat", temppmat, maxformvec, pnnheader)
+
+	// pmatr-all (must exist given where nnopt is called)
+	getmat($s1, "pmatr-all.dat", tempmat)
+
+	temppmat = new Matrix(tempmat.nrow, tempmat.ncol)
+
+	for m = 0, tempmat.nrow-1 {
+		
+		for p = 0, tempmat.ncol-1 {
+
+			temppmat.x[m][p] = tempmat.x[m][p] * plowvec.x[p]
+		}
+	}
+
+	getpheader()
+	savemat($s1, "pmatr-all-nn.dat", temppmat, maxformvec, pnnheader)
+
+	// pmatr, if it exists
+	// getmat(iampdir, "pmatr.dat", tempmat)
+
+	// pmatr_nn = new Matrix(tempmat.nrow, tempmat.ncol)
+
+	// for m = 0, tempmat.nrow-1 {
+		
+	// 	for p = 0, tempmat.ncol-1 {
+
+	// 		pmatr_nn.x[m][p] = tempmat.x[m][p] * plowvec.x[p]
+	// 	}
+	// }
+
+	// getpnnheader()
+	// savemat(iampdir, "pmatr-nn.dat", pmatr_nn, maxformvec, pnnheader)
 }
 // ---------------------------------------------------------------------------------------
 
@@ -125,7 +190,7 @@ proc keepopt() {local k, m, p, q localobj tempmat, tempvec, pmatr, ematr
 	
 	tempvec = new Vector()
 
-	setpname(mode_)
+	setpname(mode_, idata)
 	getplow()
 	getphi()
 
@@ -194,63 +259,6 @@ proc keepopt() {local k, m, p, q localobj tempmat, tempvec, pmatr, ematr
 	print "keepopt complete"
 
 	nnopt($s1)
-}
-// ---------------------------------------------------------------------------------------
-
-
-
-// ---------------------------------------------------------------------------------------
-proc nnopt() {local m, p localobj tempmat, pmatr_nn, pmat_nn
-
-	getplow()
-
-	// pmatr-all
-	getmat($s1, "pmatr-all.dat", tempmat)
-
-	pmatr_nn = new Matrix(tempmat.nrow, tempmat.ncol)
-
-	for m = 0, tempmat.nrow-1 {
-		
-		for p = 0, tempmat.ncol-1 {
-
-			pmatr_nn.x[m][p] = tempmat.x[m][p] * plowvec.x[p]
-		}
-	}
-
-	getpheader()
-	savemat(iampdir, "pmatr-all-nn.dat", pmatr_nn, maxformvec, pnnheader)
-
-	// pmatr
-	getmat(iampdir, "pmatr.dat", tempmat)
-
-	pmatr_nn = new Matrix(tempmat.nrow, tempmat.ncol)
-
-	for m = 0, tempmat.nrow-1 {
-		
-		for p = 0, tempmat.ncol-1 {
-
-			pmatr_nn.x[m][p] = tempmat.x[m][p] * plowvec.x[p]
-		}
-	}
-
-	getpnnheader()
-	savemat(iampdir, "pmatr-nn.dat", pmatr_nn, maxformvec, pnnheader)
-
-	// pmat
-	getmat(iampdir, "pmat.dat", tempmat)
-
-	pmat_nn = new Matrix(tempmat.nrow, tempmat.ncol)
-
-	for m = 0, tempmat.nrow-1 {
-		
-		for p = 0, tempmat.ncol-1 {
-
-			pmat_nn.x[m][p] = tempmat.x[m][p] * plowvec.x[p]
-		}
-	}
-
-	getpnnheader()
-	savemat(iampdir, "pmat-nn.dat", pmat_nn, maxformvec, pnnheader)
 }
 // ---------------------------------------------------------------------------------------
 

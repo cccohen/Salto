@@ -42,7 +42,7 @@ ucounter = 0
 // $14 = ucount, local variable determining if simulation could not finish due to lack of time
 // $15 = exit_case, by default 0 (no exit) unless certain criteria are met (see optimize())
 
-func orgopt() {local p, ucount, exit_case
+func orgopt() {local k, p, ucount, exit_case
 
 	// pelog needs to occur before calls to change weight, which call efun(), which calls init()
 	// which calls upd/savepelog(), which uses the pelog labels to identify whether and which
@@ -61,10 +61,10 @@ func orgopt() {local p, ucount, exit_case
 	// exit case fast sim finished, start slow
 	if ($o12.x[0] && !$o12.x[1]) {
 
-		add_weight()
+		add_weight($2, 1)
 	}
 	
-	initfit()
+	initfit($2, 1)
 
 	adj_injbound($2)
 
@@ -428,10 +428,9 @@ proc data_out() {
 // procedure for mutating initial conditions.
 // takes seed argument for rng and mode_.
 
-proc mutate() {local p, sim localobj prand
+proc mutate() {local p, sim
 
-	prand = new Random()
-	rpmat = new Matrix(ns, genvec.size)
+	rpmat = new Matrix(setgen(mode_, idata), genvec.size)
 
 	sim = 0
 	
@@ -546,8 +545,6 @@ proc adj_rp() {local m, p, reduction_factor, mstart localobj tempmat, tempobj
 // ---------------------------------------------------------------------------------------
 proc getrpmat() {
 
-	spacegen()
-	getmutation()
 	mutate()
 	adj_rp($1+1, $s2)	
 }
@@ -744,14 +741,13 @@ proc getsim() {local q, i
 
 
 // ---------------------------------------------------------------------------------------
+// Returns simax-adjusted ns. Does not include the zeroth (default) simulation.
 func getscount() {
 
-	setgen()
+	ns = setgen($1, $2)
 
 	if (ns > simax) {
 
-		// scount only exists for simax, which only exists in the context of fractional factorial implementations/simulations.
-		// otherwise, scount functions identically to ns, but at the function level.
 		return simax
 	
 	} else if (ns == simax) {
@@ -776,56 +772,57 @@ func getscount() {
 
 proc saveopt() {localobj tempmat
 
-	if (!chkdir($s1, "\nemat.dat\n")) {
+	if (!chkdir($s1, "\nemat.dat")) {
 
 		tempmat = new Matrix($2+1, nf+2)
 		savemat($s1, "emat.dat", tempmat, vformvec, eheader)
 	}
 
-	if (!chkdir($s1, "\npmat.dat\n")) {
+	if (!chkdir($s1, "\npmat.dat")) {
 
 		tempmat = new Matrix($2+1, getnp())
 		savemat($s1, "pmat.dat", tempmat, maxformvec, pheader)
 	}
 
-	if (!chkdir($s1, "\neqmat.dat\n")) {
+	if (!chkdir($s1, "\neqmat.dat")) {
 
 		tempmat = new Matrix($2+1, nf+2)
 		savemat($s1, "eqmat.dat", tempmat, vformvec)		
 	}
 
-	if (!chkdir($s1, "\npqmat.dat\n")) {
+	if (!chkdir($s1, "\npqmat.dat")) {
 	
 		tempmat = new Matrix($2+1, getnp())
 		savemat($s1, "pqmat.dat", tempmat, maxformvec)
 	}
 
-	if (!chkdir($s1, "\nexitmat.dat\n")) {
+	if (!chkdir($s1, "\nexitmat.dat")) {
 
 		tempmat = new Matrix($2+1, 3)
+		// "%d\t" as a format does not work (!)
 		savemat($s1, "exitmat.dat", tempmat, "%g\t")
 	}
 
-	if (!chkdir($s1, "\ntmat.dat\n")) {
+	if (!chkdir($s1, "\ntmat.dat")) {
 
 		tempmat = new Matrix($2+1, 1)
 		savemat($s1, "tmat.dat", tempmat, tformvec)
 	}
 
-	if (!chkdir($s1, "\nvmat.dat\n")) {
+	if (!chkdir($s1, "\nvmat.dat")) {
 
 		tempmat = new Matrix(vdatmat.nrow, ($2+1)*nf+1)
 		tempmat.setcol(0, vdatmat.getcol(0))
 		savemat($s1, "vmat.dat", tempmat, vformvec, vheader)
 	}		
 
-	if (!chkdir($s1, "\nelogmat.dat\n")) {
+	if (!chkdir($s1, "\nelogmat.dat")) {
 
 		tempmat = new Matrix($2+1, nf+1)
 		savemat($s1, "elogmat.dat", tempmat, vformvec)
 	}
 
-	if (!chkdir($s1, "\nplogmat.dat\n")) {
+	if (!chkdir($s1, "\nplogmat.dat")) {
 
 		tempmat = new Matrix($2+1, getnp())
 		savemat($s1, "plogmat.dat", tempmat, maxformvec)
@@ -834,12 +831,14 @@ proc saveopt() {localobj tempmat
 // ---------------------------------------------------------------------------------------
 
 
+
+
+// ---------------------------------------------------------------------------------------
 // $s1 = save dir
 // $s2 = log type (e.g. "eq")
 // $o3 = vector of data to be saved
 // $s4 = format string
 // $5 = sim number
-// ---------------------------------------------------------------------------------------
 proc savelog() {local k, f localobj rvec, tempvec
 
 	sprint(logstr, "%s%s", $s2, "log")
@@ -897,7 +896,7 @@ proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_
 	print getnp(), "parameters found for NU optimization (model type: ", modstr, ")"
 	print genvec.size, "parameters selected for evolution"
 
-	scount = getscount()
+	scount = getscount(mode_, idata)
 
 	if (!numarg()) {
 
@@ -978,20 +977,20 @@ proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_
 	istart = -1
 
 	crdir(root, "out", 0)
-	getmod()
 	crdir(out, modstr)
-	print "\n"
 	
 	pmat = new Matrix(total_scount, getnp())
-	eqlist = crveclist(total_scount, eqlist)
-	pqlist = crveclist(total_scount, pqlist)
-	exitlist = crveclist(total_scount, exitlist, 3)	
+	eqlist = crveclist(eqlist, total_scount)
+	pqlist = crveclist(pqlist, total_scount)
+	exitlist = crveclist(exitlist, total_scount, 3)	
 
 	for r = 0, rangemat.ncol-1 {
 
 		for k = rangemat.x[0][r], rangemat.x[1][r] {
 
-			reseticlamp(k, 0)
+			// always off for window replacement/superposition in reseticlamp, because cumbersome
+			// in most parallex use cases.
+			reseticlamp(mode_, 1, k, 1)
 			tolopt = settol(k)
 			maxstepsizeopt = setmaxstepsize(tolopt)
 
@@ -1011,16 +1010,16 @@ proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_
 
 			saveopt(iampdir, scount)		
 			
-			getsim(0, getscount())
+			getsim(0, getscount(mode_, idata))
 
-			print "Total selected optimizations = ", simvec.size
+			print "\nTotal selected optimizations = ", simvec.size
 			
 			if (loaduopt(iampdir, scount, istart)) {
 				
 				print "Unfinished optimization(s) loaded for model ", modstr, "/", iampstr
 				print "Total unfinished optimizations = ", uoptvec.sum				
 
-				initfit()
+				initfit(mode_, idata)
 
 				if (mode_ == 1) {
 
@@ -1038,6 +1037,8 @@ proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_
 					
 					} else {
 
+						// cannot pass a 13th object in para that is not a vector (tested: matrices and lists)
+						// tested on personal OpenMPI (nrn 7.5) and NSG Stampede2 Intel Skylake (nrn 7.5)
 						llc.submit("orgopt", k, mode_, ll, uoptvec.x[sim], pmat.getrow(istart*(scount+1)+simvec.x[sim]), tolopt, maxstepsizeopt, eqlist.o(istart*(scount+1)+simvec.x[sim]), pqlist.o(istart*(scount+1)+simvec.x[sim]), simvec.x[sim], scount, exitlist.o(istart*(scount+1)+simvec.x[sim]))
 					}
 				}
@@ -1074,8 +1075,8 @@ proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_
 	llc.done()
 
 	print "\n", scounter, "of ", simvec.size, "selected current clamp optimizations returned"
-	print ucounter, "of ", scounter, "optimizations did not finish due to lack of simulation time. Please see readme for instructions to finish these."
+	print ucounter, "of ", scounter, "optimization did not finish due to lack of simulation time. Please see readme for instructions to finish these."
 	print "Of the ", scounter-ucounter, "optimizations that did finish, ", exitcount, "finished both fast and slow components of the NU algorithm."
-	print "Therefore, ", scounter-exitcount, "cores are required for next round of optimizations."
+	print "Therefore, ", scounter-exitcount, "core(s) is/are required for next round of optimization."
 }
 // ---------------------------------------------------------------------------------------

@@ -7,7 +7,7 @@
 
 
 // ---------------------------------------------------------------------------------------
-proc extract() {local k, xopt, ans localobj dirlist
+proc extractopt() {local k, xopt, ans localobj dirlist
 
 	getmod()
 	dirlist = getdirlist(moddir, dirlist)
@@ -18,20 +18,20 @@ proc extract() {local k, xopt, ans localobj dirlist
 
 			sprint(tempdir, "%s%s%s", moddir, dirlist.o(k).label, "/")
 
-			print "Extracting optimization data from folder:"
+			print "\nExtracting optimization data from folder:"
 			print tempdir
 
-			sprint(qstr, "%s", "\nPlease select one of the following two options:\n1) Extract error, parameter, exit code, and time data (required for further optimization)?, or \n2) Extract voltage, error log and parameter log data (may take more time and not required for further optimizations)?")
-			ans = xred(qstr, 1, 1, 2)
+			sprint(qstr, "%s", "\nPlease select one of the following three options:\n1) Extract error, parameter, exit code, and time data (required for further optimizations)? Or \n2) Extract voltage, error and parameter log data only (not required for further optimizations)? Or\n3) Skip extracting this folder?")
+			ans = xred(qstr, 1, 1, 3)
 
 			if (ans == 1) {
 
 				extract_log(tempdir, "fe")
 				extract_log(tempdir, "fp")
 				extract_log(tempdir, "eq")
-				extract_log(tempdir, "pq")				
+				extract_log(tempdir, "pq")
 				extract_log(tempdir, "t")
-				extract_log(tempdir, "exit")	
+				extract_log(tempdir, "exit")
 			}
 
 			if (ans == 2) {
@@ -61,7 +61,7 @@ proc extract_log() {local nline, line, nrows, k, f, qstart, q, exitcount localob
 
 		geteheader()
 		getpheader()
-		getvheader(getscount()+1)
+		getvheader(getscount(mode_, idata, axbleb_exists)+1)
 
 		sprint(tempheader, "%s", "")
 		sprint(logmatstr, "%s%s", $s2, "mat.dat")
@@ -110,7 +110,7 @@ proc extract_log() {local nline, line, nrows, k, f, qstart, q, exitcount localob
 
 		if (chkdir($s1, logmatstr)) {
 
-			print "Extracting ", logstr, "..."
+			print "\nExtracting ", logstr, "..."
 
 			sprint(logdir, "%s%s%s", $s1, logstr, "/")
 			sprint(commstr, "%s%s%s", "ls", " ", logdir)
@@ -180,8 +180,8 @@ proc extract_log() {local nline, line, nrows, k, f, qstart, q, exitcount localob
 					}
 				}
 
-				print exitcount, "\noptimizations of ", tempmat.nrow, "completed both fast and slow components of the NU algorithm."
-				print "Therefore, ", tempmat.nrow-exitcount, "cores are required for the next round of optimizations.\n"
+				print "\n", exitcount, "of ", tempmat.nrow, "optimizations completed both fast and slow components of the NU algorithm."
+				print "Therefore, ", tempmat.nrow-exitcount, "core(s) is/are required for the next round of optimizations.\n"
 			}			
 
 			savemat($s1, logmatstr, tempmat, format, tempheader)
@@ -190,7 +190,7 @@ proc extract_log() {local nline, line, nrows, k, f, qstart, q, exitcount localob
 
 		} else {
 
-			saveopt($s1, getscount())
+			saveopt($s1, getscount(mode_, idata, axbleb_exists))
 			extract_log($s1, $s2)
 		}
 	}

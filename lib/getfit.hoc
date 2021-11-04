@@ -8,7 +8,7 @@
 
 // -------------------------------Variables----------------------------------------
 objref paramvec, solnvec, elogvec, plogvec, nefunvec, optibox
-objref genvec, spacemat, genvec, mutmat, permvec, chkmat
+objref genvec, spacemat, genvec, mutmat, permvec, chkparamvec
 objref pmat, vvec, rangemat
 objref eqlist, pqlist
 objref boundvec, origboundlist, newboundlist, weightvec, weightmat, origweightlist, newweightlist, errlist, scalelist
@@ -18,11 +18,14 @@ solnvec = new Vector()
 genvec = new Vector()
 spacemat = new Matrix()
 
+prand = new Random()
+
 elogvec = new Vector()
 plogvec = new Vector()
 nefunvec = new Vector()
+chkparamvec = new Vector()
 
-strdef pheader, eheader, vheader, varstr, plogdir, elogdir, logstr, logmatstr, outstr, esimstr, psimstr
+strdef pheader, eheader, vheader, pnnheader, varstr, plogdir, elogdir, logstr, logmatstr, outstr, esimstr, psimstr
 strdef mutstart, mutp, mutcom, mutend, mutexec
 
 nefun_ = 0
@@ -115,7 +118,7 @@ proc adj_weight() {local points_to_adv, f, k, lo_bound, up_bound, indlo, indhi l
 		boundvec = new Vector()
 
 		k = indlo
-		while (k <= indhi) {
+		while (k <= indhi-points_to_adv+1) {
 			
 			boundvec.append(tempxvec.x[k])
 			tempvec.append(tempyvec.mean(k, k+points_to_adv-1))
@@ -215,10 +218,10 @@ proc add_weight() {local f, k, points_to_adv, lo_bound, up_bound, indlo, indhi, 
 	tempvec.floor()
 	points_to_adv = tempvec.x[0]
 
-	crveclist(nf, origboundlist)
-	crveclist(nf, newboundlist)
+	crveclist(origboundlist, nf)
+	crveclist(newboundlist, nf)
 
-	crveclist(nf, origweightlist)
+	crveclist(origweightlist, nf)
 
 	// save original boundary/weight vecs in origbound/origweightlist, and create new boundary vecs in newboundlist
 	for f = 0, nf-1 {
@@ -269,7 +272,7 @@ proc add_weight() {local f, k, points_to_adv, lo_bound, up_bound, indlo, indhi, 
 		boundvec.x[boundvec.size-1] = tempxvec.x[indlo]
 
 		k = indlo
-		while (k <= indhi) {
+		while (k <= indhi-points_to_adv+1) {
 
 			boundvec.resize(boundvec.size+1)
 			boundvec.x[boundvec.size-1] = tempxvec.x[k+points_to_adv-1]
@@ -298,7 +301,7 @@ proc add_weight() {local f, k, points_to_adv, lo_bound, up_bound, indlo, indhi, 
 		tempnum += newboundlist.o(f).size
 	}
 
-	crveclist(tempnum-nf, newweightlist)
+	crveclist(newweightlist, tempnum-nf)
 
 	for f = 0, nf-1 {
 
@@ -340,7 +343,7 @@ proc add_weight() {local f, k, points_to_adv, lo_bound, up_bound, indlo, indhi, 
 	}
 
 	// create a list containing the errors from each newboundlist and newweightlist combination
-	crveclist(nf, errlist)
+	crveclist(errlist, nf)
 	
 	// size-1 because not counting the first bound/weight, which is always 0
 	for k = 0, errlist.count-1 {
@@ -455,7 +458,7 @@ proc add_weight() {local f, k, points_to_adv, lo_bound, up_bound, indlo, indhi, 
 	}
 
 	// calculate ratio of weight to scale for each time/bound interval, and place these in scalelist.
-	crveclist(errlist.count, scalelist)
+	crveclist(scalelist, errlist.count)
 	
 	for k = 0, scalelist.count-1 {
 
@@ -505,7 +508,7 @@ proc add_weight() {local f, k, points_to_adv, lo_bound, up_bound, indlo, indhi, 
 		RegionFitness[f].set_modelx(tempxvec)
 	}
 
-	initfit()
+	initfit($1, $2)
 
 	print "add weight ended..."
 }
@@ -600,7 +603,7 @@ proc initfit() {
 	plogvec.resize(0)
 	nefunvec.resize(0)
 
-	chkmat = crchkmat()
+	chkparamvec = initchkparam($1, $2, chkparamvec)
 
 	nefun_ = 0
 	nquad_ = 0
@@ -803,761 +806,29 @@ proc getpelogdirs() {
 
 
 // --------------------------------------------------------------------------------
-proc getmodeltype() {local rec, SOf, AXf, DEf
-
-	sprint(modeltypestr, "%s", "")
-	DEFAULT = 0
-
-	if ($2) {
-
-		// count locations
-		SOf = 0
-		AXf = 0
-		DEf = 0
-
-		sprint(SOstr, "%s", "soma")
-		sprint(AXstr, "%s", "axon")
-		sprint(DEstr, "%s", "dend")
-		sprint(APstr, "%s", "apic")
-
-		// define number and location of recordings
-		for rec = 0, nrec-1 {
-
-			if (strf.substr(recloclist.o(rec).label, SOstr) > -1) {
-			
-				SOf += 1
-			
-			} else if (strf.substr(recloclist.o(rec).label, AXstr) > -1) {
-			
-				AXf += 1
-			
-			} else if ((strf.substr(recloclist.o(rec).label, DEstr) > -1) || (strf.substr(recloclist.o(rec).label, APstr) > -1)) {
-
-				DEf += 1
-			}
-		}
-
-		// labels for combination of fit variables
-		SOAX = 0
-		SODE = 0
-		SO = 0
-		AX = 0
-		DE = 0		
-
-		// Establish model type as a function of fit variable locations
-		if (SOf > 0 && AXf > 0 && DEf == 0) {
-
-			SOAX = 1
-			modeltypestr = "SOAX"
-
-			if ($1 == 0) {
-
-				Ri_doarg = 1
-				Ri_uselog = 1
-				
-				rpa_doarg = 1
-				rpa_uselog = 1
-				
-				parafact_doarg = 1
-				parafact_uselog = 1
-				
-				Rm_doarg = 1
-				Rm_uselog = 1
-
-				Rmy_doarg = 1
-				Rmy_uselog = 1
-				
-				Cm_doarg = 1
-				Cm_uselog = 1
-				
-				Cmy_doarg = 1
-				Cmy_uselog = 1
-				
-				Cpip_doarg = 1
-				Cpip_uselog = 1
-
-				
-				Na_so_doarg = 0
-				Na_so_uselog = 0
-
-				lc_Na_de_doarg = 0
-				lc_Na_de_uselog = 0
-
-				Na_prox_doarg = 0
-				Na_prox_uselog = 0
-
-				Na_ais_doarg = 0
-				Na_ais_uselog = 0
-
-				Na_int_doarg = 0
-				Na_int_uselog = 0
-
-				Na_nod_doarg = 0
-				Na_nod_uselog = 0
-
-				Na_end_doarg = 0
-				Na_end_uselog = 0
-
-				Na_col_doarg = 0
-				Na_col_uselog = 0
-
-
-				Nap_ais_doarg = 0
-				Nap_ais_uselog = 0
-
-				Nap_int_doarg = 0
-				Nap_int_uselog = 0
-
-				Nap_nod_doarg = 0
-				Nap_nod_uselog = 0
-
-				Nap_end_doarg = 0
-				Nap_end_uselog = 0
-
-
-				Kv1_so_doarg = 0
-				Kv1_so_uselog = 0
-
-				lc_Kv_Kv1_de_doarg = 0
-				lc_Kv_Kv1_de_uselog = 0
-
-				Kv1_prox_doarg = 0
-				Kv1_prox_uselog = 0
-
-				Kv1_ais_doarg = 0
-				Kv1_ais_uselog = 0
-
-				Kv1_int_doarg = 0
-				Kv1_int_uselog = 0
-
-				Kv1_nod_doarg = 0
-				Kv1_nod_uselog = 0
-
-				Kv1_end_doarg = 0
-				Kv1_end_uselog = 0
-
-				Kv1_col_doarg = 0
-				Kv1_col_uselog = 0
-
-
-				Kv_so_doarg = 0
-				Kv_so_uselog = 0
-
-
-				Kv7_de_doarg = 0
-				Kv7_de_uselog = 0
-
-				Kv7_so_doarg = 0
-				Kv7_so_uselog = 0
-
-				Kv7_prox_doarg = 0
-				Kv7_prox_uselog = 0
-
-				Kv7_ais_doarg = 0
-				Kv7_ais_uselog = 0
-
-				Kv7_int_doarg = 0
-				Kv7_int_uselog = 0
-
-				Kv7_nod_doarg = 0
-				Kv7_nod_uselog = 0
-
-				Kv7_end_doarg = 0
-				Kv7_end_uselog = 0
-
-				Kv7_col_doarg = 0
-				Kv7_col_uselog = 0
-
-
-				KCa_doarg = 0
-				KCa_uselog = 0
-
-
-				Ca_doarg = 0
-				Ca_uselog = 0
-
-				It2_doarg = 0
-				It2_uselog = 0
-
-
-				H_so_doarg = 0
-				H_so_uselog = 0
-
-				tc_H_de_doarg = 0
-				tc_H_de_uselog = 0
-
-				H_ax_doarg = 0
-				H_ax_uselog = 0
-
-
-				Kv1_juxta_doarg = 0
-				Kv1_juxta_uselog = 0
-			}
-
-			if ($1 == 1) {
-
-				Ri_doarg = 0
-				Ri_uselog = 0
-				
-				rpa_doarg = 0
-				rpa_uselog = 0
-				
-				parafact_doarg = 0
-				parafact_uselog = 0
-				
-				Rm_doarg = 0
-				Rm_uselog = 0
-
-				Rmy_doarg = 0
-				Rmy_uselog = 0
-				
-				Cm_doarg = 0
-				Cm_uselog = 0
-				
-				Cmy_doarg = 0
-				Cmy_uselog = 0
-				
-				Cpip_doarg = 0
-				Cpip_uselog = 0
-
-				
-				Na_so_doarg = 1
-				Na_so_uselog = 1
-
-				lc_Na_de_doarg = 1
-				lc_Na_de_uselog = 1
-
-				Na_prox_doarg = 1
-				Na_prox_uselog = 1
-
-				Na_ais_doarg = 1
-				Na_ais_uselog = 1
-
-				Na_int_doarg = 1
-				Na_int_uselog = 1
-
-				Na_nod_doarg = 1
-				Na_nod_uselog = 1
-
-				Na_end_doarg = 1
-				Na_end_uselog = 1
-
-				Na_col_doarg = 1
-				Na_col_uselog = 1
-
-
-				Nap_ais_doarg = 1
-				Nap_ais_uselog = 1
-
-				Nap_int_doarg = 1
-				Nap_int_uselog = 1
-
-				Nap_nod_doarg = 1
-				Nap_nod_uselog = 1
-
-				Nap_end_doarg = 1
-				Nap_end_uselog = 1
-
-
-				Kv1_so_doarg = 1
-				Kv1_so_uselog = 1
-
-				lc_Kv_Kv1_de_doarg = 1
-				lc_Kv_Kv1_de_uselog = 1
-
-				Kv1_prox_doarg = 1
-				Kv1_prox_uselog = 1
-
-				Kv1_ais_doarg = 1
-				Kv1_ais_uselog = 1
-
-				Kv1_int_doarg = 1
-				Kv1_int_uselog = 1
-
-				Kv1_nod_doarg = 1
-				Kv1_nod_uselog = 1
-
-				Kv1_end_doarg = 1
-				Kv1_end_uselog = 1
-
-				Kv1_col_doarg = 1
-				Kv1_col_uselog = 1
-
-
-				Kv_so_doarg = 1
-				Kv_so_uselog = 1
-
-
-				Kv7_de_doarg = 1
-				Kv7_de_uselog = 1
-
-				Kv7_so_doarg = 1
-				Kv7_so_uselog = 1
-
-				Kv7_prox_doarg = 1
-				Kv7_prox_uselog = 1
-
-				Kv7_ais_doarg = 1
-				Kv7_ais_uselog = 1
-
-				Kv7_int_doarg = 1
-				Kv7_int_uselog = 1
-
-				Kv7_nod_doarg = 1
-				Kv7_nod_uselog = 1
-
-				Kv7_end_doarg = 1
-				Kv7_end_uselog = 1
-
-				Kv7_col_doarg = 1
-				Kv7_col_uselog = 1
-
-
-				KCa_doarg = 1
-				KCa_uselog = 1
-
-
-				Ca_doarg = 1
-				Ca_uselog = 1
-
-				It2_doarg = 1
-				It2_uselog = 1
-
-
-				H_so_doarg = 1
-				H_so_uselog = 1
-
-				tc_H_de_doarg = 1
-				tc_H_de_uselog = 1
-
-				H_ax_doarg = 1
-				H_ax_uselog = 1
-
-				if (juxtaparanod) {
-
-					Kv1_juxta_doarg = 1
-					Kv1_juxta_uselog = 1
-				}
-			}
-
-			if (numarg() == 3 && argtype(3) == 0) {
-
-				if ($3 == 1) {
-
-					print SOf, "somatic and ", AXf, "axonal recording locations found"
-				}				
-			}
-
-		} else if (SOf > 0 && DEf > 0 && AXf == 0) {
-
-			SODE = 1
-			modeltypestr = "SODE"
-
-			if ($1 == 0) {
-
-				Ri_doarg = 1
-				Ri_uselog = 1
-				
-				rpa_doarg = 0
-				rpa_uselog = 0
-				
-				parafact_doarg = 0
-				parafact_uselog = 0
-				
-				Rm_doarg = 1
-				Rm_uselog = 1
-
-				Rmy_doarg = 0
-				Rmy_uselog = 0
-				
-				Cm_doarg = 1
-				Cm_uselog = 1
-				
-				Cmy_doarg = 0
-				Cmy_uselog = 0
-				
-				Cpip_doarg = 1
-				Cpip_uselog = 1
-
-				
-				Na_so_doarg = 0
-				Na_so_uselog = 0
-
-				lc_Na_de_doarg = 0
-				lc_Na_de_uselog = 0
-
-				Na_prox_doarg = 0
-				Na_prox_uselog = 0
-
-				Na_ais_doarg = 0
-				Na_ais_uselog = 0
-
-				Na_int_doarg = 0
-				Na_int_uselog = 0
-
-				Na_nod_doarg = 0
-				Na_nod_uselog = 0
-
-				Na_end_doarg = 0
-				Na_end_uselog = 0
-
-				Na_col_doarg = 0
-				Na_col_uselog = 0
-
-
-				Nap_ais_doarg = 0
-				Nap_ais_uselog = 0
-
-				Nap_int_doarg = 0
-				Nap_int_uselog = 0
-
-				Nap_nod_doarg = 0
-				Nap_nod_uselog = 0
-
-				Nap_end_doarg = 0
-				Nap_end_uselog = 0
-
-
-				Kv1_so_doarg = 0
-				Kv1_so_uselog = 0
-
-				lc_Kv_Kv1_de_doarg = 0
-				lc_Kv_Kv1_de_uselog = 0
-
-				Kv1_prox_doarg = 0
-				Kv1_prox_uselog = 0
-
-				Kv1_ais_doarg = 0
-				Kv1_ais_uselog = 0
-
-				Kv1_int_doarg = 0
-				Kv1_int_uselog = 0
-
-				Kv1_nod_doarg = 0
-				Kv1_nod_uselog = 0
-
-				Kv1_end_doarg = 0
-				Kv1_end_uselog = 0
-
-				Kv1_col_doarg = 0
-				Kv1_col_uselog = 0
-
-
-				Kv_so_doarg = 0
-				Kv_so_uselog = 0
-
-
-				Kv7_de_doarg = 0
-				Kv7_de_uselog = 0
-
-				Kv7_so_doarg = 0
-				Kv7_so_uselog = 0
-
-				Kv7_prox_doarg = 0
-				Kv7_prox_uselog = 0
-
-				Kv7_ais_doarg = 0
-				Kv7_ais_uselog = 0
-
-				Kv7_int_doarg = 0
-				Kv7_int_uselog = 0
-
-				Kv7_nod_doarg = 0
-				Kv7_nod_uselog = 0
-
-				Kv7_end_doarg = 0
-				Kv7_end_uselog = 0
-
-				Kv7_col_doarg = 0
-				Kv7_col_uselog = 0
-
-
-				KCa_doarg = 0
-				KCa_uselog = 0
-
-
-				Ca_doarg = 0
-				Ca_uselog = 0
-
-				It2_doarg = 0
-				It2_uselog = 0
-
-
-				H_so_doarg = 0
-				H_so_uselog = 0
-
-				tc_H_de_doarg = 0
-				tc_H_de_uselog = 0
-
-				H_ax_doarg = 0
-				H_ax_uselog = 0
-
-
-				Kv1_juxta_doarg = 0
-				Kv1_juxta_uselog = 0
-			}
-
-			if ($1 == 1) {
-
-				Ri_doarg = 0
-				Ri_uselog = 0
-				
-				rpa_doarg = 0
-				rpa_uselog = 0
-				
-				parafact_doarg = 0
-				parafact_uselog = 0
-				
-				Rm_doarg = 0
-				Rm_uselog = 0
-
-				Rmy_doarg = 0
-				Rmy_uselog = 0
-				
-				Cm_doarg = 0
-				Cm_uselog = 0
-				
-				Cmy_doarg = 0
-				Cmy_uselog = 0
-				
-				Cpip_doarg = 0
-				Cpip_uselog = 0
-
-				
-				Na_so_doarg = 1
-				Na_so_uselog = 1
-
-				lc_Na_de_doarg = 1
-				lc_Na_de_uselog = 1
-
-				Na_prox_doarg = 1
-				Na_prox_uselog = 1
-
-				Na_ais_doarg = 1
-				Na_ais_uselog = 1
-
-				Na_int_doarg = 0
-				Na_int_uselog = 0
-
-				Na_nod_doarg = 0
-				Na_nod_uselog = 9
-
-				Na_end_doarg = 0
-				Na_end_uselog = 0
-
-				Na_col_doarg = 0
-				Na_col_uselog = 0
-
-
-				Nap_ais_doarg = 1
-				Nap_ais_uselog = 1
-
-				Nap_int_doarg = 0
-				Nap_int_uselog = 0
-
-				Nap_nod_doarg = 0
-				Nap_nod_uselog = 0
-
-				Nap_end_doarg = 0
-				Nap_end_uselog = 0
-
-
-				Kv1_so_doarg = 1
-				Kv1_so_uselog = 1
-
-				lc_Kv_Kv1_de_doarg = 1
-				lc_Kv_Kv1_de_uselog = 1
-
-				Kv1_prox_doarg = 1
-				Kv1_prox_uselog = 1
-
-				Kv1_ais_doarg = 1
-				Kv1_ais_uselog = 1
-
-				Kv1_int_doarg = 0
-				Kv1_int_uselog = 0
-
-				Kv1_nod_doarg = 0
-				Kv1_nod_uselog = 0
-
-				Kv1_end_doarg = 0
-				Kv1_end_uselog = 0
-
-				Kv1_col_doarg = 0
-				Kv1_col_uselog = 0
-
-
-				Kv_so_doarg = 1
-				Kv_so_uselog = 1
-
-
-				Kv7_de_doarg = 1
-				Kv7_de_uselog = 1
-
-				Kv7_so_doarg = 1
-				Kv7_so_uselog = 1
-
-				Kv7_prox_doarg = 1
-				Kv7_prox_uselog = 1
-
-				Kv7_ais_doarg = 1
-				Kv7_ais_uselog = 1
-
-				Kv7_int_doarg = 0
-				Kv7_int_uselog = 0
-
-				Kv7_nod_doarg = 0
-				Kv7_nod_uselog = 0
-
-				Kv7_end_doarg = 1
-				Kv7_end_uselog = 1
-
-				Kv7_col_doarg = 1
-				Kv7_col_uselog = 1
-
-
-				KCa_doarg = 1
-				KCa_uselog = 1
-
-
-				Ca_doarg = 1
-				Ca_uselog = 1
-
-				It2_doarg = 1
-				It2_uselog = 1
-
-
-				H_so_doarg = 1
-				H_so_uselog = 1
-
-				tc_H_de_doarg = 1
-				tc_H_de_uselog = 1
-
-				H_ax_doarg = 1
-				H_ax_uselog = 1
-
-				Kv1_juxta_doarg = 0
-				Kv1_juxta_uselog = 0
-			}
-
-			if (numarg() == 3 && argtype(3) == 0) {
-
-				if ($3 == 1) {
-
-					print SOf, "somatic and ", DEf, "dendritic recording locations found"
-				}
-			}
-
-		} else if (SOf > 0 && AXf == 0 && DEf == 0) {
-
-			SO = 1
-			modeltypestr = "SO"
-
-			Ri_doarg = 1
-			rpa_doarg = 0
-			parafact_doarg = 0
-			Rm_doarg = 1
-			Rmy_doarg = 0
-			Cm_doarg = 1
-			Cmy_doarg = 0
-			Cpip_doarg = 1
-
-			if (numarg() == 3 && argtype(3) == 0) {
-
-				if ($3 == 1) {
-
-					print SOf, "somatic recording location(s) found"
-				}
-			}
-		}
-	
-	} else {
-
-		DEFAULT = 1
-		modeltypestr = "DEFAULT"
-	}
-
-	if ($1 == 0) {
-
-		sprint(modeltypestr, "%s%s%s", "pas", "-", modeltypestr)
-	
-	} else if ($1 == 1) {
-
-		sprint(modeltypestr, "%s%s%s", "act", "-", modeltypestr)
-	}
-
-	// to modify from defaults, and take into account extra parameters, if any.
-	loadfile(ses, doargfilestr)
-
-	if ($2) {
-
-		if (RmN_doarg) {
-
-			sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "RmN")
-		}
-		
-		if (RmA_doarg) {
-
-			sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "RmA")
-		}
-
-		if (RmI_doarg) {
-
-			sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "RmI")
-		}
-
-		if (RiA_doarg) {
-
-			sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "RiA")
-		}
-
-		if (per_int_doarg) {
-		
-			sprint(modeltypestr, "%s%s%s", modeltypestr, "-", "perint")
-			initperint()
-		}
-	}
-
-	if (numarg() == 3 && argtype(3) == 0) {
-
-		if ($3 == 0 || $3 == 1) {
-
-			print "Model type: ", modeltypestr
-		}			
-	}
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------------------------------------------------------
 // updates both pnorm and corresponding RunFitParm with pnorm arguments
 proc updfitparam() {local p, i, k
 
 	if (argtype(1) == 1) {
 
 		// whole vector input
-		if (numarg() == 1) {
+		if (numarg() == 1 && argtype(1) == 1) {
 
-			if (argtype(1) == 1) {
+			for p = 0, $o1.size-1 {
 
-				for p = 0, $o1.size-1 {
-
-					RunFitParm[p].val = $o1.x[p]
-					setpnorm(p, $o1.x[p])
-				}
+				setpnorm(p, $o1.x[p])
+				getpnorm(p, $o1.x[p])
+				RunFitParm[p].val = $o1.x[p]
 			}
 
 		// vector + vector range from $2 to $3 as input 
-		} else if (numarg() == 3) {
+		} else if (numarg() == 3 && argtype(1) == 1) {
 
-			if (argtype(1) == 1) {
+			for k = 0, $o1.size-1 {
 
-				for k = 0, $o1.size-1 {
-
-					RunFitParm[k+$2].val = $o1.x[k]
-					setpnorm(k+$2, $o1.x[k])
-				}
+				setpnorm(k+$2, $o1.x[k])
+				getpnorm(k+$2, $o1.x[k])
+				RunFitParm[k+$2].val = $o1.x[k]
 			}
 		}
 	
@@ -1565,9 +836,10 @@ proc updfitparam() {local p, i, k
 	} else {
 
 		for i = 1, numarg() {
-
-			RunFitParm[i-1].val = $i
+			
 			setpnorm(i-1, $i)
+			getpnorm(i-1, $i)
+			RunFitParm[i-1].val = $i
 		}
 	}
 }
@@ -1576,17 +848,9 @@ proc updfitparam() {local p, i, k
 
 
 // --------------------------------------------------------------------------------
-// check number of RunFitParm variables against number that should be present, 
-// based on setnp(), and fixes these accordingly. Should be run once before opts.
-
 proc updrfp() {local k, tempnum
 
 	getpnorm()
-	getplow()
-	getphi()
-	getdoarg()
-	getuselog()
-
 	tempnum = ParmFitness[0].parmlist.count
 
 	for k = 0, pnormvec.size-1 {
@@ -1688,15 +952,12 @@ proc showdom() {
 
 
 // --------------------------------------------------------------------------------
-// set to-be-optimized genes, i.e. parameters.
-proc setgen() {local p, tempnum
+// set to-be-optimized parameters.
+func setgen() {local p, tempnum
 
-	genvec.resize(0)
+	genvec.resize(0)	
 
-	if (mode_ == 0) {
-
-		getmodeltype(mode_, idata)
-		getdoarg()
+	if ($1 == 0) {
 
 		for p = 0, doargvec.size-2 {
 
@@ -1707,48 +968,38 @@ proc setgen() {local p, tempnum
 			}
 		}
 	
-	} else if (mode_ == 1) {
+	} else if ($1 == 1) {
 
-		if (SOAX && axbleb_exists) {
-			
-			tempnum = setnp(0)
-			setnp(mode_)
+		tempnum = setnp(0, 0)
 
-			genvec.resize(11)
+		if (SOAX) {
+
+			genvec.resize(8)
 			
 			// Selected parameters
-			// Na: so, ais, nod, end
-			// Kv1: so, ais, nod, end
-			// if juxta: Kv1 juxta
-			// Kv: so
+			// Na: prox, ais, int, nod
+			// Kv1: prox, ais, int, juxta, nod
 
-			// Na_so
-			genvec.x[0] = tempnum+0
+			// Na_prox
+			genvec.x[0] = tempnum+2
 			// Na_ais
 			genvec.x[1] = tempnum+3
 			// Na_int
 			genvec.x[2] = tempnum+4
 			// Na_nod
 			genvec.x[3] = tempnum+5
-			// Na_end
-			genvec.x[4] = tempnum+6
 
-			// Kv1_so
-			genvec.x[5] = tempnum+12
+			// Kv1_prox
+			genvec.x[4] = tempnum+14
 			// Kv1_ais
-			genvec.x[6] = tempnum+15
+			genvec.x[5] = tempnum+15
 			// Kv1_int
-			genvec.x[7] = tempnum+16
+			genvec.x[6] = tempnum+16
 			// Kv1_nod
-			genvec.x[8] = tempnum+17
-			// Kv1_end
-			genvec.x[9] = tempnum+18
-
-			// Kv_so
-			genvec.x[10] = tempnum+20
+			genvec.x[7] = tempnum+17
 
 			// Kv1_juxta
-			if (juxtaparanod) {
+			if (axontype == 4) {
 
 				genvec.resize(genvec.size+1)
 				genvec.x[genvec.size-1] = tempnum+35
@@ -1757,6 +1008,11 @@ proc setgen() {local p, tempnum
 	}
 	
 	ns = nd^(genvec.size)
+
+	spacegen()
+	getmutation(ns)
+
+	return ns
 }
 // --------------------------------------------------------------------------------
 
@@ -1768,9 +1024,6 @@ proc setgen() {local p, tempnum
 // Cpip, which will still be optimized, but as a "silent" gene.
 
 proc spacegen() {local m, p
-
-	getphi()
-	getplow()
 	
 	spacemat.resize(nd+1, genvec.size)
 
@@ -1786,16 +1039,16 @@ proc spacegen() {local m, p
 
 
 
-// ---------------------------------getmutation-------------------------------------------
+// ---------------------------------------------------------------------------------------
 // procedure for getting  mutation possibilities, which are really just
 // permutations of all possible pspace row indices (row = 0, row = nrow-2).
 // i.e. if nd = 2, there are 2 possible pspace rows indices, representing
 // the 2 states of the variable: (row = 0, row = 1) and (row = 1, row = 2).
 
-proc getmutation() {local k localobj tempvec
-
-	tempvec = new Vector(genvec.size, 0)
-	mutmat = new Matrix(ns, tempvec.size)
+proc getmutation() {local k, m localobj tempvec
+	
+	mutmat = new Matrix($1, genvec.size)
+	tempvec = new Vector(genvec.size)
 
 	if (nd == 1) {
 
@@ -1834,68 +1087,28 @@ proc getmutation() {local k localobj tempvec
 
 
 // --------------------------------------------------------------------------------
-obfunc crchkmat() {local m
+obfunc initchkparam() {local k, p, unitsize, tempnum
 
-	// chkmat created and sized to current number of fit parameters, 
-	// and initialized to all parameters being non-optimal (=1) 
-	// and therefore eligible for further optimization
-	chkmat = new Matrix(getnp(), 1)
+	// chkparamvec (=$o3) created and sized to current number of fit parameters,
+	// and initialized to all parameters being non-optimal (=1).
+	// Note: only vector objects seem to cross the para/non-para line for functions
+	// called by init(), where init() does not take arguments, to maintain compatibility with
+	// with other calls to init().
+	$o3.resize(4*(unitsize = setnp($1, $2)))
+	
+	for p = 0, unitsize-1 {
 
-	for m = 0, chkmat.nrow-1 {
-
-		chkmat.x[m][0] = 1
+		$o3.x[p] = 1
+		$o3.x[2*unitsize+p] = 1
+		$o3.x[3*unitsize+p] = phivec.x[p]/plowvec.x[p]
 	}
 
 	// remove eligibility from already optimal or currently non-optimized parameters (in increasing order of parameter numbers)
 	if (solnvec.size) {
 
-		for m = 0, solnvec.size-1 {
+		for p = 0, solnvec.size-1 {
 
-			chkmat.x[m][0] = 0
-		}
-	}
-
-	if (strf.len(elogvec.label) && strf.len(plogvec.label)) {
-
-		if (esim == -1 && psim == -1) {
-
-			for m = 0, chkmat.nrow-1 {
-
-				chkmat.x[m][0] = 0
-			}
-		}
-	}
-
-	getmodeltype(mode_, idata)
-	getdoarg()
-	for m = 0, chkmat.nrow-1 {
-
-		if (!doargvec.x[m]) {
-
-			chkmat.x[m][0] = 0
-		}
-	}
-
-	return chkmat
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------------------------------------------------------
-obfunc chkparam() {local m, tempnum, p
-
-	$o1.resize($o1.nrow, 3)
-
-	getplow()
-	getphi()
-
-	for m = 0, $o1.nrow-1 {
-
-		if ($o1.x[m][0]) {
-
-			$o1.x[m][1] = 1
-			$o1.x[m][2] = phivec.x[m]/plowvec.x[m]
+			$o3.x[p] = 0
 		}
 	}
 
@@ -1904,322 +1117,492 @@ obfunc chkparam() {local m, tempnum, p
 		sscanf(elogvec.label, "%lf", &esim)
 		sscanf(plogvec.label, "%lf", &psim)
 
-		if (esim > -1 && psim > -1) {
+		if (esim == -1 && psim == -1) {
 
-			for m = 0, genvec.size-1 {
+			for p = 0, unitsize-1 {
 
-				$o1.x[genvec.x[m]][1] = spacemat.x[mutmat.x[psim][m]][m]
-				$o1.x[genvec.x[m]][2] = spacemat.x[mutmat.x[psim][m]+1][m]
+				$o3.x[p] = 0
 			}
-
-			tempnum = setnp(0)
-
-			for p = 0, $o1.nrow-1 {
-
-				// Na_so
-				if (p == 0+tempnum) {
-
-					// if Na_so < Na_ais, < Na_nod
-					if (RunFitParm[p].val < RunFitParm[3+tempnum].val && RunFitParm[p].val < RunFitParm[5+tempnum].val) {
-
-						$o1.x[p][0] = 0
-						$o1.x[1+tempnum][0] = 0
-						$o1.x[2+tempnum][0] = 0
-					}
-				}
-
-				// Na_ais
-				if (p == 3+tempnum) {
-					
-					if (!$o1.x[0+tempnum][0]) {
-
-						// if Na_ais > Na_int, > Na_col
-						if (RunFitParm[p].val > RunFitParm[4+tempnum].val && RunFitParm[p].val > RunFitParm[7+tempnum].val) {
-
-							$o1.x[p][0] = 0
-						}
-					}
-				}
-
-				// Na_int
-				if (p == 4+tempnum) {
-
-					if (!$o1.x[3+tempnum][0]) {
-
-						// if Na_int < Na_nod
-						if (RunFitParm[p].val < RunFitParm[5+tempnum].val) {
-
-							$o1.x[p][0] = 0	
-						}
-					}
-				}
-
-				// Na_nod
-				if (p == 5+tempnum) {
-
-					if (!$o1.x[4+tempnum][0]) {
-
-						// if Na_nod > Na_col
-						if (RunFitParm[p].val > RunFitParm[7+tempnum].val) {
-
-							$o1.x[p][0] = 0
-							$o1.x[7+tempnum][0] = 0
-						}
-					}
-
-					// no restrictive statements can definitively be made about Na_end
-					$o1.x[6+tempnum][0] = 0	
-				}
-
-				// Nap_ais
-				if (p == 8+tempnum) {
-
-					// Nap_ais > Nap_int
-					if (RunFitParm[p].val > RunFitParm[9+tempnum].val) {
-
-						$o1.x[p][0] = 0
-					}
-				}
-
-				// Nap_int
-				if (p == 9+tempnum) {
-
-					// Nap_int < Nap_ais, < Nap_nod
-					if (RunFitParm[p].val < RunFitParm[8+tempnum].val && RunFitParm[p].val < RunFitParm[10+tempnum].val) {
-
-						$o1.x[p][0] = 0
-						// Nap_nod
-						$o1.x[10+tempnum][0] = 0
-					}
-
-					// No definitive restrictions on Nap_end
-					$o1.x[11+tempnum][0] = 0
-				}
-
-				// Kv1_so
-				if (p == 12+tempnum) {
-
-					// Kv1_so < Kv1_ais, < Kv1_juxta, if present
-					if (RunFitParm[p].val < RunFitParm[15+tempnum].val) {
-
-						if (juxtaparanod) {
-
-							if (RunFitParm[p].val < RunFitParm[35+tempnum].val) {
-
-								$o1.x[p][0] = 0
-								// lc_Kv_Kv1_de
-								$o1.x[13+tempnum][0] = 0
-								// Kv1_prox
-								$o1.x[14+tempnum][0] = 0
-							}
-						
-						} else {
-
-							$o1.x[p][0] = 0
-							// lc_Kv_Kv1_de
-							$o1.x[13+tempnum][0] = 0
-							// Kv1_prox
-							$o1.x[14+tempnum][0] = 0
-						}
-					}
-				}
-
-				// Kv1_ais
-				if (p == 15+tempnum) {
-
-					if (!$o1.x[12+tempnum][0]) {
-
-						// if Kv1_ais > Kv1_int, > Kv1_nod, > Kv1_col
-						if (RunFitParm[p].val > RunFitParm[16+tempnum].val && RunFitParm[p].val > RunFitParm[17+tempnum].val && RunFitParm[p].val > RunFitParm[19+tempnum].val) {
-
-							$o1.x[p][0] = 0
-						}
-					}
-				}
-
-				// Kv1_int
-				if (p == 16+tempnum) {
-
-					// Kv1_int < Kv1_ais
-					if (!$o1.x[15+tempnum][0]) {
-
-						if (juxtaparanod) {
-
-							if (RunFitParm[p].val < RunFitParm[35+tempnum].val) {
-
-								$o1.x[p][0] = 0
-							}
-						
-						} else {
-
-							$o1.x[p][0] = 0
-						}
-					}
-				}
-
-				// Kv1_nod
-				if (p == 17+tempnum) {
-
-					// Kv1_nod < Kv1_ais
-					if (!$o1.x[15+tempnum][0]) {
-
-						if (juxtaparanod) {
-
-							if (RunFitParm[p].val < RunFitParm[35+tempnum].val) {
-
-								$o1.x[p][0] = 0
-							}
-						
-						} else {
-
-							$o1.x[p][0] = 0
-						}
-					}
-
-					// No restrictive statements can be made about Kv1_end
-					$o1.x[18+tempnum][0] = 0
-				}
-
-				// Kv1_col
-				if (p == 19+tempnum) {
-
-					// if Kv1_col < Kv1_ais
-					if (!$o1.x[15+tempnum][0]) {
-
-						if (juxtaparanod) {
-
-							if (RunFitParm[p].val < RunFitParm[35+tempnum].val) {
-
-								$o1.x[p][0] = 0
-							}
-						
-						} else {
-
-							$o1.x[p][0] = 0
-						}
-					}
-				}
-
-				// Kv_so
-				if (p == 20+tempnum) {
-
-					if (!$o1.x[13+tempnum][0]) {
-
-						$o1.x[p][0] = 0
-					}
-				}
-
-				// Kv7_so
-				if (p == 21+tempnum) {
-
-					// if Kv7_so >= Kv7_de, < Kv7_ais, < Kv7_nod
-					if (RunFitParm[p].val >= RunFitParm[22+tempnum].val && RunFitParm[p].val < RunFitParm[24+tempnum].val && RunFitParm[p].val < RunFitParm[26+tempnum].val) {
-
-						$o1.x[p][0] = 0
-						// Kv7_de
-						$o1.x[22+tempnum][0] = 0
-						// Kv7_prox
-						$o1.x[23+tempnum][0] = 0
-					}
-				}
-
-				// Kv7_ais
-				if (p == 24+tempnum) {
-
-					if (!$o1.x[21+tempnum][0]) {
-
-						// if Kv7_ais > Kv7_int, > Kv7_col
-						if (RunFitParm[p].val > RunFitParm[25+tempnum].val && RunFitParm[p].val > RunFitParm[28+tempnum].val) {
-
-							$o1.x[p][0] = 0
-						}
-					}
-				}
-
-				// Kv7_int
-				if (p == 25+tempnum) {
-
-					if (!$o1.x[24+tempnum][0]) {
-
-						// if Kv7_int < Kv7_nod && Kv7_int < Kv7_col
-						if (RunFitParm[p].val < RunFitParm[26+tempnum].val) {						
-
-							$o1.x[p][0] = 0
-						}
-					}
-				}
-
-				// Kv7_nod
-				if (p == 26+tempnum) {
-
-					if (!$o1.x[25+tempnum][0]) {
-
-						// if Kv7_nod > Kv7_col
-						if (RunFitParm[p].val > RunFitParm[28+tempnum].val) {
-
-								$o1.x[p][0] = 0
-								// Kv7_col
-								$o1.x[28+tempnum][0] = 0
-						}
-					}
-
-					// no definitive restrictions on Kv7_end
-					$o1.x[27+tempnum][0] = 0
-				}
-
-				// No restrictive statements can be made at this time on KCa, Ca, It2, H_so, tc_H_de, H_ax
-				if (p == 29+tempnum) {
-
-					$o1.x[p][0] = 0
-					$o1.x[30+tempnum][0] = 0
-					$o1.x[31+tempnum][0] = 0
-					$o1.x[32+tempnum][0] = 0
-					$o1.x[33+tempnum][0] = 0
-					$o1.x[34+tempnum][0] = 0
-				}
-
-				// Kv1_juxta
-				if (p == 35+tempnum) {
-
-					// if Kv1_juxta > Kv1_so, > Kv1_int, > Kv1_nod, > Kv1_col
-					if (!$o1.x[12+tempnum][0] && !$o1.x[16+tempnum][0] && !$o1.x[17+tempnum][0] && !$o1.x[19+tempnum][0]) {
-
-						$o1.x[35+tempnum][0] = 0
-					}
-				}
-			}			
 		}
 	}
 
-	return $o1
+	tempnum = setnp(0, 0)
+
+	for p = 0, unitsize-1 {
+
+		if (!doargvec.x[p] || !$2) {
+
+			$o3.x[p] = 0
+		}
+
+		// lc_Na_de: sufficiently restricted by Na_so		
+		if (p == 1+tempnum) {
+
+			$o3.x[p] = 0
+		}
+
+		// Na_end: no effective restriction can me made
+		if (p == 6+tempnum) {
+
+			$o3.x[p] = 0
+		}		
+
+		// Nap_ais: no clear evidence of more or less Nap anywhere along the primary axon, just its presence
+		if (p == 8+tempnum) {
+
+			$o3.x[p] = 0
+		}
+
+		// Nap_int: no clear evidence of more or less Nap anywhere along the primary axon, just its presence
+		if (p == 9+tempnum) {
+
+			$o3.x[p] = 0
+		}
+
+		// Nap_nod: no clear evidence of more or less Nap anywhere along the primary axon, just its presence
+		if (p == 10+tempnum) {
+
+			$o3.x[p] = 0
+		}
+
+		// Nap_end: no clear evidence of more or less Nap anywhere along the primary axon, just its presence
+		if (p == 11+tempnum) {
+
+			$o3.x[p] = 0
+		}
+
+		// lc_Kv1_Kv_de is sufficiently restricted by Kv1_so and Kv_so
+		if (p == 13+tempnum) {
+
+			$o3.x[p] = 0
+		}
+
+		// Kv1_end: no clear restrictions
+		if (p == 18+tempnum) {
+
+			$o3.x[p] = 0
+		}
+
+		// Kv_so: no clear restrictions
+		if (p == 20+tempnum) {
+
+			$o3.x[p] = 0
+		}
+
+		// Kv7_prox: no clear restrictions
+		if (p == 23+tempnum) {
+
+			$o3.x[p] = 0
+		}
+
+		// Kv7_end: no clear restrictions
+		if (p == 27+tempnum) {
+			
+			$o3.x[p] = 0
+		}
+
+		// KCa: no clear restrictions
+		if (p == 29+tempnum) {
+			
+			$o3.x[p] = 0
+		}
+
+		// Ca: no clear restrictions
+		if (p == 30+tempnum) {
+			
+			$o3.x[p] = 0
+		}
+
+		// It2: no clear restrictions
+		if (p == 31+tempnum) {
+			
+			$o3.x[p] = 0
+		}
+
+		// H_so: no clear restrictions
+		if (p == 32+tempnum) {
+			
+			$o3.x[p] = 0
+		}
+
+		// tc_H_de: no clear restrictions
+		if (p == 33+tempnum) {
+			
+			$o3.x[p] = 0
+		}
+
+		// H_ax: no clear restrictions
+		if (p == 34+tempnum) {
+			
+			$o3.x[p] = 0
+		}
+	}
+
+	return $o3
 }
 // --------------------------------------------------------------------------------
 
 
 
 // --------------------------------------------------------------------------------
-obfunc mutparam() {local p localobj prand, tempvec
+obfunc chkparam() {local p, unitsize, tempnum
 
-	prand = new Random()
-	tempvec = new Vector()
+	if ($1 == 1 && $2) {
 
-	for p = 0, $o1.nrow-1 {
+		if (strf.len(elogvec.label) && strf.len(plogvec.label)) {
 
-		tempvec.resize(tempvec.size+1)
+			sscanf(elogvec.label, "%lf", &esim)
+			sscanf(plogvec.label, "%lf", &psim)
 
-		if ($o1.x[p][0]) {
+			if (esim > -1 && psim > -1) {
+
+				unitsize = $o3.size/4
+
+				if (esim == 0 && psim == 0) {
+
+					for p = 0, genvec.size-1 {
+
+						$o3.x[2*unitsize+genvec.x[p]] = spacemat.x[0][p]
+						$o3.x[3*unitsize+genvec.x[p]] = spacemat.x[spacemat.nrow-1][p]
+					}
+				
+				} else {
+
+					for p = 0, genvec.size-1 {
+
+						$o3.x[2*unitsize+genvec.x[p]] = spacemat.x[mutmat.x[psim-1][p]][p]
+						$o3.x[3*unitsize+genvec.x[p]] = spacemat.x[mutmat.x[psim-1][p]+1][p]
+					}
+				}
+
+				tempnum = setnp(0, 0)
+
+				for p = 0, unitsize-1 {
+
+					if ($o3.x[p]) {
+
+						// Na_so
+						if (p == 0+tempnum) {
+
+							// if Na_so < Na_ais, and Na_nod
+							if (RunFitParm[p].val*plowvec.x[p] < RunFitParm[3+tempnum].val*plowvec.x[3+tempnum] && RunFitParm[p].val*plowvec.x[p] < RunFitParm[5+tempnum].val*plowvec.x[5+tempnum]) {
+
+								$o3.x[unitsize+p] = 0
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}
+
+						// Na_prox
+						if (p == 2+tempnum) {
+
+							// if Na_prox > Na_int, Na_col
+							if (RunFitParm[p].val*plowvec.x[p] > RunFitParm[4+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[7+tempnum].val*plowvec.x[p]) {
+
+								$o3.x[unitsize+p] = 0
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}				
+
+						// Na_ais
+						if (p == 3+tempnum) {
+
+							// if Na_ais > Na_so, Na_int, Na_col
+							if (RunFitParm[p].val*plowvec.x[p] > RunFitParm[0+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[4+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[7+tempnum].val*plowvec.x[p]) {
+
+								$o3.x[unitsize+p] = 0
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}
+
+						// Na_int
+						if (p == 4+tempnum) {
+
+							// if Na_int < Na_prox, Na_ais, Na_nod
+							if (RunFitParm[p].val*plowvec.x[p] < RunFitParm[2+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] < RunFitParm[3+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] < RunFitParm[5+tempnum].val*plowvec.x[p]) {
+
+								$o3.x[unitsize+p] = 0
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}
+
+						// Na_nod
+						if (p == 5+tempnum) {
+
+							// if Na_nod > Na_so, Na_int, Na_col
+							if (RunFitParm[p].val*plowvec.x[p] > RunFitParm[0+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[4+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[7+tempnum].val*plowvec.x[p]) {
+
+								$o3.x[unitsize+p] = 0
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}
+
+						// Na_col
+						if (p == 7+tempnum) {
+
+							// if Na_col < Na_nod, Na_ais, Na_prox
+							if (RunFitParm[p].val*plowvec.x[p] < RunFitParm[2+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] < RunFitParm[3+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] < RunFitParm[5+tempnum].val*plowvec.x[p]) {
+
+								$o3.x[unitsize+p] = 0
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}
+
+						// Kv1_so
+						if (p == 12+tempnum) {
+
+							// Kv1_so < Kv1_ais, Kv1_juxta (if present)
+							if (RunFitParm[p].val*plowvec.x[p] < RunFitParm[15+tempnum].val*plowvec.x[p]) {
+
+								$o3.x[unitsize+p] = 0
+
+								if (axontype == 4 && RunFitParm[p].val*plowvec.x[p] >= RunFitParm[35+tempnum].val*plowvec.x[p]) {
+
+									$o3.x[unitsize+p] = 1
+								}
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}
+
+						// Kv1_prox
+						if (p == 14+tempnum) {
+
+							// Kv1_prox > Kv1_int, Kv1_nod (mammals), Kv1_col
+							if (RunFitParm[p].val*plowvec.x[p] > RunFitParm[16+tempnum].val*plowvec.x[16+tempnum] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[17+tempnum].val*plowvec.x[17+tempnum] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[19+tempnum].val*plowvec.x[19+tempnum]) {
+
+								$o3.x[unitsize+p] = 0
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}
+
+						// Kv1_ais
+						if (p == 15+tempnum) {
+
+							// if Kv1_ais > Kv1_so, Kv1_int, Kv1_nod (mammals), Kv1_col
+							if (RunFitParm[p].val*plowvec.x[p] > RunFitParm[12+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[16+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[17+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[19+tempnum].val*plowvec.x[p]) {
+
+								$o3.x[unitsize+p] = 0
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}
+
+						// Kv1_int
+						if (p == 16+tempnum) {
+
+							// Kv1_int < Kv1_prox, Kv1_ais, Kv1_juxta
+							if (RunFitParm[p].val*plowvec.x[p] < RunFitParm[14+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] < RunFitParm[15+tempnum].val*plowvec.x[p]) {
+
+								$o3.x[unitsize+p] = 0
+
+								if (axontype == 4 && RunFitParm[p].val*plowvec.x[p] >= RunFitParm[35+tempnum].val*plowvec.x[p]) {
+
+									$o3.x[unitsize+p] = 1
+								}
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}
+
+						// Kv1_nod
+						if (p == 17+tempnum) {
+
+							// Kv1_nod < Kv1_prox, Kv1_ais, Kv1_juxta
+							if (RunFitParm[p].val*plowvec.x[p] < RunFitParm[14+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] < RunFitParm[15+tempnum].val*plowvec.x[p]) {
+
+								$o3.x[unitsize+p] = 0
+
+								if (axontype == 4 && RunFitParm[p].val*plowvec.x[p] >= RunFitParm[35+tempnum].val*plowvec.x[p]) {
+
+									$o3.x[unitsize+p] = 1
+								}
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}
+
+						// Kv1_col
+						if (p == 19+tempnum) {
+
+							// if Kv1_col < Kv1_prox, Kv1_ais, Kv1_juxta
+							if (RunFitParm[p].val*plowvec.x[p] < RunFitParm[14+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] < RunFitParm[15+tempnum].val*plowvec.x[p]) {
+
+								$o3.x[unitsize+p] = 0
+
+								if (axontype == 4 && RunFitParm[p].val*plowvec.x[p] >= RunFitParm[35+tempnum].val*plowvec.x[p]) {
+
+									$o3.x[unitsize+p] = 1
+								}
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}
+
+						// Kv7_so
+						if (p == 21+tempnum) {
+
+							// if Kv7_so < Kv7_ais, Kv7_nod
+							if (RunFitParm[p].val*plowvec.x[p] < RunFitParm[24+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] < RunFitParm[26+tempnum].val*plowvec.x[p]) {
+
+								$o3.x[unitsize+p] = 0
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}
+
+						// Kv7_de
+						if (p == 22+tempnum) {
+
+							// if Kv7_de < Kv7_ais, Kv7_nod
+							if (RunFitParm[p].val*plowvec.x[p] < RunFitParm[24+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] < RunFitParm[26+tempnum].val*plowvec.x[p]) {
+
+								$o3.x[unitsize+p] = 0
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}
+
+						// Kv7_ais
+						if (p == 24+tempnum) {
+
+							// if Kv7_ais > Kv7_so, Kv7_de, Kv7_int, Kv7_col
+							if (RunFitParm[p].val*plowvec.x[p] > RunFitParm[21+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[22+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[25+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[28+tempnum].val*plowvec.x[p]) {
+
+								$o3.x[unitsize+p] = 0
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}
+
+						// Kv7_int
+						if (p == 25+tempnum) {
+
+							// if Kv7_int < Kv7_ais, Kv7_nod
+							if (RunFitParm[p].val*plowvec.x[p] < RunFitParm[24+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] < RunFitParm[26+tempnum].val*plowvec.x[p]) {
+
+								$o3.x[unitsize+p] = 0
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}
+
+						// Kv7_nod
+						if (p == 26+tempnum) {
+
+							// if Kv7_nod > Kv7_so, Kv7_de, Kv7_int, Kv7_col
+							if (RunFitParm[p].val*plowvec.x[p] > RunFitParm[21+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[22+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[25+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[28+tempnum].val*plowvec.x[p]) {
+
+								$o3.x[unitsize+p] = 0
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}
+
+						// Kv7_col
+						if (p == 28+tempnum) {
+
+							// if Kv7_col < Kv7_ais, Kv7_nod
+							if (RunFitParm[p].val*plowvec.x[p] < RunFitParm[24+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] < RunFitParm[26+tempnum].val*plowvec.x[p]) {
+
+								$o3.x[unitsize+p] = 0
+							
+							} else {
+
+								$o3.x[unitsize+p] = 1
+							}
+						}
+
+						// Kv1_juxta
+						if (axontype == 4) {
+
+							if (p == 35+tempnum) {
+
+								// if Kv1_juxta > Kv1_so, Kv1_int, Kv1_nod (mammals), Kv1_col
+								if (RunFitParm[p].val*plowvec.x[p] > RunFitParm[12+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[16+tempnum].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[17].val*plowvec.x[p] && RunFitParm[p].val*plowvec.x[p] > RunFitParm[19].val*plowvec.x[p]) {
+
+									$o3.x[unitsize+p] = 0
+								
+								} else {
+
+									$o3.x[unitsize+p] = 1
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return $o3
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+obfunc mutchkparam() {local p, unitsize localobj tempvec
+	
+	unitsize = $o1.size/4
+	tempvec = new Vector(unitsize)	
+
+	for p = 0, unitsize-1 {
+
+		if ($o1.x[p] && $o1.x[unitsize+p]) {
 			
-			tempvec.x[tempvec.size-1] = prand.uniform($o1.x[p][1], $o1.x[p][2])
+			tempvec.x[p] = prand.uniform($o1.x[2*unitsize+p], $o1.x[3*unitsize+p])
 		
 		} else {
 
-			tempvec.x[tempvec.size-1] = RunFitParm[p].val
+			tempvec.x[p] = RunFitParm[p].val
 		}
 	}
 
 	return tempvec
 }
 // --------------------------------------------------------------------------------
+
 
 
 // --------------------------------------------------------------------------------
@@ -2363,30 +1746,27 @@ proc changedata() {local f localobj boundvec, weightvec, tempxvec
 
 	strdef chgdata_iampstr
 	getiamp($1, chgdata_iampstr)
-	print "Fit data changed to ", chgdata_iampstr, " voltage response"	
+	print "\nFit data changed to ", chgdata_iampstr, " voltage response"	
 }
 // --------------------------------------------------------------------------------
 
 
 
 // --------------------------------------------------------------------------------
-// $1 = iiamp
-// $2 = 0, or 1; whether to rewrite and reload associated data files and windows
-
 proc reseticlamp() {local wstart, wkill, win, interval, wcount
 	
-	{stim.amp = iampvec.x[$1]}
+	{stim.amp = iampvec.x[$3]}
 	printclamp()
-	changedata($1)
-	
-	if ($2 == 1) {
+	changedata($3)
 
-		writenum(ses, iampfilestr, iampvec.x[$1])
-		writefitdata($1)
+	if (!$4) {
 
-		writevtplot(iampvec.x[$1])
-		writevxplot(iampvec.x[$1])
-		writeshape(iampvec.x[$1])
+		writenum(ses, iampfilestr, iampvec.x[$3])
+		writefitdata($3)
+
+		writevtplot($1, $2, iampvec.x[$3])
+		writevxplot(iampvec.x[$3])
+		writeshape(iampvec.x[$3])
 
 		loadfile(1, ses, vtplotfilestr)
 		loadfile(1, ses, vxplotfilestr)
@@ -2454,19 +1834,16 @@ func getoptsoln() {local k localobj tempmat
 
 	if (getiampdir()) {
 
-		if (chkdir(iampdir, "\npmatr.dat\n") || chkdir(iampdir, "\npmatr-all.dat\n")) {
+		if (chkdir(iampdir, "\npmatr.dat") || chkdir(iampdir, "\npmatr-all.dat")) {
 
-			if (numarg() == 2 && argtype(2) == 2) {
+			if (chkdir(iampdir, "\npmatr.dat") && chkdir(iampdir, "\npmatr-all.dat")) {
 
-				if (!strcmp($s2, "all")) {
+				getmat(iampdir, "pmatr.dat", tempmat)
+			
+			} else if (!chkdir(iampdir, "\npmatr.dat") && chkdir(iampdir, "\npmatr-all.dat")) {
 
-					getmat(iampdir, "pmatr-all.dat", tempmat)
-				
-				} else {
-
-					getmat(iampdir, "pmatr.dat", tempmat)
-				}
-			}		
+				getmat(iampdir, "pmatr-all.dat", tempmat)
+			}
 
 			solnvec = new Vector(tempmat.getrow(0).size)
 
@@ -2476,26 +1853,25 @@ func getoptsoln() {local k localobj tempmat
 			}
 
 			updfitparam(solnvec)
-			getpnorm()
 
-			print "Optimal parameters loaded for ", modstr
+			print "Optimal parameters loaded for ", modstr, "/", iampstr
 
 			return solnvec.size
 		
 		} else {
 
-			print "Optimal parameters do not exist for ", modstr
+			print "Optimal parameters do not exist for ", modstr, "/", iampstr
 
-			getoptpas($1)
+			getoptpas($1, $2)
 
 			return 0
 		}
 	
 	} else {
 
-		print "Optimization directory does not exist for ", modstr
+		print "Optimization directory does not exist for ", modstr, "/", iampstr
 
-		getoptpas($1)
+		getoptpas($1, $2)
 
 		return 0
 	}
@@ -2505,44 +1881,51 @@ func getoptsoln() {local k localobj tempmat
 
 
 // --------------------------------------------------------------------------------
-func getoptpas() {local k, tempnum
-
-	tempnum = $1
-	mode_ = 0	
+func getoptpas() {local k
 	
-	if (getmod()) {
+	strdef optpas_modstr, optpas_moddir
 
-		if (chkdir(moddir, "pematr.dat")) {
+	strf.tail(modstr, "-", optpas_modstr)
+	sprint(optpas_modstr, "%s%s", "pas-", optpas_modstr)
 
-			getmat(moddir, "pematr.dat", tempmat)
+	sprint(optpas_moddir, "%s%s%s", out, optpas_modstr, "/")
+	
+	if (chkdir(out, optpas_modstr)) {
 
-			solnvec = new Vector(setnp(mode_))
+		if (chkdir(optpas_moddir, "\npematr.dat")) {
 
-			for k = 0, setnp(mode_)-1 solnvec.x[k] = tempmat.getrow(tempmat.nrow-2).x[k]
+			getmat(optpas_moddir, "pematr.dat", tempmat)
+
+			if (!$1) {
+
+				solnvec = new Vector(setnp($1, $2))
+			
+			} else {
+
+				solnvec = new Vector(setnp(0, 0))
+			}
+
+			for k = 0, solnvec.size-1 {
+
+				solnvec.x[k] = tempmat.getrow(tempmat.nrow-2).x[k]
+			}
 
 			updfitparam(solnvec)
-			getpnorm()
 
-			print "Optimal parameters loaded for ", modstr
-
-			mode_ = $1			
+			print "Optimal parameters loaded for ", optpas_modstr
 
 			return solnvec.size
 	
 		} else {
 
-			print "Optimal parameters do not exist for ", modstr
-
-			mode_ = $1
+			print "Optimal parameters do not exist for ", optpas_modstr
 
 			return 0
 		}
 	
 	} else {
 
-		print "Parameter directory does not exist for ", modstr
-
-		mode_ = $1
+		print "Parameter directory does not exist for ", optpas_modstr
 
 		return 0
 	}
@@ -2586,12 +1969,12 @@ proc ppnorm() {local k, tempnum
 
 		if (!strcmp($s1, "help")) {
 
-			print "No arguments required. Will print each pnorm."
+			print "No arguments required. Will print each active pnorm."
 			stop
 		}
 	}
 
-	tempnum = setnp(0)
+	tempnum = setnp(0, 0)
 
 	for k = tempnum, pnormvec.size-1 {
 
@@ -2641,7 +2024,7 @@ proc getsecparam() {local seg, countseg, pos, nrecrows, k localobj tempvec, temp
 	tempvec.floor
 	nrecrows = tempvec.x[0]+1
 	
-	crveclist(countseg+1, templist)
+	crveclist(templist, countseg+1)
 	
 	for k = 0, templist.count-1 {
 

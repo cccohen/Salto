@@ -161,7 +161,7 @@ proc saveiclamp() {local tempnum
 
 
 
-// -------------------------------setstimpanel-------------------------------------
+// --------------------------------------------------------------------------------
 proc setstimpanel() {local k
 
 	stimbox = new VBox(3)
@@ -211,7 +211,7 @@ proc setstimpanel() {local k
 				sprint(tempstr, "%g%s", setnsig(iampvec.x[k], 3)*1000, " pA")
 			}
 
-			sprint(stimstr, "%s%g%s", "reseticlamp(", k, ", 1) getoptsoln(mode_)")
+			sprint(stimstr, "%s%g%s", "reseticlamp(mode_, idata, ", k, ", 0) getoptsoln(mode_, idata) init()")
 
 			xradiobutton(tempstr, stimstr)
 		}

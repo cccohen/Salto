@@ -55,17 +55,17 @@ proc setdt() {local Dt
 // --------------------------------------------------------------------------------
 func gettstop() {
 
-	if (idata) {
+	if ($2) {
 
 		return tdatvec.x[tdatvec.size-1]
 	
 	} else {
 
-		if (mode_ == 0) {
+		if ($1 == 0) {
 
 			return 100
 		
-		} else if (mode_ == 1) {
+		} else if ($1 == 1) {
 
 			return 50
 		}
@@ -107,7 +107,7 @@ func settol() {local iiamp, iidel, f localobj templist
 		noisevec.append(templist.o(f).var(0, iidel))
 	}
 
-	print "\nError tolerance set to ", setnsig(setnsig(noisevec.sum, nsigv), 5), "mV^2"
+	print "Error tolerance set to ", setnsig(setnsig(noisevec.sum, nsigv), 5), "mV^2\n"
 	
 	return setnsig(noisevec.sum, nsigv)
 }
@@ -273,7 +273,7 @@ func getC() {
 
 
 
-// --------------------------------gettau------------------------------------------
+// --------------------------------------------------------------------------------
 // takes (1) secname. 
 // Outputs tau_sec (ms).
 func gettau() {
@@ -284,13 +284,13 @@ func gettau() {
 
 
 
-// -----------------------------getmaxrecdist--------------------------------------
+// --------------------------------------------------------------------------------
 // takes no argument. requires a seticlamp and recloclist.count > 0.
 // outputs maximum path length between locstim and recloc (um)
 func getmaxrecdist() {local k localobj tempvec
 
 	tempvec = new Vector()
-	loclist2sub(recloclist, subloclist)
+	subloclist = loclist2subloclist(recloclist, subloclist)
 	
 	for k = 0, recseclist.count-1 {
 		
@@ -313,7 +313,7 @@ func getmaxrecdist() {local k localobj tempvec
 func getminrecdist() {local k localobj tempvec
 
 	tempvec = new Vector()
-	loclist2sub(recloclist, subloclist)
+	loclist2subloclist(recloclist, subloclist)
 	
 	for k = 0, recseclist.count-1 {
 
@@ -554,84 +554,6 @@ func getcellori() {local x1, y1, xn, yn, normx, normy, cellangle
 
 
 // --------------------------------------------------------------------------------
-proc getpdef() {local k
-
-	pdefvec = new Vector()
-
-	for k = 0, pnamelist.count-1 {
-
-		sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_def")
-		execute(tempstr)
-		pdefvec.append(num)
-	}
-}
-// --------------------------------------------------------------------------------
-
-
-
-// ---------------------------------getp-------------------------------------------
-// takes no arguments
-// gets current p (parameters) in pvec
-proc getp() {local k
-
-	pvec = new Vector()
-
-	for k = 0, pnamelist.count-1 {
-
-		sprint(tempstr, "%s%s", "num = ", pnamelist.o(k).label)
-		execute(tempstr)
-		pvec.append(num)
-	}
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------------------------------------------------------
-// takes no arguments
-// gets current pnormdef in pnormdefvec
-proc getpnormdef() {local k
-
-	pnormdefvec = new Vector()
-
-	for k = 0, pnamelist.count-1 {
-
-		sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_norm_def")
-		execute(tempstr)
-		pnormdefvec.append(num)
-	}
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------------------------------------------------------
-proc getpnorm() {local k
-
-	if (numarg() == 1 && argtype(1) == 2) {
-
-		if (!strcmp($s1, "help")) {
-
-			print "Takes no arguments. Gets/updates current pnorm (_norm, AKA RunFitParm variables) in pnormvec."
-			print "Note: pnormvec does not track current pnorm, but what should be those sent for optimization."
-			stop
-		}
-	}
-
-	pnormvec = new Vector()
-
-	for k = 0, pnamelist.count-1 {
-
-		sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_norm")
-		execute(tempstr)
-		pnormvec.append(num)
-	}
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------------------------------------------------------
 obfunc p2pnorm() {local p, i localobj tempvec
 
 	getplow()
@@ -679,78 +601,6 @@ obfunc p2pnorm() {local p, i localobj tempvec
 
 
 
-// --------------------------------getplow-----------------------------------------
-// takes no arguments
-// gets current plow in plowvec
-proc getplow() {local k
-
-	plowvec = new Vector()
-
-	for k = 0, pnamelist.count-1 {
-
-		sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_low")
-		execute(tempstr)
-		plowvec.append(num)
-	}
-}
-// --------------------------------------------------------------------------------
-
-
-
-// ---------------------------------getphi-----------------------------------------
-// takes no arguments
-// gets current phi (defined parameter highs) in phivec
-proc getphi() {local k
-
-	phivec = new Vector()
-
-	for k = 0, pnamelist.count-1 {
-
-		sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_high")
-		execute(tempstr)
-		phivec.append(num)
-	}
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------getdoarg----------------------------------------
-// takes no arguments
-// gets current parameter doarg in doargvec
-proc getdoarg() {local k
-
-	doargvec = new Vector()
-
-	for k = 0, pnamelist.count-1 {
-
-		sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_doarg")
-		execute(tempstr)
-		doargvec.append(num)
-	}
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------getuselog---------------------------------------
-// takes no arguments
-// gets current parameter uselog in uselogvec
-proc getuselog() {local k
-
-	uselogvec = new Vector()
-
-	for k = 0, pnamelist.count-1 {
-
-		sprint(tempstr, "%s%s%s", "num = ", pnamelist.o(k).label, "_uselog")
-		execute(tempstr)
-		uselogvec.append(num)
-	}
-}
-// --------------------------------------------------------------------------------
-
-
-
 // -------------------------------getpifdel----------------------------------------
 func getpifdel() {local fdel, pifdel
 
@@ -774,7 +624,7 @@ func getpifdel() {local fdel, pifdel
 
 
 // --------------------------------------------------------------------------------
-proc writemodeltype() {
+proc write_modeltype() {
 
 	sprint(modstrtype, "%s", "")
 	sprint(modstrtype, "%s%s%s%s%s%s", celltype, "-", modeltypestr, "-", axontypestr, ".type")
@@ -799,9 +649,6 @@ proc writemodeltype() {
 
 // --------------------------------------------------------------------------------
 func getmod() {
-
-	getmodeltype(mode_, idata)
-	getaxontype(0)
 
 	sprint(modstr, "%s%s%s", modeltypestr, "-", axontypestr)
 	sprint(moddir, "%s%s%s", out, modstr, "/")

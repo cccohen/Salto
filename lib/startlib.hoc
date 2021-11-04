@@ -25,11 +25,11 @@ strdef cwd, tempstr, teststr, tempdir, testdir, tempheader, commstr, rstr, ostr,
 strdef maxform, maxnum, maxformvec
 strdef tform, tformvec, vform, vformvec
 strdef trailzero, format, numstr, numhead, powstr, headstr, tailstr
-strdef locstr, sublocstr, BBqstr, BBqstr_left, BBqstr_right
+strdef locstr, sublocstr, reclocstr, BBqstr, BBqstr_left, BBqstr_right
 strdef decpipseclist, crpipseclist, crcurpip, crfirstsec, crstarttip, crremtip, piplistappend
 strdef tokpip, strpipc, secstr, parstr, gparstr, gchstr, stimstr, durstr, delstr, wstr
 strdef upiampqstr, iampqstr, niampqstr, iampqstr_first, iampqstr_next, importqstr, axontypestr
-strdef modestr, recloclistfilestr, iampvecfilestr, vdatfilestr, iampfilestr, idelfilestr, idurfilestr, locstimfilestr
+strdef modestr, recloclistfilestr, temprecfilestr, iampvecfilestr, locstimfilestr, injvecfilestr, iampfilestr, idelfilestr, idurfilestr, vdatfilestr
 strdef runcontrolfilestr, vtplotfilestr, vxplotfilestr, shapeplotfilestr, savedatafilestr, savedatadatafilestr, savedataparamfilestr, doargfilestr
 strdef na_gatingfilestr, miscparamfilestr
 strdef SOstr, AXstr, DEstr, APstr
@@ -37,7 +37,6 @@ strdef modeltypestr, modstrtype, modstr, moddir, iampstr, iampdir, manstr, mandi
 
 idata = 0
 nrec = 0
-mintau0 = 30e-3
 piploc = 1
 stack = 0
 nstack = 500
@@ -58,8 +57,6 @@ SC = 0
 DC = 0
 DCPARA = 0
 axontypestr = "UNKNOWN"
-paranod = 0
-juxtaparanod = 0
 demy = 0
 // --------------------------------------------------------------------------------
 
@@ -221,9 +218,11 @@ obfunc getvec() {local var, nvar
 
 
 // --------------------------------------------------------------------------------
+// interprets string number data, usually stored in a vector label, into vector data.
+// to be used with getline, which returns such labels.
 obfunc getvarvec() {
 
-	sprint(rstr, "%s", $o1.label)
+	sprint(rstr, $o1.label)
 	$o1.resize(0)
 
 	while (strf.len(rstr)) {
@@ -233,12 +232,12 @@ obfunc getvarvec() {
 			$o1.resize($o1.size+1)
 			$o1.x[$o1.size-1] = num
 
-			if (strf.substr(rstr, "\t") > 1) {
+			if (strf.substr(rstr, "\t") >= 1) {
 
 				strf.tail(rstr, "\t", rstr)
 			}
 
-			if (strf.substr(rstr, "\n") > 1) {
+			if (strf.substr(rstr, "\n") >= 1) {
 
 				strf.tail(rstr, "\n", rstr)
 			}
@@ -284,7 +283,7 @@ func getstrlist() {local nstr, strn
 		chkin()
 		chdir($s1)
 
-		$o3 = crveclist(nstr, $o3)
+		$o3 = crveclist($o3, nstr)
 		
 		strn = 0
 		getfile.ropen($s2)
@@ -398,7 +397,6 @@ obfunc getline() {local nline, line, pos localobj tempvec
 // ---------------------------------getstring--------------------------------------
 // takes (1) dir, (2) filename, (3) str
 // outputs first delimited string in filename in str
-
 proc getstring() {
 
 	chkin()
@@ -418,7 +416,6 @@ proc getstring() {
 
 // --------------------------------------------------------------------------------
 // takes (1) output dir, (2) filename, (3) str, (4) append (=1) or write new (0)
-
 proc writestr() {
 	
 	chkin()
@@ -562,77 +559,86 @@ proc setfilestr() {
 
 	if ($1 == 0 && $2 == 1) {
 
-		modestr = "passive"
-		recloclistfilestr = "recloclist.dat"
+		doargfilestr = "doarg-pas.dat"
 		iampvecfilestr = "iampvec-pas.dat"
-		vdatfilestr = "vdat-pas.dat"
-		iampfilestr = "iamp-pas.dat"
-		locstimfilestr = "locstim.dat"
+		iampfilestr = "iamp-pas.dat"		
 		idelfilestr = "idel-pas.dat"
 		idurfilestr = "idur-pas.dat"
+		injvecfilestr = "injlist.dat"
+		locstimfilestr = "locstim.dat"
+		modestr = "passive"		
+		recloclistfilestr = "recloclist.dat"
 		runcontrolfilestr = "runcontrol-pas.ses"
-		vtplotfilestr = "vtplot-pas.ses"
-		vxplotfilestr = "vxplot-pas.ses"
 		shapeplotfilestr = "shapeplot-pas.ses"
 		savedatafilestr = "savedata-pas.ses"
 		savedatadatafilestr = "savedata-pas.ses.fd1"
 		savedataparamfilestr = "savedata-pas.ses.ft1"
-		doargfilestr = "doarg-pas.dat"
+		temprecfilestr = "temprec.dat"
+		vdatfilestr = "vdat-pas.dat"
+		vtplotfilestr = "vtplot-pas.ses"
+		vxplotfilestr = "vxplot-pas.ses"
 	
 	} else if ($1 == 1 && $2 == 1) {
 
-		modestr = "active"
-		recloclistfilestr = "recloclist.dat"
-		iampvecfilestr = "iampvec-act.dat"
-		vdatfilestr = "vdat-act.dat"		
+		doargfilestr = "doarg-act.dat"
 		iampfilestr = "iamp-act.dat"
-		locstimfilestr = "locstim.dat"
+		iampvecfilestr = "iampvec-act.dat"		
 		idelfilestr = "idel-act.dat"
 		idurfilestr = "idur-act.dat"
+		injvecfilestr = "injlist.dat"
+		locstimfilestr = "locstim.dat"
+		modestr = "active"		
+		recloclistfilestr = "recloclist.dat"
 		runcontrolfilestr = "runcontrol-act.ses"
-		vtplotfilestr = "vtplot-act.ses"
-		vxplotfilestr = "vxplot-act.ses"
 		shapeplotfilestr = "shapeplot-act.ses"
 		savedatafilestr = "savedata-act.ses"
 		savedatadatafilestr = "savedata-act.ses.fd1"
 		savedataparamfilestr = "savedata-act.ses.ft1"
-		doargfilestr = "doarg-act.dat"
+		temprecfilestr = "temprec.dat"
+		vdatfilestr = "vdat-act.dat"
+		vtplotfilestr = "vtplot-act.ses"
+		vxplotfilestr = "vxplot-act.ses"
 
 	} else if ($1 == 0 && $2 == 0) {
 
-		recloclistfilestr = "recloclist-def.dat"
-		iampvecfilestr = "iampvec-pas-def.dat"
+		doargfilestr = "doarg-pas-def.dat"		
 		iampfilestr = "iamp-pas-def.dat"
-		locstimfilestr = "locstim-def.dat"
+		iampvecfilestr = "iampvec-pas-def.dat"
 		idelfilestr = "idel-pas-def.dat"
 		idurfilestr = "idur-pas-def.dat"
+		injvecfilestr = "injlist-def.dat"
+		locstimfilestr = "locstim-def.dat"
+		modestr = "passive-default"
+		recloclistfilestr = "recloclist-def.dat"
 		runcontrolfilestr = "runcontrol-pas-def.ses"
+		shapeplotfilestr = "shapeplot-pas-def.ses"
+		temprecfilestr = "temprec-def.dat"
 		vtplotfilestr = "vtplot-pas-def.ses"
 		vxplotfilestr = "vxplot-pas-def.ses"
-		shapeplotfilestr = "shapeplot-pas-def.ses"
-		doargfilestr = "doarg-pas-def.dat"
 	
 	} else if ($1 == 1 && $2 == 0) {
 
-		recloclistfilestr = "recloclist-def.dat"
+		doargfilestr = "doarg-act-def.dat"		
 		iampvecfilestr = "iampvec-act-def.dat"
-		iampfilestr = "iamp-act-def.dat"
-		locstimfilestr = "locstim-def.dat"
+		iampfilestr = "iamp-act-def.dat"		
 		idelfilestr = "idel-act-def.dat"
 		idurfilestr = "idur-act-def.dat"
+		injvecfilestr = "injlist-def.dat"
+		locstimfilestr = "locstim-def.dat"
+		modestr = "active-default"
+		recloclistfilestr = "recloclist-def.dat"
 		runcontrolfilestr = "runcontrol-act-def.ses"
+		shapeplotfilestr = "shapeplot-act-def.ses"
+		temprecfilestr = "temprec-def.dat"
 		vtplotfilestr = "vtplot-act-def.ses"
 		vxplotfilestr = "vxplot-act-def.ses"
-		shapeplotfilestr = "shapeplot-act-def.ses"
-		doargfilestr = "doarg-act-def.dat"
 	}
 }
 // --------------------------------------------------------------------------------
 
 
 
-// ------------------------------getnsigmax----------------------------------------
-// takes no argument.
+// --------------------------------------------------------------------------------
 // outputs max nsig of NEURON. Based on float_epsilon.
 func getnsigmax() {local nsigmax
 
@@ -647,9 +653,7 @@ func getnsigmax() {local nsigmax
 
 
 // --------------------------------------------------------------------------------
-// takes no argument.
 // sets maximum precision format based on getnsigmax
-
 proc setmaxform() {
 
 	sprint(maxform, "%s%d%s", "%.", getnsigmax()-1, "le")
@@ -659,9 +663,7 @@ proc setmaxform() {
 
 
 // --------------------------------------------------------------------------------
-// takes no argument.
 // sets maximum precision format based on getnsigmax for vector output
-
 proc setmaxformvec() {
 
 	sprint(maxformvec, "%s%d%s\t", "%.", getnsigmax()-1, "le")
@@ -716,28 +718,56 @@ proc setvformvec() {
 
 
 // --------------------------------------------------------------------------------
-obfunc crveclist() {local nvec, k localobj tempmat
-
-	nvec = $1
-	$o2 = new List()
+obfunc crveclist() {local k localobj tempmat
 	
-	tempmat = new Matrix(1, nvec)
+	$o1 = new List()
 	
-	for k = 0, nvec-1 {
+	tempmat = new Matrix(1, $2)
+	
+	for k = 0, $2-1 {
 
-		$o2.append(tempmat.getcol(k))
+		$o1.append(tempmat.getcol(k))
 		
 		if (numarg() == 3) {
 
-			$o2.o(k).resize($3)
+			$o1.o(k).resize($3)
 
 		} else {
 
-			$o2.o(k).resize(0)
+			$o1.o(k).resize(0)
 		}		
 	}
 
-	return $o2
+	return $o1
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+obfunc resizeveclist() {local k, q localobj templist
+
+	templist = crveclist(templist, $2, $3)
+
+	for k = 0, $o1.count-1 {
+
+		for q = 0, $o1.o(k).size-1 {
+
+			templist.o(k).x[q] = $o1.o(k).x[q]
+		}
+	}
+
+	$o1 = crveclist($o1, $2, $3)
+
+	for k = 0, $o1.count-1 {
+
+		for q = 0, $o1.o(k).size-1 {
+
+			$o1.o(k).x[q] = templist.o(k).x[q]
+		}
+	}
+
+	return $o1
 }
 // --------------------------------------------------------------------------------
 
@@ -759,7 +789,7 @@ proc crvvarlist() {local k
 	}
 
 	strdef vvarstr, strtokleft, strtokright
-	crveclist($o1.count, $o2)
+	crveclist($o2, $o1.count)
 	
 	for k = 0, $o1.count-1 {
 
@@ -815,7 +845,7 @@ func getnsig() {local maxlen, curlen, k localobj tempvec, templist
 
 		templist = new List()
 
-		crveclist($o1.size, templist)
+		crveclist(templist, $o1.size)
 
 		for k = 0, templist.count-1 {
 
@@ -1133,20 +1163,43 @@ func getmat() {local nrows
 
 
 // --------------------------------------------------------------------------------
-proc import_recloc_data() {local rec, subloc, BB
-
-	crveclist(10, recloclist)
+proc importaisloc() {
 
 	sprint(tempstr, "%s", "")
+	sprint(teststr, "%s", " ")
+
+	while (strf.len(teststr) > 0) {
+
+		string_dialog("Please list axon initial segment sections (e.g. \"axon[0]\"). Return blank when done.", teststr)
+
+		sprint(tempstr, "%s%s\n", tempstr, teststr)
+	}
+
+	writestr(ses, "aisloc.dat", tempstr, 0)
+
+	sprint(tempstr, "%s", "")
+	sprint(teststr, "%s", "")
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc importreclocdata() {local rec, subloc, BB
+
+	crveclist(recloclist, 10)
+
+	sprint(tempstr, "%s", "")
+
 	for rec = 0, recloclist.count-1 {
 
 		if (rec) {
 
-			string_dialog("Please enter the next recording location, if applicable. Example: axon[10](0.5). Return blank when done.", tempstr)
+			string_dialog("Please enter the next recording location, if applicable. Format: axon[10](0.5). Return blank when done.", tempstr)
 
 		} else {
 
-			string_dialog("Please enter the injecting/recording location. Currently, only one is supported. Example: soma(0.5)", tempstr)
+			string_dialog("Please enter the injecting/recording location. Currently, only one is supported. Format: soma(0.5)", tempstr)
 		}
 
 		if (strf.len(tempstr) > 0) {
@@ -1190,7 +1243,7 @@ proc import_recloc_data() {local rec, subloc, BB
 
 	// create voltage fit variables from recording locations	
 	sublocvec = new Vector()
-	loclist = crveclist(recloclist.count, loclist)
+	loclist = crveclist(loclist, recloclist.count)
 
 	for rec = 0, loclist.count-1 {
 		
@@ -1222,7 +1275,7 @@ proc import_recloc_data() {local rec, subloc, BB
 	}
 
 	// create fit variables list
-	fitvarlist = crveclist(recloclist.count, fitvarlist)
+	fitvarlist = crveclist(fitvarlist, recloclist.count)
 
 	print "The following fit variables have been created:"
 
@@ -1255,6 +1308,21 @@ proc import_recloc_data() {local rec, subloc, BB
 		BBvec.x[BB] = 1e6*xred(BBqstr, 1, 1, 100)
 	}
 	savevec(ses, "BBvec.dat", BBvec)	
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc importblebdata() {
+
+	sprint(tempstr, "%s", "")
+
+	string_dialog("Please enter the final non-myelinated  section of the principal axon. Format: axon[20]", tempstr)
+
+	writestr(ses, "axbleb_loc.dat", tempstr, 0)
+
+	sprint(tempstr, "%s", "")
 }
 // --------------------------------------------------------------------------------
 
@@ -1418,7 +1486,7 @@ proc importv() {local k, rec, import localobj tempmat, vdatvec, tcmpvec
 		chdir(root)
 		
 		sprint(tempdir, "%s", root)
-		crveclist(nrec, vpathlist)
+		crveclist(vpathlist, nrec)
 
 		for k = 0, iampvec.size-1 {
 
@@ -1507,7 +1575,7 @@ proc importv() {local k, rec, import localobj tempmat, vdatvec, tcmpvec
 		chdir(root)
 		
 		sprint(tempdir, "%s", root)
-		crveclist(nrec, vpathlist)
+		crveclist(vpathlist, nrec)
 		
 		for rec = 0, recloclist.count-1 {
 
@@ -1682,14 +1750,14 @@ proc appenddata() {local k, iapp, iiapp, m, y, f localobj tempmat, newvdatmat
 
 
 
-// -------------------------------seclist2list-------------------------------------
+// --------------------------------------------------------------------------------
 // takes (1) seclist; (2) destlist
 // output secnames in destlist
 proc seclist2list() {local countsec, counter
 
 	countsec = 0
 	forsec $o1 countsec += 1
-	crveclist(countsec, $o2)
+	crveclist($o2, countsec)
 	
 	if (countsec == $o2.count) {
 
@@ -1707,10 +1775,28 @@ proc seclist2list() {local countsec, counter
 
 
 // --------------------------------------------------------------------------------
-// takes (1) loclist (i.e. recloclist); (2) obj
-// outputs loc as sec (= no subloc) in objlist (strlist)
+obfunc list2seclist() {local k
 
-proc loclist2sec() {local k
+	$o2 = new SectionList()
+
+	for k = 0, $o1.count-1 {
+
+		if (strf.len($o1.o(k).label)) {
+
+			forsec $o1.o(k).label $o2.append()
+		}
+	}
+
+	return $o2
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+// takes (1) loclist (i.e. recloclist); (2) obj
+// outputs loc as secname (= no subloc) in objlist (strlist)
+obfunc loclist2seclist() {local k
 
 	if (numarg() == 1 && argtype(1) == 2) {
 
@@ -1724,24 +1810,28 @@ proc loclist2sec() {local k
 		}
 	}
 
-	crveclist($o1.count, $o2)
+	$o2 = crveclist($o2, $o1.count)
 
 	for k = 0, $o1.count-1 {
 
 		strf.head($o1.o(k).label, "[(]", tempstr)
 		$o2.o(k).label(tempstr)
 	}
+
+	tempstr = ""
+
+	return $o2
 }
 // --------------------------------------------------------------------------------
 
 
 
-// ------------------------------loclist2sub---------------------------------------
+// --------------------------------------------------------------------------------
 // takes (1) loclist (i.e. recloclist); (2) obj
 // outputs subloc of loc in objlist (strlist)
-proc loclist2sub() {local k
+obfunc loclist2subloclist() {local k
 
-	crveclist($o1.count, $o2)
+	$o2 = crveclist($o2, $o1.count)
 
 	for k = 0, $o1.count-1 {
 
@@ -1749,6 +1839,10 @@ proc loclist2sub() {local k
 		strf.left(tempstr, strf.len(tempstr)-1)
 		$o2.o(k).label(tempstr)
 	}
+
+	tempstr = ""
+
+	return $o2
 }
 // --------------------------------------------------------------------------------
 
@@ -1768,6 +1862,87 @@ func sec2secnum() {local u
 	} else {
 
 		return -1
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc getcoremodeltype() {local rec, SOf, AXf, DEf
+
+	sprint(modeltypestr, "%s", "")
+	sprint(reclocstr, "%s", "")
+	DEFAULT = 0
+
+	// count locations
+	SOf = 0
+	AXf = 0
+	DEf = 0
+
+	sprint(SOstr, "%s", "soma")
+	sprint(AXstr, "%s", "axon")
+	sprint(DEstr, "%s", "dend")
+	sprint(APstr, "%s", "apic")
+
+	// define number and location of recordings
+	if (nrec) {
+
+		for rec = 0, nrec-1 {
+
+			if (strf.substr(recloclist.o(rec).label, SOstr) > -1) {
+			
+				SOf += 1
+			
+			} else if (strf.substr(recloclist.o(rec).label, AXstr) > -1) {
+			
+				AXf += 1
+			
+			} else if ((strf.substr(recloclist.o(rec).label, DEstr) > -1) || (strf.substr(recloclist.o(rec).label, APstr) > -1)) {
+
+				DEf += 1
+			}
+		}
+	}
+
+	// labels for combination of fit variables
+	SOAX = 0
+	SODE = 0
+	SO = 0
+	AX = 0
+	DE = 0
+
+	// Establish model type as a function of fit variable locations
+	if (SOf > 0 && AXf > 0 && DEf == 0) {
+
+		SOAX = 1
+		modeltypestr = "SOAX"
+
+		sprint(reclocstr, "%d%s%d%s", SOf, " somatic and ", AXf, " axonal recording locations found")
+	}
+
+	if (SOf > 0 && DEf > 0 && AXf == 0) {
+
+		SODE = 1
+		modeltypestr = "SODE"
+
+		sprint(reclocstr, "%d%s%d%s", SOf, " somatic and ", DEf, " dendritic recording locations found")
+	}
+
+	if (SOf > 0 && AXf == 0 && DEf == 0) {
+
+		SO = 1
+		modeltypestr = "SO"
+
+		sprint(reclocstr, "%d%s", SOf, " somatic recording location(s) found")
+	}
+
+	if (SOf == 0 && AXf == 0 && DEf == 0) {
+
+		DEFAULT = 1
+		modeltypestr = "DEFAULT"
+
+		sprint(reclocstr, "%s", "No recording locations found")
 	}
 }
 // --------------------------------------------------------------------------------
@@ -1831,7 +2006,7 @@ proc setcelltype() {
 // --------------------------------------------------------------------------------
 obfunc getcelltype() {local nline, k localobj celltypevec, tempvec
 
-	if (chkdir(ses, "\ncelltype.dat\n")) {
+	if (chkdir(ses, "celltype.dat\n")) {
 
 		nline = getnline(ses, "celltype.dat")
 		celltypevec = new Vector(nline)
@@ -1893,6 +2068,8 @@ obfunc getcelltype() {local nline, k localobj celltypevec, tempvec
 		}
 	}
 
+	celltypevec.label(celltype)
+
 	return celltypevec
 }
 // --------------------------------------------------------------------------------
@@ -1905,6 +2082,34 @@ proc print_celltype() {
 	print "Cell type: ", celltype
 }
 // --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc print_axontype() {
+
+	if (axontype == 1) {
+
+		print "Axon type: NOMY"
+	}
+
+	if (axontype == 2) {
+
+		print "Axon type: SC"
+	}
+
+	if (axontype == 3) {
+
+		print "Axon type: DC"
+	}
+
+	if (axontype == 4) {
+
+		print "Axon type: DCPARA"
+	}
+}
+// --------------------------------------------------------------------------------
+
 
 
 
@@ -1923,50 +2128,36 @@ func getaxontype() {local axontype
 		DC = 0
 		DCPARA = 0
 		axontypestr = "NOMY"
-
-		if (!numarg()) {
-
-			print "Axon type: NOMY"
-		}
 	
-	} else if (axontype == 2) {
+	}
+
+	if (axontype == 2) {
 
 		NOMY = 0
 		SC = 1
 		DC = 0
 		DCPARA = 0
 		axontypestr = "SC"
-
-		if (!numarg()) {
-
-			print "Axon type: SC"
-		}
 	
-	} else if (axontype == 3) {
+	}
+
+	if (axontype == 3) {
 
 		NOMY = 0
 		SC = 0
 		DC = 1
 		DCPARA = 0
 		axontypestr = "DC"
-
-		if (!numarg()) {
-
-			print "Axon type: DC"
-		}
 	
-	} else if (axontype == 4) {
+	}
+
+	if (axontype == 4) {
 
 		NOMY = 0
 		SC = 0
 		DC = 0
 		DCPARA = 1
 		axontypestr = "DCPARA"
-
-		if (!numarg()) {
-
-			print "Axon type: DCPARA"
-		}
 	}
 	
 	return axontype
@@ -2332,7 +2523,7 @@ func secoricmp() {local k, secangavg localobj templist, tempvec
 	templist = new List()
 	tempvec = new Vector()
 
-	crveclist(numarg(), templist)
+	crveclist(templist, numarg())
 
 	templist.o(0).label($s1)
 	templist.o(1).label($s2)
@@ -2508,26 +2699,33 @@ obfunc getdirlist() {local nline, line, k localobj tempobj
 
 		nline = getnline($s1, "templog.dat")
 
-		$o2 = crveclist(nline, $o2)
+		$o2 = crveclist($o2, nline)
 
-		for line = 1, nline {
+		for line = 0, nline-1 {
 
 			tempobj = getline($s1, "templog.dat", line)
-			$o2.o(line-1).label(tempobj.label)
+			
+			if (strf.len(tempobj.label)) {
+
+				if (!(strf.substr($o2.o(k).label, ".dat") > -1 || strf.substr($o2.o(k).label, ".hoc") > -1 || strf.substr($o2.o(k).label, ".ses") > -1 || strf.substr($o2.o(k).label, ".type") > -1 || strf.substr($o2.o(k).label, ".txt") > -1 || strf.substr($o2.o(k).label, ".ffs") > -1)) {
+
+					$o2.o(line).label(tempobj.label)
+				}
+			}
 		}
 
 		// remove templog
 		rmdir($s1, "templog.dat")
 
-		// clean up dirlist
+		// clean up dirlist from superfluous entries
 		k = $o2.count-1
 		
 		while (k >= 0) {
 
-		if ((strf.substr($o2.o(k).label, ".dat") > -1) || (strf.substr($o2.o(k).label, ".hoc") > -1) || (strf.substr($o2.o(k).label, ".ses") > -1)) {
+			if (!strf.len($o2.o(k).label)) {
 
-			$o2.remove(k)
-		}
+				$o2.remove(k)				
+			}
 
 			k -= 1
 		}
@@ -2570,7 +2768,7 @@ proc set_maxtime() {local maxtime_hours, line localobj templist, tempvec
 
 	if (chkdir(ses, "time.dat")) {
 
-		templist = crveclist(getnline(ses, "time.dat"), templist)
+		templist = crveclist(templist, getnline(ses, "time.dat"))
 
 		for line = 0, templist.count-1 {
 
