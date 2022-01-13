@@ -8,7 +8,7 @@
 
 // -------------------------------Variables----------------------------------------
 objref getfile, writefile, llc, strf, PWM, timer
-objref tempobj, tempmat, templist, tempseclist, tempvec, testvec, tempxvec, tempyvec, rvec
+objref tempobj, tempmat, templist, tempseclist, tempvec, testvec, tempxvec, tempyvec, temptvec, rvec
 objref recloclist, recseclist, loclist, subloclist, sublocvec, iampvec, piplist, fitvarlist, pnamelist, vvarlist, dirlist
 objref secref, tsecref, cdiamvec, pvec, pnormvec
 objref BBvec, celltypevec, injvec, vdatmat, newvdatmat, vdatlist, vdatvec, tdatvec, tcmpvec, vpathlist
@@ -43,21 +43,17 @@ nstack = 500
 countsecflag = 1
 num = 0
 pow = 0
-ll = 0
 chgdelta1 = 0
 min_weight = 10
 runtime = 0
 maxtime = 1e9
 overtime = 0
-hourlog = 1
-chkhour = 2
 
 NOMY = 0
 SC = 0
 DC = 0
 DCPARA = 0
 axontypestr = "UNKNOWN"
-demy = 0
 // --------------------------------------------------------------------------------
 
 
@@ -540,14 +536,12 @@ func chkpara() {
 	
 	if (llc.nhost == 1) {
 
-		ll = 0
+		return 0
 	
 	} else {
 
-		ll = 1
+		return 1
 	}
-
-	return ll
 }
 // --------------------------------------------------------------------------------
 
@@ -721,21 +715,24 @@ proc setvformvec() {
 obfunc crveclist() {local k localobj tempmat
 	
 	$o1 = new List()
-	
-	tempmat = new Matrix(1, $2)
-	
-	for k = 0, $2-1 {
 
-		$o1.append(tempmat.getcol(k))
-		
-		if (numarg() == 3) {
+	if ($2) {
 
-			$o1.o(k).resize($3)
+		tempmat = new Matrix(1, $2)
 
-		} else {
+		for k = 0, $2-1 {
 
-			$o1.o(k).resize(0)
-		}		
+			$o1.append(tempmat.getcol(k))
+			
+			if (numarg() == 3) {
+
+				$o1.o(k).resize($3)
+
+			} else {
+
+				$o1.o(k).resize(0)
+			}
+		}
 	}
 
 	return $o1
@@ -1170,12 +1167,32 @@ proc importaisloc() {
 
 	while (strf.len(teststr) > 0) {
 
-		string_dialog("Please list axon initial segment sections (e.g. \"axon[0]\"). Return blank when done.", teststr)
-
+		string_dialog("Please list all axon initial segment sections, beginning with e.g. \"axon[0]\"). Return blank when done.", teststr)
 		sprint(tempstr, "%s%s\n", tempstr, teststr)
 	}
 
 	writestr(ses, "aisloc.dat", tempstr, 0)
+
+	sprint(tempstr, "%s", "")
+	sprint(teststr, "%s", "")
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc importblebdata() {
+
+	sprint(tempstr, "%s", "")
+	sprint(teststr, "%s", " ")
+
+	while (strf.len(teststr) > 0) {
+
+		string_dialog("Please enter all sections of the non-myelinated principal axon end-bulb. Format: \"axon[20]\". Return blank when done.", teststr)
+		sprint(tempstr, "%s%s\n", tempstr, teststr)
+	}
+
+	writestr(ses, "axblebloc.dat", tempstr, 0)
 
 	sprint(tempstr, "%s", "")
 	sprint(teststr, "%s", "")
@@ -1308,21 +1325,6 @@ proc importreclocdata() {local rec, subloc, BB
 		BBvec.x[BB] = 1e6*xred(BBqstr, 1, 1, 100)
 	}
 	savevec(ses, "BBvec.dat", BBvec)	
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------------------------------------------------------
-proc importblebdata() {
-
-	sprint(tempstr, "%s", "")
-
-	string_dialog("Please enter the final non-myelinated  section of the principal axon. Format: axon[20]", tempstr)
-
-	writestr(ses, "axbleb_loc.dat", tempstr, 0)
-
-	sprint(tempstr, "%s", "")
 }
 // --------------------------------------------------------------------------------
 
@@ -2114,9 +2116,6 @@ proc print_axontype() {
 
 
 // --------------------------------------------------------------------------------
-// takes (1) optional quiet argument = anything. requires axontype.dat in ses.
-// outputs axontype (1-5) and associated myelin code (nomy, DC, SC, etc)
-
 func getaxontype() {local axontype
 
 	axontype = getvar(ses, "axontype.dat")
@@ -2160,6 +2159,34 @@ func getaxontype() {local axontype
 		axontypestr = "DCPARA"
 	}
 	
+	return axontype
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+func changeaxontype() {local ans
+
+	print "\nChange Axon Type"
+
+	if (!numarg()) {
+
+		tempstr = "\nPlease select one from the following axon types:\n1 = no myelin\n2 = single cable\n3 = double cable without paranodes\n4 = double cable with paranodes\n"
+		ans = xred(tempstr, axontype, 1, 4)
+
+		writebit(ses, "axontype.dat", ans)
+
+		tempstr = ""
+	
+	} else {
+
+		writebit(ses, "axontype.dat", $1)		
+	}
+	
+	axontype = getaxontype()
+	print_axontype()
+
 	return axontype
 }
 // --------------------------------------------------------------------------------
@@ -2785,5 +2812,31 @@ proc set_maxtime() {local maxtime_hours, line localobj templist, tempvec
 
 	writestr(ses, "time.dat", tempstr)
 	sprint(tempstr, "%s", "")
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+func indwherelast() {local k
+
+	k = $o1.size-1
+
+	if (!strcmp($s2, ">")) {
+		
+		while (k >= 0) {
+
+			if ($o1.x[k] > $3) {
+
+				break
+			
+			} else {
+
+				k -= 1
+			}	
+		}
+	}
+
+	return k
 }
 // --------------------------------------------------------------------------------

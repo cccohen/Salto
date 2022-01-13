@@ -55,7 +55,7 @@ proc extractopt() {local k, xopt, ans localobj dirlist
 proc extract_log() {local nline, line, nrows, k, f, qstart, q, exitcount localobj tempvec, tempobj, tempmat, rvec
 
 	sprint(logstr, "%s%s", $s2, "log")
-	sprint(testdir, "%s\n", logstr)
+	sprint(testdir, "\n%s", logstr)
 
 	if (chkdir($s1, testdir)) {
 
@@ -99,51 +99,53 @@ proc extract_log() {local nline, line, nrows, k, f, qstart, q, exitcount localob
 
 		if (!strcmp($s2, "e")) {
 
-			sprint(logmatstr, "%s", "elogmat.dat")
+			sprint(logmatstr, "%s", "logemat.dat")
 			sprint(format, "%s", vformvec)
 		}
 		
 		if (!strcmp($s2, "p")) {
 
-			sprint(logmatstr, "%s", "plogmat.dat")
+			sprint(logmatstr, "%s", "logpmat.dat")
 		}
 
-		if (chkdir($s1, logmatstr)) {
+		sprint(teststr, "\n%s", logmatstr)		
+
+		if (chkdir($s1, teststr)) {
 
 			print "\nExtracting ", logstr, "..."
 
 			sprint(logdir, "%s%s%s", $s1, logstr, "/")
 			sprint(commstr, "%s%s%s", "ls", " ", logdir)
 
-			sprint(outstr, "%s", "")
-			system(commstr, outstr)
+			sprint(datastr, "%s", "")
+			system(commstr, datastr)
 
-			strf.left(outstr, strf.len(outstr)-1)
+			if (strf.len(datastr)) {
 
-			writestr($s1, "templog.dat", outstr, 0)
+				strf.left(datastr, strf.len(datastr)-1)
 
-			nline = getnline($s1, "templog.dat")
+				writestr($s1, "templog.dat", datastr, 0)
 
-			tempvec = new Vector(nline)
+				nline = getnline($s1, "templog.dat")
 
-			for line = 0, nline-1 {
+				tempvec = new Vector(nline)
 
-				tempobj = getline($s1, "templog.dat", line)
-				sscanf(tempobj.label, "%lf", &tempvec.x[line])
-			}
+				for line = 0, nline-1 {
 
-			rmdir($s1, "templog.dat")
+					tempobj = getline($s1, "templog.dat", line)
+					sscanf(tempobj.label, "%lf", &tempvec.x[line])
+				}
 
-			nrows = getmat($s1, logmatstr, tempmat)
+				rmdir($s1, "templog.dat")
 
-			for k = 0, tempvec.size-1 {
+				nrows = getmat($s1, logmatstr, tempmat)
 
-				sprint(filestr, "%g%s", tempvec.x[k], ".dat")
-				tempobj = getvarvec(tempobj = getline(logdir, filestr, 0))
+				for k = 0, tempvec.size-1 {
 
-				if (tempobj.size) {
+					sprint(filestr, "%g%s", tempvec.x[k], ".dat")
+					tempobj = getvarvec(tempobj = getline(logdir, filestr, 0))
 
-					if (strcmp($s2, "v")) {
+					if (tempobj.size) {
 
 						if (tempobj.size > tempmat.ncol) {
 
@@ -151,48 +153,51 @@ proc extract_log() {local nline, line, nrows, k, f, qstart, q, exitcount localob
 						}
 
 						tempmat.setrow(tempvec.x[k], tempobj)
-				
-					} else {
+					}
+				}
 
-						for f = 0, nf-1 {
+				if (!strcmp($s2, "exit")) {
+					
+					sprint(format, "%s", "%g\t")
+					exitcount = 0
 
-							qstart = f*nrows
-			
-							for q = 0, nrows-1 {
+					for k = 0, tempmat.nrow-1 {
 
-								tempmat.x[q][nf*tempvec.x[k]+f+1] = tempobj.x[qstart+q]
+						if (tempmat.x[k][1]) {
+
+							if (mode_ == 0) {
+
+								exitcount += 1
+
+							} else {
+
+								if (tempmat.x[k][0]) {
+
+									exitcount += 1
+								}
 							}
 						}
 					}
-				}
+
+					print "\n", exitcount, "of ", tempmat.nrow, "optimizations completed both fast and slow components of the NU algorithm in folder:\n", $s1
+					print "Therefore, ", tempmat.nrow-exitcount, "core(s) is/are required for the next round of optimizations.\n"
+				}			
+
+				savemat($s1, logmatstr, tempmat, format, tempheader)
+
+				print "...Extraction completed for ", logstr
+			
 			}
-
-			if (!strcmp($s2, "exit")) {
-				
-				sprint(format, "%s", "%g\t")
-				exitcount = 0
-
-				for k = 0, tempmat.nrow-1 {
-
-					if (tempmat.x[k][0] && tempmat.x[k][1]) {
-
-						exitcount += 1
-					}
-				}
-
-				print "\n", exitcount, "of ", tempmat.nrow, "optimizations completed both fast and slow components of the NU algorithm."
-				print "Therefore, ", tempmat.nrow-exitcount, "core(s) is/are required for the next round of optimizations.\n"
-			}			
-
-			savemat($s1, logmatstr, tempmat, format, tempheader)
-
-			print "...Extraction completed for ", logstr
 
 		} else {
 
 			saveopt($s1, getscount(mode_, idata, axbleb_exists))
 			extract_log($s1, $s2)
 		}
+	
+	} else {
+
+		print "\nNo optimization data to extract in: ", logstr
 	}
 }
 // ---------------------------------------------------------------------------------------

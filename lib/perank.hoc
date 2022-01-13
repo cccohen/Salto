@@ -167,16 +167,17 @@ proc nnopt() {local m, p localobj tempmat, temppmat
 
 
 // ---------------------------------------------------------------------------------------
-proc tstat() {localobj tempmat
+proc tstat() {localobj tempmat, tempvec
 
 	// get stats for tmat
-	if (chkdir($s1, "\ntmat.dat\n")) {
+	if (chkdir($s1, "\ntmat.dat")) {
 
 		getmat($s1, "tmat.dat", tempmat)
 		tempmat = delzeromat(tempmat)
+		tempvec = delzerovec(tempmat.getcol(tempmat.ncol-1))
 
-		print "Total number of simulations: ", tempmat.nrow
-		print "Average simulation time: ", setnsig(tempmat.getcol(0).mean/3600, 3), "hour(s)"
+		print "\nTotal simulations performed: ", tempvec.size
+		print "Average simulation time: ", setnsig(tempvec.mean/3600, 3), "hour(s)"
 	}
 }
 // ---------------------------------------------------------------------------------------

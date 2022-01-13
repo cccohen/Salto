@@ -24,7 +24,7 @@ proc defmorph_sp() {
 
 	// default, rat S1 L5tt	
 	dens_sp = 0.5
-	// default asp, estimate for rat based on extrapolation from mouse estimates (Cohen et al. 2020)
+	// default asp, estimate for rat based on extrapolation from mouse estimates of ~1 um2 (Knott et al. 2006)
 	asp = 2
 	
 	if (celltypevec.x[0] == 1 && celltypevec.x[1] == 1 && celltypevec.x[2] == 1) {
@@ -33,28 +33,24 @@ proc defmorph_sp() {
 		asp = 2
 	}
 
-	if (celltypevec.x[0] == 2 && celltypevec.x[1] == 2 && celltypevec.x[2] == 2) {
+	if (celltypevec.x[0] == 2 && celltypevec.x[1] == 2 && celltypevec.x[2] == 1) {
 
-		dens_sp = 0.21
+		// Benavides-Piccione 2021, layer V temporal cortex (T2b).
+		dens_sp = 0.2
+		// see above
 		asp = 3.9
 	}
 }
 
 // dependence of spine location from soma
 // L2/3, rat, V1, basal/oblique 20um, apical trunk 75um (Larkman 1991)
-// L2/3, human, TeAC, basal/oblique 60um, apical trunk 100 um (Benavides-Piccione et al. 2013)
+// L2/3 and L5, human, temporal cortex, basal/oblique: 20 um, apical trunk: 100 um (Benavides-Piccione et al. 2021; 2013).
 // L5tt, rat, V1, basal/oblique 20um, apical trunk 100um (Larkman 1991)
 proc defdist_sp() {
 
 	distbas_sp = 20
 	distapic_sp = 20
 	distaptrunk_sp = 100
-
-	if (celltypevec.x[0] == 2) {
-
-		distbas_sp = 60
-		distapic_sp = 100
-	}
 }
 	
 // Get basal and apical length and area to which spinescaling applies.

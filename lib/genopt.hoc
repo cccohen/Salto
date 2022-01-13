@@ -7,10 +7,7 @@
 
 
 // -------------------------------------Variables-----------------------------------------
-objref rpmat, eqvec, pqvec, simvec, uoptvec, exitlist
-objref tempemat, temppmat
-
-strdef rampstr1, rampstr2, rampstr3, rampstr4, rampstr5, rampstr6, logdir
+objref rpmat, uoptvec
 
 // Maximum number of simulations on a given supercomputer at a given time
 // Comet and Stampede2 RAM allocations force a maximum number of 2^12 simulations.
@@ -31,26 +28,34 @@ ucounter = 0
 // $3 = ll
 // $4 = uopt
 // $o5 = p from pmat
-// $6 = tol
-// $7 = maxstepsize
-// $o8 = eqvec from eqlist
-// $o9 = pqvec from pqlist
-// $10 = sim
-// $11 = scount
-// $o12 = exitlist vec
-// $13 (extra argument) = hoc_ac_ = id, which genopt sends on its own to optimize
-// $14 = ucount, local variable determining if simulation could not finish due to lack of time
-// $15 = exit_case, by default 0 (no exit) unless certain criteria are met (see optimize())
+// $o6 = eqvec from eqlist
+// $o7 = pqvec from pqlist
+// $8 = sim
+// $9 = scount
+// $o10 = exitlist vec
+// $o11 = simulation cycle (time) vector.
+// $12 (extra argument) = hoc_ac_, a unique optimization id variable
+// $13 (extra argument) = ucount, a local variable determining if simulation could not finish due to lack of time
+// $14 (extra argument) = exit_case, by default 0 (no exit) unless certain criteria are met (see optimize())
 
-func orgopt() {local k, p, ucount, exit_case
+func orgopt() {local tolopt, maxstepsizeopt, ind, lastsim, p, ucount, exit_case
+
+	reseticlamp(mode_, idata, $1, 0, !$3)
+	tolopt = settol($1, !$3)
+	maxstepsizeopt = setmaxstepsize(tolopt)
 
 	// pelog needs to occur before calls to change weight, which call efun(), which calls init()
-	// which calls upd/savepelog(), which uses the pelog labels to identify whether and which
-	// sim is operating.
-	// pelog() only sets log vector labels
-	pelog($10, $10)
-
-	print "\nRunning simulation ", $10+1, "of ", $11+1
+	// which calls upd/savepelog(), which uses the pelog labels to identify whether and which sim is operating.
+	// pelog() only sets log vector labels.
+	// the full simulation number includes the cycle number, i.e. how many x-hour cycles are being run for simulation y.
+	// represented as sim = y.x
+	ind = indwherelast($o11, ">", float_epsilon)+1
+	
+	sprint(tempstr, "%d%s%d", $8, ".", ind)
+	pelog(tempstr, tempstr)
+	
+	getiamp($1, iampstr)
+	print "\nRunning simulation ", $8+1, "of ", $9+1, "for injection amplitude ", iampstr
 
 	// assign fit parameters
 	for p = 0, $o5.size-1 {
@@ -59,22 +64,21 @@ func orgopt() {local k, p, ucount, exit_case
 	}
 
 	// exit case fast sim finished, start slow
-	if ($o12.x[0] && !$o12.x[1]) {
+	if ($o10.x[0] && !$o10.x[1]) {
 
-		add_weight($2, 1)
+		add_weight($2, idata)
 	}
-	
-	initfit($2, 1)
 
-	adj_injbound($2)
+	initfit($2, idata)
+	adj_injbound($2, !$3)
 
 	// ucount = 0 if simulation did not complete due to overtime
-	ucount = 0	
+	ucount = 0
 	// exit_case by default is 0 (= no exit), unless there is a reason to exit (=1)
 	exit_case = 0
 
 	// for simplicity, everything received by genopt is sent to optimize, in order
-	optimize($1, $2, $3, $4, $o5, $6, $7, $o8, $o9, $10, $11, $o12, hoc_ac_, ucount, exit_case)
+	optimize($1, $2, $3, $4, $o5, tolopt, maxstepsizeopt, $o6, $o7, $8, $9, $o10, $o11, hoc_ac_, ucount, exit_case)
 
 	// the number of calls to genopt gets counted
 	return 1
@@ -86,10 +90,10 @@ func orgopt() {local k, p, ucount, exit_case
 // ---------------------------------------------------------------------------------------
 // The NU algorithm.
 
-// Description: a "just-enough" or sufficiency approach to optimization, ideal 
+// Description: a "just-enough" approach to optimization, ideal 
 // for unevenly distributed parameters, such as myelin over a primary axon, 
-// or weakly-constrained parameters in general, due to intrinsic noise or possibly
-// other factors.
+// or weakly-constrained parameters in general, due to intrinsic noise or
+// other noise-generating factors.
 
 // $1 = iiamp
 // $2 = mode_
@@ -103,11 +107,12 @@ func orgopt() {local k, p, ucount, exit_case
 // $10 = sim
 // $11 = scount
 // $o12 = exitlist vec
-// $13 = hoc_ac_ = id, which genopt sends on its own to optimize
-// $14 = ucount, local variable determining if simulation could not finish due to lack of time
-// $15 = exit_case, by default 0 (no exit) unless certain criteria are met (see optimize())
+// $o13 = simulation cycle (time) vector.
+// $14 = hoc_ac_ = id, which genopt sends on its own to optimize
+// $15 = ucount, local variable determining if simulation could not finish due to lack of time
+// $16 = exit_case, by default 0 (no exit) unless certain criteria are met (see optimize())
 
-proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec, weightvec, tempxvec, tempvec
+proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec, weightvec, tempvec, tempmat, tempxvec, temptvec
 
 	// variable tracking whether optimize is running
 	fitoff = 0
@@ -129,7 +134,23 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 		
 		for f = 0, nf-1 {
 
-			// save previous boundaries
+			// save current time data
+			temptvec = new Vector(RegionFitness[f].xdat.size)
+
+			for k = 0, temptvec.size-1 {
+
+				temptvec.x[k] = RegionFitness[f].xdat.x[k]
+			}
+
+			// save current bounded time data
+			tempxvec = new Vector(RegionFitness[f].xdat_.size)
+
+			for k = 0, tempxvec.size-1 {
+
+				tempxvec.x[k] = RegionFitness[f].xdat_.x[k]
+			}
+
+			// save current boundaries
 			boundvec = new Vector(RegionFitness[f].boundary.size)
 			
 			for k = 0, boundvec.size-1 {
@@ -137,7 +158,7 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 				boundvec.x[k] = RegionFitness[f].boundary.x[k]
 			}
 
-			// save previous weights
+			// save current weights
 			weightvec = new Vector(RegionFitness[f].weight.size)
 			
 			for k = 0, weightvec.size-1 {
@@ -145,27 +166,15 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 				weightvec.x[k] = RegionFitness[f].weight.x[k]
 			}			
 
-			// set new (default) boundaries
+			// create new (default) boundaries
 			RegionFitness[f].boundary = new Vector(2)
 			
 			RegionFitness[f].boundary.x[0] = RegionFitness[f].xdat.x[0]
 			RegionFitness[f].boundary.x[1] = RegionFitness[f].xdat.x[RegionFitness[f].xdat.size-1]
 			
-			// make these new boundaries effective (must use different xdat vector)
-			tempxvec = new Vector(RegionFitness[f].xdat.size)
-
-			for k = 0, tempxvec.size-1 {
-
-				tempxvec.x[k] = RegionFitness[f].xdat.x[k]
-			}
-
-			RegionFitness[f].set_modelx(tempxvec)
-
-			// ensure yveclist vector of the fit generator is of the correct size, i.e. the default
-			// for a correct call to meansqerr by RegionFitness[f].ydat_, comparing FitnessGenerator[0].yveclist.o(f) to RegionFitness[f].dw_
-			// for that comparison to work, yveclist.o(f).size must equal that of RegionFitness[f].dw_ and RegionFitness[f].ydat_, both of which
-			// are now default, i.e. RegionFitness[f].xdat.size.
-			FitnessGenerator[0].yveclist.o(f).resize(RegionFitness[f].xdat.size)
+			// set these new boundaries (must use different xdat vector)
+			// use whole tdat
+			RegionFitness[f].set_modelx(temptvec)
 			
 			nopelog()
 			// generate error function
@@ -199,10 +208,12 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 				RegionFitness[f].weight.x[k] = weightvec.x[k]
 			}
 			
+			// set these new boundaries and weights (must use different xdat vector)
+			// use bounded tdat
 			RegionFitness[f].set_modelx(tempxvec)
 
 			// restore correct FitnessGenerator yveclist vector fit size
-			FitnessGenerator[0].yveclist.o(f).resize(RegionFitness[f].xdat_.size)
+			FitnessGenerator[0].yveclist.o(f).resize(tempxvec.size)
 		}
 
 		// pqvec from pqlist is resized to accomodate the new resultant parameters (+getnp())
@@ -223,14 +234,14 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 		// overview of exitmat codes:
 		// column 0: number of optimization type (currently 0 and 1)
 		// column 1: whether optimization unfinished (0) or finished (1)
-		// column 2: step-back (0 or 1 +1)
+		// column 2: step-back (0 or 1)
 		if (overtime) {
 
 			print "\nCompleted simulation ", $10+1, "of ", $11+1, "at ", iampstr, " in ", setnsig(runtime/3600, 3), "hour(s)"
 			print "Reason for exit: runtime is over set maximum of ", setnsig(maxtime/3600, 3), "hour(s) (simulation ", $10+1, "of ", $11+1, "at ", iampstr, ")"
 
-			$14 = 1
-			$15 = 1			
+			$15 = 1
+			$16 = 1			
 
 			$o12.x[1] = 0
 			$o12.x[2] = 0
@@ -247,7 +258,7 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 					print "\nCompleted simulation ", $10+1, "of ", $11+1, "at ", iampstr, " in ", setnsig(runtime/3600, 3), "hour(s)"
 					print "Reason for exit: error is below set threshold of ", $6, "mV^2 (simulation ", $10+1, "of ", $11+1, "at ", iampstr, ")"
 
-					$15 = 1
+					$16 = 1
 
 					if (nquad_ == 1) {
 
@@ -278,7 +289,7 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 					print "\nCompleted simulation ", $10+1, "of ", $11+1, "at ", iampstr, " in ", setnsig(runtime/3600, 3), "hour(s)"
 					print "Reason for exit: error improvement is decreasing and below set threshold, or error is below set threshold of ", $6, "mV^2 (simulation ", $10+1, "of ", $11+1, "at ", iampstr, ")"
 
-					$15 = 1
+					$16 = 1
 
 					$o12.x[1] = 1
 					$o12.x[2] = 1
@@ -294,7 +305,7 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 			}
 		}
 
-		if ($15) {
+		if ($16) {
 
 			exite = -($o12.x[2]+1)*(nf+1)-1
 			exitp = -($o12.x[2]+1)*getnp()
@@ -372,21 +383,41 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 
 				// ---------------------------t---------------------------
 				tempvec = new Vector()
-				tempvec.resize(tempvec.size+1)
+
+				if ($o13.size) {
+
+					tempvec.resize($o13.size+1)
+
+					for k = 0, tempvec.size-2 {
+
+						tempvec.x[k] = $o13.x[k]
+					}
+				
+				} else {
+
+					tempvec.resize(1)
+				}
+				
 				tempvec.x[tempvec.size-1] = vvec.x[vvec.size-1]
 
 				savelog(iampdir, "t", tempvec, tformvec, $10)
+
+				vvec.resize(vvec.size-1)
 				// -------------------------------------------------------
 
 				// ---------------------------v---------------------------
-				tempvec = new Vector(vvec.size-1)
-				
-				for k = 0, tempvec.size-1 {
+				tempmat = new Matrix(RegionFitness[0].xdat.size, nf+1)
+				tempmat.setcol(0, RegionFitness[0].xdat)
 
-					tempvec.x[k] = vvec.x[k]
+				for f = 0, nf-1 {
+
+					for k = 0, tempmat.nrow-1 {
+
+						tempmat.x[k][f+1] = vvec.x[k+f*tempmat.nrow]
+					}
 				}
 				
-				savelog(iampdir, "v", tempvec, vformvec, $10)
+				savelog(iampdir, "v", tempmat, vformvec, $10)
 				// -------------------------------------------------------
 
 				print "\nResults saved for simulation ", $10+1, "of ", $11+1, "at ", iampstr
@@ -397,12 +428,12 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 		
 		} else {
 
-			optimize($1, $2, $3, $4, $o5, $6, $7, $o8, $o9, $10, $11, $o12, $13, $14, $15)
+			optimize($1, $2, $3, $4, $o5, $6, $7, $o8, $o9, $10, $11, $o12, $o13, $14, $15, $16)
 		}
 	}
 
 	// send out uopt statistic
-	data_out($13, $3, $14, $o12)
+	data_out($14, $3, $15, $o12)
 }
 // ---------------------------------------------------------------------------------------
 
@@ -571,11 +602,11 @@ proc getrpmat() {
 // $1 = k, iampvec pos
 // $2 = scount
 // $3 = istart
-func loaduopt() {local uopt, k, q, r, p, ind, f localobj tempmat, tempvec, tempemat, temppmat
+func loaduopt() {local uopt, k, q, r, p, ind, f localobj tempmat, tempvec
 
 	uopt = 0
 
-	if (chkdir($s1, "\nexitmat.dat\n")) {
+	if (chkdir($s1, "\nexitmat.dat")) {
 
 		getmat($s1, "exitmat.dat", tempmat)
 
@@ -623,62 +654,67 @@ func loaduopt() {local uopt, k, q, r, p, ind, f localobj tempmat, tempvec, tempe
 
 	if (uoptvec.size) {
 
-		getrpmat($2, $s1)
-
-		getmat($s1, "eqmat.dat", tempemat)
-		getmat($s1, "pqmat.dat", temppmat)
-			
+		// add into eqlist previous (completed quad) errors + current error (not necessarily from a completed quad)
+		getmat($s1, "eqmat.dat", tempmat)
+		
 		q = 0
 		k = simvec.x[q]
 		while (k <= simvec.x[simvec.size-1]) {
 
-			// initialized to rp
-			pmat.setrow($3*($2+1)+k, rpmat.getrow(k))
-
 			// if previous results have been saved, then load and re-initialize with those
-			if ((ind = tempemat.getrow(k).indwhere("<", float_epsilon)) > -1) {
+			if ((ind = tempmat.getrow(k).indwhere("<", float_epsilon)) > -1) {
 
 				eqlist.o($3*($2+1)+k).resize(0)
-				pqlist.o($3*($2+1)+k).resize(0)						
 
-				// add everything into eqlist up to where the exitcode indicates start of relevant error series
-				if (ind+tempemat.getrow(k).x[ind] > nf+1) {
-
-					for r = 0, ind+tempemat.getrow(k).x[ind]-1 {
-
-						eqlist.o($3*($2+1)+k).resize(eqlist.o($3*($2+1)+k).size+1)
-						eqlist.o($3*($2+1)+k).x[eqlist.o($3*($2+1)+k).size-1] = tempemat.getrow(k).x[r]
-					}
-				}
-
-				// add the final, relevant error series without tol or the exit code
-				for f = 0, nf {
+				// ind-2 to exclude the step-back code (ind) and tol (ind-2)
+				for r = 0, ind-2 {
 
 					eqlist.o($3*($2+1)+k).resize(eqlist.o($3*($2+1)+k).size+1)
-					eqlist.o($3*($2+1)+k).x[eqlist.o($3*($2+1)+k).size-1] = tempemat.getrow(k).x[f+ind+tempemat.getrow(k).x[ind]]
+					eqlist.o($3*($2+1)+k).x[eqlist.o($3*($2+1)+k).size-1] = tempmat.getrow(k).x[r]
 				}
+			}
 
-				// do the same for the parameter series: find the index of the exitcode
-				ind = temppmat.getrow(k).indwhere("<", float_epsilon)
+			q += 1
 
-				// add everything into pqlist up to where exitcode indicates
-				if (ind+temppmat.getrow(k).x[ind] > getnp()-1) {
+			if (q < simvec.size) {
 
-					for r = 0, ind+temppmat.getrow(k).x[ind]-1 {
+				k = simvec.x[q]
 
-						pqlist.o($3*($2+1)+k).resize(pqlist.o($3*($2+1)+k).size+1)
-						pqlist.o($3*($2+1)+k).x[pqlist.o($3*($2+1)+k).size-1] = temppmat.getrow(k).x[r]
-					}
-				}
+			} else {
 
-				// add the final, relevant parameter series without the exitcode, which coincidentally
-				// will also be used to start the new optimization, and therefore be put into pmat
-				for p = ind+temppmat.getrow(k).x[ind], ind+temppmat.getrow(k).x[ind]+getnp()-1 {
+				k = simvec.x[simvec.size-1]+1
+			}
+		}
+
+		// do the same for the biophysical parameters
+		getrpmat($2, $s1)
+		getmat($s1, "pqmat.dat", tempmat)
+
+		q = 0
+		k = simvec.x[q]
+		while (k <= simvec.x[simvec.size-1]) {
+
+			// initialize pmat to rpmat
+			pmat.setrow($3*($2+1)+k, rpmat.getrow(k))
+
+			if ((ind = tempmat.getrow(k).indwhere("<", float_epsilon)) > -1) {
+
+				pqlist.o($3*($2+1)+k).resize(0)
+
+				// add into pqlist previously completed quad parameters + current parameters (not necessarily from a completed quad)
+				// ind-1 to exclude the step-back code (ind)
+				for p = 0, ind-1 {
 
 					pqlist.o($3*($2+1)+k).resize(pqlist.o($3*($2+1)+k).size+1)
-					pqlist.o($3*($2+1)+k).x[pqlist.o($3*($2+1)+k).size-1] = temppmat.getrow(k).x[p-ind-temppmat.getrow(k).x[ind]]
+					pqlist.o($3*($2+1)+k).x[pqlist.o($3*($2+1)+k).size-1] = tempmat.getrow(k).x[p]
+				}
 
-					pmat.x[$3*($2+1)+k][p-ind-temppmat.getrow(k).x[ind]] = temppmat.getrow(k).x[p-ind-temppmat.getrow(k).x[ind]]
+				// add current parameters (not necessarily from a completed quad) into pmat, for optimization
+				r = 0
+				for p = pqlist.o($3*($2+1)+k).size-getnp(), pqlist.o($3*($2+1)+k).size-1 {
+
+					pmat.x[$3*($2+1)+k][r] = pqlist.o($3*($2+1)+k).x[p]
+					r += 1
 				}
 			}
 
@@ -692,18 +728,51 @@ func loaduopt() {local uopt, k, q, r, p, ind, f localobj tempmat, tempvec, tempe
 
 				k = simvec.x[simvec.size-1]+1
 			}				
-		}
+		}		
 
-		uopt = 1			
+		uopt = 1
+		
+		// load previous t
+		getmat($s1, "tmat.dat", tempmat)
+
+		q = 0
+		k = simvec.x[q]
+		while (k <= simvec.x[simvec.size-1]) {
+
+			tlist.o($3*($2+1)+k).resize(0)
+
+			// if previous results have been saved, then load those times
+			if ((ind = indwherelast(tempmat.getrow(k), ">", float_epsilon)) > -1) {
+
+				tlist.o($3*($2+1)+k).resize(ind+1)
+
+				// ind-2 to exclude the step-back code (ind) and tol (ind-2)
+				for r = 0, ind {
+
+					tlist.o($3*($2+1)+k).x[r] = tempmat.getrow(k).x[r]
+				}
+			}
+
+			q += 1
+
+			if (q < simvec.size) {
+
+				k = simvec.x[q]
+
+			} else {
+
+				k = simvec.x[simvec.size-1]+1
+			}
+		}
 	}
 
 	if (uopt) {
 
-		print "\nUnfinished optimization check passed..."
+		print "\nUnfinished optimization check passed...\n"
 	
 	} else {
 
-		print "\nFailed to load unfinished optimization in ", $s1
+		print "\nFailed to load unfinished optimization in ", $s1, "\n"
 	}
 
 	return uopt
@@ -816,16 +885,16 @@ proc saveopt() {localobj tempmat
 		savemat($s1, "vmat.dat", tempmat, vformvec, vheader)
 	}		
 
-	if (!chkdir($s1, "\nelogmat.dat")) {
+	if (!chkdir($s1, "\nlogemat.dat")) {
 
 		tempmat = new Matrix($2+1, nf+1)
-		savemat($s1, "elogmat.dat", tempmat, vformvec)
+		savemat($s1, "logemat.dat", tempmat, vformvec)
 	}
 
-	if (!chkdir($s1, "\nplogmat.dat")) {
+	if (!chkdir($s1, "\nlogpmat.dat")) {
 
 		tempmat = new Matrix($2+1, getnp())
-		savemat($s1, "plogmat.dat", tempmat, maxformvec)
+		savemat($s1, "logpmat.dat", tempmat, maxformvec)
 	}
 }
 // ---------------------------------------------------------------------------------------
@@ -839,32 +908,33 @@ proc saveopt() {localobj tempmat
 // $o3 = vector of data to be saved
 // $s4 = format string
 // $5 = sim number
-proc savelog() {local k, f localobj rvec, tempvec
+// $o6 = subsim number, passed as sim cycle (time) vector
+proc savelog() {local k, f, ind localobj rvec, tempvec
 
 	sprint(logstr, "%s%s", $s2, "log")
 
-	if (numarg() == 5) {
+	if (numarg() >= 5) {
 
 		if (chkdir($s1, logstr)) {
-
-			sprint(format, "%s%s", "%s", $s4)
-			sprint(outstr, "%s", "")
-
-			for k = 0, $o3.size-1 {
-
-				sprint(outstr, format, outstr, $o3.x[k])
-			}
-
+						
 			sprint(filestr, "%d%s", $5, ".dat")
-			sprint(logdir, "%s%s%s", $s1, logstr, "/")
+			sprint(logdir, "%s%s%s", $s1, logstr, "/")			
 
-			if (!strcmp($s2, "t")) {
+			if (strcmp($s2, "v")) {
 
-				writestr(logdir, filestr, outstr, 1)
-			
+				sprint(datastr, "%s", "")
+				sprint(format, "%s%s", "%s", $s4)
+
+				for k = 0, $o3.size-1 {
+
+					sprint(datastr, format, datastr, $o3.x[k])
+				}
+				
+				writestr(logdir, filestr, datastr, 0)
+
 			} else {
 
-				writestr(logdir, filestr, outstr, 0)
+				savemat(logdir, filestr, $o3, $s4)
 			}
 		}
 
@@ -889,11 +959,21 @@ proc savelog() {local k, f localobj rvec, tempvec
 // ns = nd^(getnp()-1)
 // scount = ns if ns < simax, else scount = simax.
 
-proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_scount, tolopt, maxstepsizeopt, p, q, jobi, ucount localobj rangemat, tempvec
+proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_scount, p, q, jobi, ucount, np localobj rangemat, tempvec
 
 	print "NU/evolutionary algorithm"
 	getmod()
-	print getnp(), "parameters found for NU optimization (model type: ", modstr, ")"
+
+	if (mode_ == 0) {
+
+		np = genvec.size
+
+	} else {
+
+		np = getnp()
+	}
+	
+	print np, "parameters found for NU optimization (model type: ", modstr, ")"
 	print genvec.size, "parameters selected for evolution"
 
 	scount = getscount(mode_, idata)
@@ -905,12 +985,12 @@ proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_
 		rangemat.x[0][0] = 0
 		rangemat.x[1][0] = iampvec.size-1
 
-		total_scount = (scount+1) * (iampvec.size)
+		total_scount = (scount+1) * iampvec.size
 
 		getiamp(0, rampstr1)
 		getiamp(iampvec.size-1, rampstr2)
 
-		print "\nOptimization selected for current clamp from ", rampstr1, " to ", rampstr2		
+		print "\nOptimization selected for stimulation amplitudes from ", rampstr1, " to ", rampstr2
 	
 	} else if (numarg()/2 == 1) {
 
@@ -924,7 +1004,7 @@ proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_
 		getiamp($1, rampstr1)
 		getiamp($2, rampstr2)
 
-		print "\nOptimization selected for current clamp from ", rampstr1, " to ", rampstr2
+		print "\nOptimization selected for stimulation amplitudes from ", rampstr1, " to ", rampstr2
 	
 	} else if (numarg()/2 == 2) {
 
@@ -943,7 +1023,7 @@ proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_
 		getiamp($3, rampstr3)
 		getiamp($4, rampstr4)
 
-		print "\nOptimization selected for current clamp from ", rampstr1, " to ", rampstr2, " and ", rampstr3, " to ", rampstr4
+		print "\nOptimization selected for stimulation amplitudes from ", rampstr1, " to ", rampstr2, " and ", rampstr3, " to ", rampstr4
 	
 	} else if (numarg()/2 == 3) {
 
@@ -967,57 +1047,50 @@ proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_
 		getiamp($5, rampstr5)
 		getiamp($6, rampstr6)
 
-		print "\nOptimization selected for current clamp from ", rampstr1, " to ", rampstr2, " and ", rampstr3, " to ", rampstr4, " and ", rampstr5, " to ", rampstr6
+		print "\nOptimization selected for stimulation amplitudes from ", rampstr1, " to ", rampstr2, " and ", rampstr3, " to ", rampstr4, " and ", rampstr5, " to ", rampstr6
 	}
 
-	print "Total optimizations required for selected current clamp(s) = ", total_scount, "\n"
+	print "Total optimizations required for selected injection amplitude(s) = ", total_scount, "\n"
 
 	scounter = 0
 	exitcount = 0
 	istart = -1
 
-	crdir(root, "out", 0)
-	crdir(out, modstr)
+	crdir(root, "data")
+	crdir(data, modstr)
 	
 	pmat = new Matrix(total_scount, getnp())
-	eqlist = crveclist(eqlist, total_scount)
-	pqlist = crveclist(pqlist, total_scount)
-	exitlist = crveclist(exitlist, total_scount, 3)	
+	eqlist = crveclist(eqlist, total_scount, 0)
+	pqlist = crveclist(pqlist, total_scount, 0)
+	tlist = crveclist(tlist, total_scount, 0)
+	exitlist = crveclist(exitlist, total_scount, 3)
 
 	for r = 0, rangemat.ncol-1 {
 
 		for k = rangemat.x[0][r], rangemat.x[1][r] {
 
-			// always off for window replacement/superposition in reseticlamp, because cumbersome
-			// in most parallex use cases.
-			reseticlamp(mode_, 1, k, 1)
-			tolopt = settol(k)
-			maxstepsizeopt = setmaxstepsize(tolopt)
-
 			istart += 1
-
+			
 			getiampdir(k, iampstr, iampdir)
-			crdir(moddir, iampstr)			
-
-			savepelog()
+			crdir(moddir, iampstr)
+			savepelog(k, iampstr, iampdir)
 			savelog(iampdir, "eq")
 			savelog(iampdir, "pq")
 			savelog(iampdir, "fe")
 			savelog(iampdir, "fp")
 			savelog(iampdir, "t")
 			savelog(iampdir, "v")
-			savelog(iampdir, "exit")
-
-			saveopt(iampdir, scount)		
+			savelog(iampdir, "exit")		
+			saveopt(iampdir, scount)
 			
-			getsim(0, getscount(mode_, idata))
+			// getsim(0, getscount(mode_, idata))
+			getsim(218, 218)
+			print "\n", simvec.size, "simulation(s) chosen for injection amplitude ", iampstr
 
-			print "\nTotal selected optimizations = ", simvec.size
-			
 			if (loaduopt(iampdir, scount, istart)) {
 				
-				print "Unfinished optimization(s) loaded for model ", modstr, "/", iampstr
-				print "Total unfinished optimizations = ", uoptvec.sum				
+				print "\nUnfinished optimization(s) loaded for model ", modstr, "/", iampstr
+				print "Total unfinished optimizations at ", iampstr, " = ", uoptvec.sum
 
 				initfit(mode_, idata)
 
@@ -1033,20 +1106,19 @@ proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_
 
 					if (!chkpara()) {
 						
-						scounter += orgopt(k, mode_, ll, uoptvec.x[sim], pmat.getrow(istart*(scount+1)+simvec.x[sim]), tolopt, maxstepsizeopt, eqlist.o(istart*(scount+1)+simvec.x[sim]), pqlist.o(istart*(scount+1)+simvec.x[sim]), simvec.x[sim], scount, exitlist.o(istart*(scount+1)+simvec.x[sim]))
+						scounter += orgopt(k, mode_, chkpara(), uoptvec.x[sim], pmat.getrow(istart*(scount+1)+simvec.x[sim]), eqlist.o(istart*(scount+1)+simvec.x[sim]), pqlist.o(istart*(scount+1)+simvec.x[sim]), simvec.x[sim], scount, exitlist.o(istart*(scount+1)+simvec.x[sim]), tlist.o(istart*(scount+1)+simvec.x[sim]))
 					
 					} else {
 
-						// cannot pass a 13th object in para that is not a vector (tested: matrices and lists)
-						// tested on personal OpenMPI (nrn 7.5) and NSG Stampede2 Intel Skylake (nrn 7.5)
-						llc.submit("orgopt", k, mode_, ll, uoptvec.x[sim], pmat.getrow(istart*(scount+1)+simvec.x[sim]), tolopt, maxstepsizeopt, eqlist.o(istart*(scount+1)+simvec.x[sim]), pqlist.o(istart*(scount+1)+simvec.x[sim]), simvec.x[sim], scount, exitlist.o(istart*(scount+1)+simvec.x[sim]))
+						// cannot pass a 13th object (can pass a number) in para that is not a vector (tested: matrices and lists)
+						// tested on personal OpenMPI (nrn 7.5) and NSG Stampede2 Intel Skylake (nrn 7.5)						
+						llc.submit("orgopt", k, mode_, chkpara(), uoptvec.x[sim], pmat.getrow(istart*(scount+1)+simvec.x[sim]), eqlist.o(istart*(scount+1)+simvec.x[sim]), pqlist.o(istart*(scount+1)+simvec.x[sim]), simvec.x[sim], scount, exitlist.o(istart*(scount+1)+simvec.x[sim]), tlist.o(istart*(scount+1)+simvec.x[sim]))
 					}
 				}
 			
 			} else {
 
-				print "No unfinished optimizations found. Stopping..."
-				stop
+				print "No unfinished optimizations found for injection amplitude ", iampstr
 			}
 		}
 	}
@@ -1065,18 +1137,33 @@ proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_
 		ucounter += ucount
 
 		// exitvec
-		if (tempvec.x[0] && tempvec.x[1]) {
+		if (tempvec.x[1]) {
 
-			exitcount += 1
-		}		
+			if (mode_ == 0) {
+
+				exitcount += 1
+			
+			} else {
+
+				if (tempvec.x[0]) {
+
+					exitcount += 1
+				}
+			}
+		}
 	}
 
 	// where parallel jobs end
 	llc.done()
 
-	print "\n", scounter, "of ", simvec.size, "selected current clamp optimizations returned"
+	print "\n", scounter, "of ", total_scount, "selected current clamp optimizations returned"
 	print ucounter, "of ", scounter, "optimization did not finish due to lack of simulation time. Please see readme for instructions to finish these."
-	print "Of the ", scounter-ucounter, "optimizations that did finish, ", exitcount, "finished both fast and slow components of the NU algorithm."
+	
+	if (mode_ > 0) {
+
+		print "Of the ", scounter-ucounter, "optimizations that did finish, ", exitcount, "finished both fast and slow components of the NU algorithm."
+	}
+	
 	print "Therefore, ", scounter-exitcount, "core(s) is/are required for next round of optimization."
 }
 // ---------------------------------------------------------------------------------------

@@ -10,7 +10,9 @@
 objref cellular, somatic, basal, apical, axonal
 objref aptrunk, praxonal, collateral, AIS
 objref internodal, nodal, axbleb
-objref apic0, axon0, aislist, praxlist, prankvec, intlist, nodlist
+objref apic0, axon0, aislist, praxlist, intlist, nodlist, axbleblist
+
+strdef axblebstr
 
 axbleb_exists = 0
 // --------------------------------------------------------------------------------
@@ -115,7 +117,10 @@ proc lilsecl() {local section, start_section, end_section, praxcount localobj te
 	list2seclist(aislist, AIS)
 
 	// secref for axon
-	forsec aislist.o(0).label axon0 = new SectionRef()
+	forsec aislist.o(0).label {
+
+		axon0 = new SectionRef()
+	}
 	
 	// findtrunk exit code
 	ftec = 1
@@ -155,16 +160,11 @@ proc lilsecl() {local section, start_section, end_section, praxcount localobj te
 
 		if (axbleb_exists) {
 
-			strdef axblebstr
-			getstring(ses, "axbleb_loc.dat", axblebstr)
-			axbleb = new SectionList()
-		
-			forsec praxlist.o(praxlist.count-1).label {
+			getstrlist(ses, "axblebloc.dat", axbleblist)
+			axbleb = new SectionList()		
+			list2seclist(axbleblist, axbleb)
 
-				axbleb.append()
-			}
-
-			end_section = praxlist.count-2
+			end_section = praxlist.count-axbleblist.count-1
 		
 		} else {
 
@@ -234,7 +234,49 @@ proc lilsecl() {local section, start_section, end_section, praxcount localobj te
 
 
 // --------------------------------------------------------------------------------
-func crintlist() {local intcount, nodcount, k, m, q localobj tempseclist, templist
+func setparal() {
+
+	if (!celltypevec.x[0] || celltypevec.x[0] == 1) {
+
+		// measured by EM (Cohen et al. 2020)
+		paral = 2.3
+	}
+
+	if (celltypevec.x[0] == 2) {
+
+		// measured by paranodin/Caspr aggregates (Coman et al. 2006)
+		paral = 2.7
+	}
+
+	return paral
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+func setjuxtal() {
+
+	if (!celltypevec.x[0] || celltypevec.x[0] == 1) {
+
+		// measured by Kv1.1 immunostaining (Nie et al. 2003)
+		juxtal = 8
+	}
+
+	if (celltypevec.x[0] == 2) {
+
+		// measured by Kv1.2 aggregates (Coman et al. 2006)
+		juxtal = 4.6
+	}
+
+	return juxtal	
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+func crintlist() {local intcount, nodcount, k, m, q, paral localobj tempseclist, templist
 
 	if (numarg() == 1 && argtype(1) == 2) {
 
@@ -263,10 +305,7 @@ func crintlist() {local intcount, nodcount, k, m, q localobj tempseclist, templi
 			nodcount += 1
 		}
 
-		if (nodcount) {
-
-			nodlist = crveclist(nodlist, nodcount)
-		}
+		nodlist = crveclist(nodlist, nodcount)
 		
 		tempseclist = new SectionList()
 
@@ -367,7 +406,39 @@ func crintlist() {local intcount, nodcount, k, m, q localobj tempseclist, templi
 
 			nodlist.remove(k)
 			k -= 1
-		}		
+		}
+
+		sprint(tempstr, "%g", axontype)
+
+		for k = 0, intlist.count-1 {
+
+			intlist.o(k).label(tempstr)
+		}
+
+		if (DCPARA) {
+
+			paral = setparal()
+
+			for k = 0, intlist.count-1 {
+
+				if ((axon[intlist.o(k).x[0]].L/(2*axon[intlist.o(k).x[0]].nseg)) > 0.5*paral) {
+
+					sprint(tempstr, "%g", 3)
+					intlist.o(k).label(tempstr)
+				}
+			}
+		}
+
+		if (nodlist.count) {
+
+			for k = 0, nodlist.count-1 {
+
+				sprint(tempstr, "%g", 0)
+				nodlist.o(k).label(tempstr)
+			}
+		}
+
+		tempstr = ""
 
 		return intlist.count
 	
@@ -455,33 +526,3 @@ obfunc getshortint() {local k, q, rowcounter localobj tempvec, tempmat
 	}
 }
 // -----------------------------------------------------------------------------------
-
-
-
-// -----------------------------------------------------------------------------------
-proc chkax() {
-
-	countPrax = 0
-	countNod = 0
-	countCol = 0
-
-	forsec praxonal {
-
-		countPrax += 1
-	}
-
-	forsec nodal {
-
-		countNod += 1
-	}
-
-	forsec collateral {
-
-		countCol += 1
-	}
-
-	print "countPrax = ", countPrax
-	print "countNod = ", countNod
-	print "countCol = ", countCol
-}
-// -------------------------------End defsec------------------------------------------

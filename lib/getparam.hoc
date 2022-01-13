@@ -107,7 +107,10 @@ func settol() {local iiamp, iidel, f localobj templist
 		noisevec.append(templist.o(f).var(0, iidel))
 	}
 
-	print "Error tolerance set to ", setnsig(setnsig(noisevec.sum, nsigv), 5), "mV^2\n"
+	if ($2) {
+		
+		print "Error tolerance set to ", setnsig(setnsig(noisevec.sum, nsigv), 5), "mV^2\n"
+	}
 	
 	return setnsig(noisevec.sum, nsigv)
 }
@@ -651,9 +654,9 @@ proc write_modeltype() {
 func getmod() {
 
 	sprint(modstr, "%s%s%s", modeltypestr, "-", axontypestr)
-	sprint(moddir, "%s%s%s", out, modstr, "/")
+	sprint(moddir, "%s%s%s", data, modstr, "/")
 
-	if (chkdir(out, modstr)) {
+	if (chkdir(data, modstr)) {
 
 		return 1
 	
@@ -728,7 +731,7 @@ proc getiamp() {local amplitude
 
 			if (numarg() == 1 && argtype(1) == 2) {
 			
-				sprint($s1, "%s%g%s", "+", amplitude, "pA")				
+				sprint($s1, "%s%g%s", "+", amplitude, "pA")
 
 			} else if (numarg() == 2 && argtype(1) == 0 && argtype(2) == 2) {
 
@@ -741,7 +744,7 @@ proc getiamp() {local amplitude
 
 			if (numarg() == 1 && argtype(1) == 2) {
 			
-				sprint($s1, "%g%s", amplitude, "pA")				
+				sprint($s1, "%g%s", amplitude, "pA")
 
 			} else if (numarg() == 2 && argtype(1) == 0 && argtype(2) == 2) {
 
@@ -753,7 +756,7 @@ proc getiamp() {local amplitude
 
 		if (amplitude >= 1) {
 
-			sprint(iampstr, "%s%g%s", "+", amplitude, "nA")
+			sprint(iampstr, "%s%g%s", "+", amplitude, "nA")			
 			
 			if (numarg() == 1 && argtype(1) == 2) {
 			

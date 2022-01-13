@@ -5,6 +5,5 @@
 // for any questions, please email c.cohen@gmx.com
 
 
-
 load_file("openmodel.hoc")
 extractopt()

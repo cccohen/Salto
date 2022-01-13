@@ -171,23 +171,23 @@ lc_Na_de_high = 600
 lc_Na_de_def = 100
 
 Na_prox_low = 0.001
-Na_prox_high = 25000
+Na_prox_high = 75000
 Na_prox_def = 2500
 
-Na_ais_low = Na_prox_low
-Na_ais_high = 50000
+Na_ais_low = 0.001
+Na_ais_high = 75000
 Na_ais_def = 10000
 
 Na_int_low = 0.001
 Na_int_high = 1000
 Na_int_def = 100
 
-Na_nod_low = Na_ais_low
-Na_nod_high = Na_ais_high
-Na_nod_def = Na_ais_def
+Na_nod_low = 0.001
+Na_nod_high = 75000
+Na_nod_def = 10000
 
 Na_end_low = 0.001
-Na_end_high = 50000
+Na_end_high = 75000
 Na_end_def = 400
 
 Na_col_low = 0.001
@@ -202,9 +202,9 @@ Nap_int_low = 1e-6
 Nap_int_high = 10
 Nap_int_def = 1e-2
 
-Nap_nod_low = Nap_ais_low
-Nap_nod_high = Nap_ais_high
-Nap_nod_def = Nap_ais_def
+Nap_nod_low = 1e-6
+Nap_nod_high = 1000
+Nap_nod_def = 1
 
 Nap_end_low = 1e-6
 Nap_end_high = 100
@@ -212,15 +212,15 @@ Nap_end_def = 1e-1
 // -------------------------Potassium channels--------------------------------------
 // Potassium channel expression. Units pS/cm2.
 Kv1_so_low = 0.001
-Kv1_so_high = 1000
+Kv1_so_high = 2000
 Kv1_so_def = 100
 
 lc_Kv_Kv1_de_low = 20
-lc_Kv_Kv1_de_high = 600
+lc_Kv_Kv1_de_high = 2000
 lc_Kv_Kv1_de_def = 200
 
 Kv1_prox_low = 0.001
-Kv1_prox_high = 5000
+Kv1_prox_high = 10000
 Kv1_prox_def = 500
 
 Kv1_ais_low = 0.001
@@ -228,15 +228,15 @@ Kv1_ais_high = 10000
 Kv1_ais_def = 3000
 
 Kv1_juxta_low = 0.001
-Kv1_juxta_high = 10000
+Kv1_juxta_high = 20000
 Kv1_juxta_def = 2000
 
 Kv1_int_low = 0.001
-Kv1_int_high = 1000
+Kv1_int_high = 2000
 Kv1_int_def = 400
 
 Kv1_nod_low = 0.001
-Kv1_nod_high = 1000
+Kv1_nod_high = 2000
 Kv1_nod_def = 200
 
 Kv1_end_low = 0.001
@@ -244,44 +244,44 @@ Kv1_end_high = 10000
 Kv1_end_def = 400
 
 Kv1_col_low = 0.001
-Kv1_col_high = 1000
+Kv1_col_high = 2000
 Kv1_col_def = 200
 
 // also known as Kv_slow
 Kv_so_low = 0.001
 Kv_so_high = 200
-Kv_so_def = 15
+Kv_so_def = 20
 
 Kv7_de_low = 0.001
-Kv7_de_high = 100
+Kv7_de_high = 200
 Kv7_de_def = 15
 
 Kv7_so_low = 0.001
-Kv7_so_high = 100
+Kv7_so_high = 200
 Kv7_so_def = 25
 
 Kv7_prox_low = 0.001
-Kv7_prox_high = 500
+Kv7_prox_high = 2600
 Kv7_prox_def = 120
 
 Kv7_ais_low = 0.001
-Kv7_ais_high = 1000
+Kv7_ais_high = 2600
 Kv7_ais_def = 160
 
 Kv7_int_low = 0.001
-Kv7_int_high = 100
+Kv7_int_high = 200
 Kv7_int_def = 5
 
-Kv7_nod_low = Kv7_ais_low
-Kv7_nod_high = Kv7_ais_high
+Kv7_nod_low = 0.001
+Kv7_nod_high = 2600
 Kv7_nod_def = 160
 
 Kv7_end_low = 0.001
-Kv7_end_high = 1000
+Kv7_end_high = 2600
 Kv7_end_def = 5
 
 Kv7_col_low = 0.001
-Kv7_col_high = 100
+Kv7_col_high = 200
 Kv7_col_def = 5
 
 KCa_low = 0.001

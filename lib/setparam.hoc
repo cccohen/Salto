@@ -15,7 +15,7 @@ objref parambox, paramoptvec, miscbox
 
 // --------------------------------------------------------------------------------
 // initial parameter distribution. see setmy() and setsps()
-proc setparam() {local nint, BB, k, m, seg, pos, dist_
+proc setparam() {local nint, BB, k, m, seg, pos, dist_, inttype
 
 	forall {
 
@@ -65,13 +65,15 @@ proc setparam() {local nint, BB, k, m, seg, pos, dist_
 
 				for m = 0, intlist.o(k).size-1 {
 
+					sscanf(intlist.o(k).label, "%d", &inttype)
+
 					axon[intlist.o(k).x[m]] {
 
 						xraxial[0] = rpa_norm * rpa_low
 						xg[0] = 1/(Rmy_norm * Rmy_low)
-						xc[0] = Cmy_norm * Cmy_low
+						xc[0] = Cmy_norm * Cmy_low		
 
-						if (DCPARA) {							
+						if (inttype == 4) {				
 
 							if (m == 0) {								
 
@@ -694,7 +696,7 @@ proc setions() {
 // Distance-dependent distributions for dendritic Ih (Kole et al 2006), Na, Kv 
 // and Kv1 (Keren et al., 2009, JPhysiol and Stuart, Schiller and Sakmann, 1997).
 // built with section numbers that (roughly) increase from the soma out.
-proc distions() {local seg, pos, dist_, nint, k, m localobj tempvec
+proc distions() {local seg, pos, dist_, nint, k, m, inttype localobj tempvec
 
 	forsec apical {
 
@@ -729,12 +731,11 @@ proc distions() {local seg, pos, dist_, nint, k, m localobj tempvec
 	}
 
 	forsec AIS {
-	// Assumes at most two AIS subsections, the preAIS and AIS proper.
 
 		for seg = 1, nseg {
 
 			pos = (2*seg-1)/(2*nseg)
-			dist_ = getdist("axon0", 0.5, secname(), pos)
+			dist_ = getdist(aislist.o(0).label, 0, secname(), pos)
 
 			// preAIS, border dependent, dependent upon preAIS border percentage (defparam)
 			if (dist_ < preAIS_border) {
@@ -775,65 +776,67 @@ proc distions() {local seg, pos, dist_, nint, k, m localobj tempvec
 		}
 	}
 
-	if (nint = crintlist()) {
-
-		paral = setparal()
-		juxtal = setjuxtal()
+	if (DCPARA) {
 
 		for k = 0, nint-1 {
 
-			for m = 0, intlist.o(k).size-1 {
+			sscanf(intlist.o(k).label, "%d", &inttype)
 
-				axon[intlist.o(k).x[m]] {					
+			if (inttype == 4) {
 
-					if (m == 0) {
+				for m = 0, intlist.o(k).size-1 {
 
-						for seg = 1, nseg {
+					axon[intlist.o(k).x[m]] {					
 
-							pos = (2*seg-1)/(2*nseg)
-							dist_ = getdist(secname(), 0, secname(), pos)
+						if (m == 0) {
 
-							if (dist_ <= paral) {
+							for seg = 1, nseg {
 
-								gbar_nax(pos) = 0
-								gbar_nap(pos) = 0
-								gbar_kv1ax(pos) = 0
-								gbar_kv7(pos) = 0
-								gbar_kca(pos) = 0
-								gbar_ca(pos) = 0
-								gbar_it2(pos) = 0
-								gbar_ih(pos) = 0
-							}
+								pos = (2*seg-1)/(2*nseg)
+								dist_ = getdist(secname(), 0, secname(), pos)
 
-							if (dist_ > paral && dist_ <= paral+juxtal) {
+								if (dist_ <= paral) {
 
-								gbar_kv1ax(pos) = Kv1_juxta_norm * Kv1_juxta_low
+									gbar_nax(pos) = 0
+									gbar_nap(pos) = 0
+									gbar_kv1ax(pos) = 0
+									gbar_kv7(pos) = 0
+									gbar_kca(pos) = 0
+									gbar_ca(pos) = 0
+									gbar_it2(pos) = 0
+									gbar_ih(pos) = 0
+								}
+
+								if (dist_ > paral && dist_ <= paral+juxtal) {
+
+									gbar_kv1ax(pos) = Kv1_juxta_norm * Kv1_juxta_low
+								}
 							}
 						}
-					}
 
-					if (m == intlist.o(k).size-1) {
+						if (m == intlist.o(k).size-1) {
 
-						for seg = 1, nseg {
+							for seg = 1, nseg {
 
-							pos = (2*seg-1)/(2*nseg)
-							dist_ = getdist(secname(), 1, secname(), pos)
+								pos = (2*seg-1)/(2*nseg)
+								dist_ = getdist(secname(), 1, secname(), pos)
 
-							if (dist_ <= paral+juxtal && dist_ > paral) {
+								if (dist_ <= paral+juxtal && dist_ > paral) {
 
-								gbar_kv1ax(pos) = Kv1_juxta_norm * Kv1_juxta_low
-							}							
+									gbar_kv1ax(pos) = Kv1_juxta_norm * Kv1_juxta_low
+								}				
 
-							if (dist_ <= paral) {
+								if (dist_ <= paral) {
 
-								gbar_nax(pos) = 0
-								gbar_nap(pos) = 0
-								gbar_kv1ax(pos) = 0
-								gbar_kv7(pos) = 0
-								gbar_kca(pos) = 0
-								gbar_ca(pos) = 0
-								gbar_it2(pos) = 0
-								gbar_ih(pos) = 0
+									gbar_nax(pos) = 0
+									gbar_nap(pos) = 0
+									gbar_kv1ax(pos) = 0
+									gbar_kv7(pos) = 0
+									gbar_kca(pos) = 0
+									gbar_ca(pos) = 0
+									gbar_it2(pos) = 0
+									gbar_ih(pos) = 0
+								}
 							}
 						}
 					}
@@ -841,27 +844,6 @@ proc distions() {local seg, pos, dist_, nint, k, m localobj tempvec
 			}
 		}
 	}
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------------------------------------------------------
-func setjuxtal() {
-
-	if (!celltypevec.x[0] || celltypevec.x[0] == 1) {
-
-		// measured by Kv1.1 immunostaining (Nie et al. 2003)
-		juxtal = 8
-	}
-
-	if (celltypevec.x[0] == 2) {
-
-		// measured by Kv1.2 aggregates (Coman et al. 2006)
-		juxtal = 4.6
-	}
-
-	return juxtal	
 }
 // --------------------------------------------------------------------------------
 

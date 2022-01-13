@@ -83,6 +83,7 @@ proc seticlamp() {local k, iamp, idel, idur, initbit
 // -------------------------------printclamp---------------------------------------
 proc printclamp() {
 
+	print "\n"
 	print "IClamp set at ", locstim
 	print "Amplitude: ", stim.amp*1000, "pA"
 	print "Duration: ", stim.dur, "ms"
@@ -211,7 +212,7 @@ proc setstimpanel() {local k
 				sprint(tempstr, "%g%s", setnsig(iampvec.x[k], 3)*1000, " pA")
 			}
 
-			sprint(stimstr, "%s%g%s", "reseticlamp(mode_, idata, ", k, ", 0) getoptsoln(mode_, idata) init()")
+			sprint(stimstr, "%s%g%s", "reseticlamp(mode_, idata, ", k, ", 1, 1) getoptsoln(mode_, idata) init()")
 
 			xradiobutton(tempstr, stimstr)
 		}

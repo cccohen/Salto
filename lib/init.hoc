@@ -12,7 +12,7 @@ proc init() {local savet, savesteps, savedt, q
 
 	dt = setnsig(dt, nsigt)
 
-	updfitparam(mutchkparam(chkparamvec = chkparam(mode_, idata, chkparamvec)))
+	updfitparam(mutchkparam(chkparam(mode_, idata, chkparamvec)))
 	
 	setparam(mode_, idata)
 	setmy()

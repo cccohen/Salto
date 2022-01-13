@@ -197,10 +197,10 @@ if (axontype > 1) {
 
 	strdef blebqstr
 	blebqstr = "\nPlease indicate whether the final section of the principal axon is myelinated:\t[y/n]"
-	bleb = sred(blebqstr, "y", "ny")
-	writebit(ses, "axbleb_exists.dat", bleb)
+	bleb = sred(blebqstr, "n", "ny")
+	writebit(ses, "axbleb_exists.dat", !bleb)
 
-	if (bleb) {
+	if (!bleb) {
 
 		importblebdata()
 	}

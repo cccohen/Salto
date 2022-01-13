@@ -1,4 +1,4 @@
-// nFit
+// Salto
 // (c) Charles CH Cohen, 2014-present
 // this software is released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 
 // International license (CC BY-NC-ND 4.0, in English).
@@ -13,9 +13,13 @@ smy = 1/(gr = getvar(ses, "gr.dat"))
 // to contain internode numbers (including paranodal sections) requested for demyelination
 // by function demyelinate(int1, int2, ..., intn). Each internode number corresponds to the
 // same index number in the intlist created by demyelinate().
-objref demyvec
-leak_dist = 0
-paracount = 0
+objref demyvec, intlast
+
+demyvec = new Vector()
+
+strdef strint, strais
+
+demy_conservative = 1
 // --------------------------------------------------------------------------------
 
 
@@ -33,123 +37,6 @@ proc setmy() {local k, m, seg, pos, dist_, Kv7_ais_distal
 
 			xg[0] *= smy
 			xc[0] *= smy
-
-			if (demy) {
-
-				sprint(secstr, "%s", secname())
-
-				for k = 0, demyvec.size-1 {
-
-					for m = 0, intlist.o(demyvec.x[k]).size-1 {
-
-						strdef strint
-						sprint(strint, "%s%g%s", ".*[", intlist.o(demyvec.x[k]).x[m], "].*")						
-					
-						if (issection(strint)) {
-
-							// this will demyelinate the section
-							xg[0] = 1/Rext
-							xc[0] = 0
-							xraxial[0] = rext
-							
-			// 				// 1st internode, where there is a greater proportion of Kv7 channels in the region of the first paranode and juxtaparanode (Hamada and Kole 2015).
-			//				// diffusion of Kv1 from juxtaparanodes into paranodes (Nie et al. 2003)
-			// 				// diffusion of NaV from AIS/nodes into at least both paranodes; size of NaV cluster 3x greater in MS demyelinated plaques (Coman et al. 2006).
-			// 				// AIS onset moves back by 2 um (from 4 in WT - Hamada et al. 2015).
-			// 				// NaV length almost doubles at nodes, Kv7.3 about 1.5 at nodes (Hamada et al. 2015)
-			// 				if (demyvec.x[k] == 0) {
-								
-			// 					if (mode_ == 1) {							
-									
-			// 						strdef strais
-			// 						forsec AIS sprint(strais, "%s", secname())
-			// 						leak_dist = ais_length * ((35/23) - 1)
-									
-			// 						forsec AIS {
-
-			// 							for seg = 1, nseg {
-
-			// 								pos = (2*seg-1)/(2*nseg)											
-			// 								Kv7_ais_distal = gbar_kv7(pos)
-			// 							}
-			// 						}
-
-			// 						forsec secstr {
-
-			// 							for seg = 1, nseg {
-
-			// 								pos = (2*seg-1)/(2*nseg)
-			// 								dist_ = getdist(strais, 1, secstr, pos)
-
-			// 								if (dist_ < leak_dist) {
-
-			// 									gbar_kv7(pos) = Kv7_ais_distal
-											
-			// 								} else {
-
-			// 									// the position is beyond but is within the downstream paranode...
-			// 									// take into account Nav and Kv7 leakage from the downstream node into this demyelinated paranode (Hamada and Kole 2015).
-			// 									ifsec paranodal {
-
-			// 										gbar_nax = Na_nod_norm * Na_nod_low
-			// 										gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
-			// 									}												
-											// }
-										// }
-									// }
-								// }
-							
-			// 				} else if (demyvec.x[k] > 0 && demyvec.x[k] < intlist.count-1) {
-
-			// 					if (mode_ == 1) {
-									
-			// 						// any other internode.
-			// 						// there will be only be leakage of Nav and Kv7 into a given paranode if the internode containing that paranode is demyelinated (Hamada and Kole 2015).
-			// 						ifsec paranodal {
-
-			// 							gbar_nax = Na_nod_norm * Na_nod_low
-			// 							gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
-			// 						}
-			// 					}
-							
-			// 				} else if (demyvec.x[k] == intlist.count-1) {
-
-			// 					if (mode_ == 1) {
-
-			// 						if (!axbleb_exists) {
-
-			// 							ifsec paranodal {
-
-			// 								gbar_nax = Na_nod_norm * Na_nod_low
-			// 								gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
-			// 							}
-									
-			// 						} else {
-
-			// 							ifsec paranodal {
-
-			// 								paracount += 1
-
-			// 								if (paracount == 1) {
-
-			// 									gbar_nax = Na_nod_norm * Na_nod_low
-			// 									gbar_kv7 = Kv7_nod_norm * Kv7_nod_low
-											
-			// 								} else if (paracount == 2) {
-
-			// 									gbar_nax = Na_end_norm * Na_end_low
-			// 									gbar_kv7 = Kv7_end_norm * Kv7_end_low
-
-			// 									paracount = 0
-			// 								}
-			// 							}
-			// 						}
-			// 					}
-			// 				}
-						}
-					}
-				}
-			}
 		}
 		
 		if (SC) {
@@ -192,13 +79,18 @@ proc setmy() {local k, m, seg, pos, dist_, Kv7_ais_distal
 			}			
 		}
 	}
+
+	if (demyvec.size) {
+
+		demy()
+	}
 }
 // --------------------------------------------------------------------------------
 
 
 
 // --------------------------------------------------------------------------------
-proc demyelinate() {local i
+proc demyelinate() {local k, i, nint
 
 	if (numarg() == 1 && argtype(1) == 2) {
 
@@ -210,24 +102,20 @@ proc demyelinate() {local i
 		}
 	}	
 
-	crintlist()
+	demyvec.resize(nint = crintlist())	
 
-	demyvec = new Vector()
-	
 	for i = 1, numarg() {
 
-		demyvec.resize(demyvec.size+1)
-		demyvec.x[demyvec.size-1] = $i-1
-	}
-		
-	print "Demyelinating the following internodes:"
-	
-	for i = 1, numarg() {
+		for k = 0, nint-1 {
 
-		print $i
+			if ($i-1 == k) {
+
+				demyvec.x[k] = 1
+				print "Demyelinating internode... ", $i
+			}
+		}
 	}
-	
-	demy = 1
+
 	init()
 }
 // --------------------------------------------------------------------------------
@@ -239,7 +127,7 @@ proc remyelinate() {
 
 	print "Remyelinating all internodes..."	
 	
-	demy = 0
+	demyvec.resize(0)
 	init()
 }
 // --------------------------------------------------------------------------------
@@ -249,11 +137,729 @@ proc remyelinate() {
 // --------------------------------------------------------------------------------
 proc demyall() {
 
-	forsec internodal {
+	if (DC || DCPARA) {
 
-		xg[0] = 1/Rext
-		xc[0] = 0
-		xraxial[0] = rext		
+		forsec internodal {
+
+			xg[0] = 1/Rext
+			xc[0] = 0
+			xraxial[0] = rext
+		}
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc demy() {local k, m, nodnum, countseg_ais, countseg_juxta, countseg_para, countseg_nod, countseg_bleb, countseg, seg, pos, r, q, u localobj tempvec
+
+	if (DC || DCPARA) {
+
+		for k = 0, demyvec.size-1 {
+
+			// demyelinate internode k+1
+			if (demyvec.x[k]) {	
+	
+				for m = 0, intlist.o(k).size-1 {
+
+					axon[intlist.o(k).x[m]] {
+
+						xg[0] = 1/Rext
+						xc[0] = 0
+						xraxial[0] = rext
+					}
+
+					if (mode_ == 1) {
+
+					// Rearrange ion channel distribution, a consequence of demyelination.
+					
+					// NaV: greater presence at formerly paranodal regions, but not beyond (Coman et al. 2006, Hamada et al. 2015).
+					// Note: does not apply at first paranode (Hamada et al. 2015)
+					// Kv1: greater presence at formerly paranodal regions, but not beyond (Nie et al. 2003).
+					// Note: since no explicit evidence of application at first paranode, not applied there.
+					// Kv7.3: greater presence at formerly paranodal and juxtaparanodal regions (Hamada et al. 2015).
+					// Note: since explicit evidence of application at first paranode and juxtaparanode, applied there.
+					
+					// Regarding the method of redistribution, the most conservative assumption is made: that no new channels
+					// are created, and therefore only redistributed, uniformly, from adjacent regions with higher densities.
+					// The redistribution strategy, therefore, consists of counting number of "original" segments and the total number of segments affected,
+					// then multiplying down the densities in original regions with original/total segments, and adding in the same in the affected regions,
+					// of the same quantity as the most adjacent original segment.
+					// A different application of the strategy results in the AIS region/first paranode/juxtaparanode, and therefore the first internode
+					// is singled out for special application first. Thereafter, the more general strategy applies. 
+					// A similar issue as the first internode is faced at the last, if adjacent to a non-myelinated bleb.
+
+						if (k == 0) {
+
+							if (m == 0) {
+
+								// count nodes
+								countseg_ais = 0
+								countseg_para = 0
+								countseg_juxta = 0
+
+								forsec AIS {
+
+									countseg_ais += nseg
+								}
+
+								axon[intlist.o(k).x[m]] {
+
+									for seg = 1, nseg {
+									
+										pos = (2*seg-1)/(2*nseg)
+										dist_ = getdist(secname(), 0, secname(), pos)
+
+										if (dist_ <= paral) {
+
+											countseg_para += 1
+										}
+
+										if (dist_ > paral && dist_ <= paral+juxtal) {
+
+											countseg_juxta += 1
+										}
+									}
+								}
+								
+								countseg = 0
+
+								forsec AIS {
+
+									for seg = 1, nseg {
+
+										pos = (2*seg-1)/(2*nseg)
+
+										if (demy_conservative) {
+
+											// Kv7
+											gbar_kv7(pos) *= countseg_ais/(countseg_ais+countseg_para+countseg_juxta)
+										}
+
+										countseg += 1
+
+										if (countseg == countseg_ais) {
+
+											tempvec = new Vector(1)
+											// last adjacent Kv7
+											tempvec.x[0] = gbar_kv7(pos)
+										}
+									}
+								}
+
+								axon[intlist.o(k).x[m]] {
+
+									for seg = 1, nseg {
+									
+										pos = (2*seg-1)/(2*nseg)
+										dist_ = getdist(secname(), 0, secname(), pos)
+
+										if (dist_ <= paral+juxtal) {
+
+											gbar_kv7(pos) = tempvec.x[0]
+										}
+									}
+								}
+							}
+
+							// apply general strategy, starting with second paranode
+							if (m == intlist.o(k).size-1) {
+
+								if (nodlist.count) {									
+									
+									countseg_para = 0
+									countseg_juxta = 0
+									tempvec = new Vector(3)
+
+									axon[intlist.o(k).x[m]] {
+
+										for seg = 1, nseg {
+										
+											pos = (2*seg-1)/(2*nseg)
+											dist_ = getdist(secname(), 1, secname(), pos)
+
+											if (dist_ <= paral) {
+
+												countseg_para += 1
+											}
+
+											if (dist_ > paral && dist_ <= paral+juxtal) {
+
+												countseg_juxta += 1
+											}
+										}
+									}
+
+									nodnum = 0
+									sscanf(nodlist.o(0).label, "%lf", &nodnum)					
+									
+									if (nodnum) {
+
+										for r = 0, nodlist.o(k).size-1 {
+
+											axon[nodlist.o(k).x[r]] {
+												
+												tempvec.x[0] = gbar_nax
+												tempvec.x[2] = gbar_kv7
+											}
+	 	 								}
+   								
+									} else {
+
+										// count nodes
+										countseg_nod = 0
+
+										for r = 0, nodlist.o(k).size-1 {
+
+											axon[nodlist.o(k).x[r]] {
+
+												countseg_nod += nseg
+											}
+										}
+
+										for r = 0, nodlist.o(k).size-1 {
+
+											axon[nodlist.o(k).x[r]] {
+
+												if (demy_conservative) {
+
+													// NaV
+													gbar_nax(pos) *= countseg_nod/(countseg_nod+countseg_para)
+													// Kv7
+													gbar_kv7(pos) *= countseg_nod/(countseg_nod+countseg_para)
+												}
+
+												tempvec.x[0] = gbar_nax
+												tempvec.x[2] = gbar_kv7
+											}
+										}
+
+										sprint(tempstr, "%g", 1)
+										nodlist.o(0).label(tempstr)
+										tempstr = ""
+									}
+
+									countseg = 0
+
+									axon[intlist.o(k).x[m]] {
+
+										for seg = 1, nseg {
+										
+											pos = (2*seg-1)/(2*nseg)
+											dist_ = getdist(secname(), 1, secname(), pos)
+
+											if (dist_ <= paral) {
+
+												gbar_nax(pos) = tempvec.x[0]
+												gbar_kv7(pos) = tempvec.x[1]
+											}											
+
+											if (dist_ > paral && dist_ <= paral+juxtal && demy_conservative) {
+
+												gbar_kv1ax(pos) *= countseg_juxta/(countseg_juxta+countseg_para)												
+											}
+
+											countseg += 1
+
+											if (countseg == countseg_juxta) {
+
+												tempvec.x[1] = gbar_kv1ax(pos)
+											}
+										}
+									}
+
+									axon[intlist.o(k).x[m]] {
+
+										for seg = 1, nseg {
+										
+											pos = (2*seg-1)/(2*nseg)
+											dist_ = getdist(secname(), 1, secname(), pos)
+
+											if (dist_ <= paral) {
+
+												gbar_kv1ax(pos) = tempvec.x[1]
+											}
+										}
+									}
+
+								} else if (axbleb_exists) {									
+
+									axon[intlist.o(k).x[m]] {
+
+										intlast = new SectionRef()
+									}
+
+									for r = 0, intlast.nchild-1 {
+
+										intlast.child[r] {
+
+											if (issection(axbleblist.o(0).label)) {
+
+												// count nodes
+												countseg_bleb = 0
+												countseg_para = 0
+												countseg_juxta = 0
+												tempvec = new Vector(3)
+
+												for q = 0, axbleblist.count-1 {
+
+													for u = 0, axbleblist.o(q).size-1 {
+
+														axon[axbleblist.o(q).x[u]] {
+
+															countseg_bleb += nseg
+														}
+													}
+												}
+
+												axon[intlist.o(k).x[m]] {
+
+													for seg = 1, nseg {
+													
+														pos = (2*seg-1)/(2*nseg)
+														dist_ = getdist(secname(), 1, secname(), pos)
+
+														if (dist_ <= paral) {
+
+															countseg_para += 1
+														}
+
+														if (dist_ > paral && dist_ <= paral+juxtal) {
+
+															countseg_juxta += 1
+														}
+													}
+												}
+
+												countseg = 0
+
+												for q = 0, axbleblist.count-1 {
+
+													for u = 0, axbleblist.o(q).size-1 {
+
+														axon[axbleblist.o(q).x[u]] {
+
+															if (demy_conservative) {
+
+																// NaV
+																gbar_nax *= countseg_bleb/(countseg_bleb+countseg_para)
+																// Kv7
+																gbar_kv7 *= countseg_bleb/(countseg_bleb+countseg_para)
+															}
+
+															tempvec.x[0] = gbar_nax
+															tempvec.x[2] = gbar_kv7
+														}
+													}
+												}
+
+												countseg = 0
+
+												axon[intlist.o(k).x[m]] {
+
+													for seg = 1, nseg {
+													
+														pos = (2*seg-1)/(2*nseg)
+														dist_ = getdist(secname(), 1, secname(), pos)
+
+														if (dist_ <= paral) {
+
+															gbar_nax(pos) = tempvec.x[0]
+															gbar_kv7(pos) = tempvec.x[2]
+														}
+
+														if (dist_ > paral && dist_ <= paral+juxtal) {
+
+															countseg += 1
+														}
+
+														if (countseg == countseg_juxta) {
+
+															tempvec.x[1] = gbar_kv1ax(pos)
+														}
+													}
+												}		
+
+												axon[intlist.o(k).x[m]] {
+
+													for seg = 1, nseg {
+													
+														pos = (2*seg-1)/(2*nseg)
+														dist_ = getdist(secname(), 1, secname(), pos)
+
+														if (dist_ <= paral+juxtal && dist_ > paral) {
+
+															gbar_kv1ax(pos) = tempvec.x[1]
+														}
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+						
+						} else {							
+
+							if (m == 0 && k <= nodlist.count) {								
+
+								countseg_para = 0
+								countseg_juxta = 0
+								tempvec = new Vector(3)
+
+								axon[intlist.o(k).x[m]] {
+
+									for seg = 1, nseg {
+									
+										pos = (2*seg-1)/(2*nseg)
+										dist_ = getdist(secname(), 0, secname(), pos)
+
+										if (dist_ <= paral) {
+
+											countseg_para += 1
+										}
+
+										if (dist_ > paral && dist_ <= paral+juxtal) {
+
+											countseg_juxta += 1
+										}
+									}
+								}
+
+								nodnum = 0
+								sscanf(nodlist.o(k).label, "%lf", &nodnum)
+								
+								if (nodnum) {
+
+									for r = 0, nodlist.o(k).size-1 {
+
+										axon[nodlist.o(k).x[r]] {
+											
+											tempvec.x[0] = gbar_nax
+											tempvec.x[2] = gbar_kv7
+										}
+									}										
+								
+								} else {
+
+									// count nodes
+									countseg_nod = 0
+
+									for r = 0, nodlist.o(k).size-1 {
+
+										axon[nodlist.o(k).x[r]] {
+
+											countseg_nod += nseg
+										}
+									}
+
+									for r = 0, nodlist.o(k).size-1 {
+
+										axon[nodlist.o(k).x[r]] {
+
+											if (demy_conservative) {
+
+												// NaV
+												gbar_nax(pos) *= countseg_nod/(countseg_nod+countseg_para)
+												// Kv7
+												gbar_kv7(pos) *= countseg_nod/(countseg_nod+countseg_para)
+											}
+
+											tempvec.x[0] = gbar_nax
+											tempvec.x[2] = gbar_kv7
+										}
+									}
+
+									sprint(tempstr, "%g", 1)
+									nodlist.o(k).label(tempstr)
+									tempstr = ""
+								}
+
+								countseg = 0
+
+								axon[intlist.o(k).x[m]] {
+
+									for seg = 1, nseg {
+									
+										pos = (2*seg-1)/(2*nseg)
+										dist_ = getdist(secname(), 0, secname(), pos)
+
+										if (dist_ <= paral) {
+
+											gbar_nax(pos) = tempvec.x[0]
+											gbar_kv7(pos) = tempvec.x[1]
+										}											
+
+										if (dist_ > paral && dist_ <= paral+juxtal && demy_conservative) {
+
+											gbar_kv1ax(pos) *= countseg_juxta/(countseg_juxta+countseg_para)
+										}
+
+										countseg += 1
+
+										if (countseg == countseg_juxta) {
+
+											tempvec.x[1] = gbar_kv1ax(pos)
+										}
+									}
+								}
+
+								axon[intlist.o(k).x[m]] {
+
+									for seg = 1, nseg {
+									
+										pos = (2*seg-1)/(2*nseg)
+										dist_ = getdist(secname(), 0, secname(), pos)
+
+										if (dist_ <= paral) {
+
+											gbar_kv1ax(pos) = tempvec.x[1]
+										}
+									}
+								}
+							}
+
+							if (m == intlist.o(k).size-1) {
+
+								if (k < nodlist.count) {									
+
+									countseg_para = 0
+									countseg_juxta = 0
+									tempvec = new Vector(3)
+
+									axon[intlist.o(k).x[m]] {
+
+										for seg = 1, nseg {
+										
+											pos = (2*seg-1)/(2*nseg)
+											dist_ = getdist(secname(), 1, secname(), pos)
+
+											if (dist_ <= paral) {
+
+												countseg_para += 1
+											}
+
+											if (dist_ > paral && dist_ <= paral+juxtal) {
+
+												countseg_juxta += 1
+											}
+										}
+									}
+
+									nodnum = 0
+									sscanf(nodlist.o(k+1).label, "%lf", &nodnum)		
+									
+									if (nodnum) {
+
+										for r = 0, nodlist.o(k).size-1 {
+
+											axon[nodlist.o(k).x[r]] {
+												
+												tempvec.x[0] = gbar_nax
+												tempvec.x[2] = gbar_kv7
+											}
+										}										
+									
+									} else {
+
+										// count nodes
+										countseg_nod = 0
+
+										for r = 0, nodlist.o(k).size-1 {
+
+											axon[nodlist.o(k).x[r]] {
+
+												countseg_nod += nseg
+											}
+										}
+
+										for r = 0, nodlist.o(k).size-1 {
+
+											axon[nodlist.o(k).x[r]] {
+
+												if (demy_conservative) {
+
+													// NaV
+													gbar_nax(pos) *= countseg_nod/(countseg_nod+countseg_para)
+													// Kv7
+													gbar_kv7(pos) *= countseg_nod/(countseg_nod+countseg_para)
+												}
+
+												tempvec.x[0] = gbar_nax
+												tempvec.x[2] = gbar_kv7
+											}
+										}
+
+										sprint(tempstr, "%g", 1)
+										nodlist.o(k+1).label(tempstr)
+										tempstr = ""
+									}
+
+									countseg = 0
+
+									axon[intlist.o(k).x[m]] {
+
+										for seg = 1, nseg {
+										
+											pos = (2*seg-1)/(2*nseg)
+											dist_ = getdist(secname(), 1, secname(), pos)
+
+											if (dist_ <= paral) {
+
+												gbar_nax(pos) = tempvec.x[0]
+												gbar_kv7(pos) = tempvec.x[1]
+											}											
+
+											if (dist_ > paral && dist_ <= paral+juxtal && demy_conservative) {
+
+												gbar_kv1ax(pos) *= countseg_juxta/(countseg_juxta+countseg_para)
+											}
+
+											countseg += 1
+
+											if (countseg == countseg_juxta) {
+
+												tempvec.x[1] = gbar_kv1ax(pos)
+											}
+										}
+									}
+
+									axon[intlist.o(k).x[m]] {
+
+										for seg = 1, nseg {
+										
+											pos = (2*seg-1)/(2*nseg)
+											dist_ = getdist(secname(), 1, secname(), pos)
+
+											if (dist_ <= paral) {
+
+												gbar_kv1ax(pos) = tempvec.x[1]
+											}
+										}
+									}
+
+								} else if (axbleb_exists) {
+
+									axon[intlist.o(k).x[m]] {
+
+										intlast = new SectionRef()
+									}
+
+									for r = 0, intlast.nchild-1 {
+
+										intlast.child[r] {
+
+											if (issection(axbleblist.o(0).label)) {
+
+												// count nodes
+												countseg_bleb = 0
+												countseg_para = 0
+												countseg_juxta = 0
+												tempvec = new Vector(3)
+
+												for q = 0, axbleblist.count-1 {
+
+													for u = 0, axbleblist.o(q).size-1 {
+
+														axon[axbleblist.o(q).x[u]] {
+
+															countseg_bleb += nseg
+														}
+													}
+												}
+
+												axon[intlist.o(k).x[m]] {
+
+													for seg = 1, nseg {
+													
+														pos = (2*seg-1)/(2*nseg)
+														dist_ = getdist(secname(), 1, secname(), pos)
+
+														if (dist_ <= paral) {
+
+															countseg_para += 1
+														}
+
+														if (dist_ > paral && dist_ <= paral+juxtal) {
+
+															countseg_juxta += 1
+														}
+													}
+												}
+
+												countseg = 0
+
+												for q = 0, axbleblist.count-1 {
+
+													for u = 0, axbleblist.o(q).size-1 {
+
+														axon[axbleblist.o(q).x[u]] {
+
+															if (demy_conservative) {
+
+																// NaV
+																gbar_nax *= countseg_bleb/(countseg_bleb+countseg_para)
+																// Kv7
+																gbar_kv7 *= countseg_bleb/(countseg_bleb+countseg_para)
+															}
+
+															tempvec.x[0] = gbar_nax
+															tempvec.x[2] = gbar_kv7
+														}
+													}
+												}
+
+												countseg = 0
+
+												axon[intlist.o(k).x[m]] {
+
+													for seg = 1, nseg {
+													
+														pos = (2*seg-1)/(2*nseg)
+														dist_ = getdist(secname(), 1, secname(), pos)
+
+														if (dist_ <= paral) {
+
+															gbar_nax(pos) = tempvec.x[0]
+															gbar_kv7(pos) = tempvec.x[2]
+														}
+
+														if (dist_ > paral && dist_ <= paral+juxtal) {
+
+															countseg += 1
+														}
+
+														if (countseg == countseg_juxta) {
+
+															tempvec.x[1] = gbar_kv1ax(pos)
+														}
+													}
+												}		
+
+												axon[intlist.o(k).x[m]] {
+
+													for seg = 1, nseg {
+													
+														pos = (2*seg-1)/(2*nseg)
+														dist_ = getdist(secname(), 1, secname(), pos)
+
+														if (dist_ <= paral+juxtal && dist_ > paral) {
+
+															gbar_kv1ax(pos) = tempvec.x[1]
+														}
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 }
 // --------------------------------------------------------------------------------

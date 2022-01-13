@@ -83,7 +83,7 @@ proc playopt() {local m, input_row, end_row
 
 	while (playvec.x[$1]) {
 
-		reseticlamp(mode_, idata, $2, 0)
+		reseticlamp(mode_, idata, $2, 0, 1)
 
 		print "\nPlaying optimization results from:"
 		print playveclist.o($1).label, "\n"

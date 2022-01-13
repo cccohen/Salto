@@ -16,117 +16,17 @@ sprint(out, "%s%s", root, "out/")
 // --------------------------------------------------------------------------------
 
 
+
+// --------------------------------------------------------------------------------
 load_file("stdgui.hoc")
 chdir(lib)
 load_file("startlib.hoc")
-loadfile(ses, "time.dat")
-loadfile(ses, "morph.hoc")
-mode_ = getvar(ses, "mode.dat")
-setmaxform()
-setmaxformvec()
-idata = getvar(ses, "idata.dat")
-setfilestr(mode_, idata)
-loaddll()
-
-iampvec = getvec(ses, iampvecfilestr, iampvec)
-temprec = getvar(ses, temprecfilestr)
-mintau0 = getvar(ses, mintau0filestr)
-nrec = getstrlist(ses, recloclistfilestr, recloclist)
-injvec = getvec(ses, "injlist.dat", injvec)
-
-if (idata) {
-	
-	nrows = getmat(ses, vdatfilestr, vdatmat)
-	tdatvec = new Vector()
-	tdatvec.append(vdatmat.getcol(0))
-	nsigt = getnsig(tdatvec)
-	BBvec = getvec(ses, "BBvec.dat", BBvec)
-	createpip(nrec)
-	conpip(recloclist)	
-
-} else {
-	
-	nsigt = 6
-}
-
-settform()
-settformvec()
-
-recseclist = loclist2seclist(recloclist, recseclist)
-load_file("defsec.hoc")
-axbleb_exists = getvar(ses, "axbleb_exists.dat")
-bigsecl()
-axontype = getaxontype()
-lilsecl()
-load_file("setnseg.hoc")
-setnseg(mintau0)
-load_file("defparam.hoc")
-defparam()
-defAISpts()
-load_file("setparam.hoc")
-initpvecs()
-getmodeltype(mode_, idata)
-setparam(mode_, idata)
-load_file("defsps.hoc")
-celltypevec = getcelltype()
-defmorph_sp()
-defdist_sp()
-defsps()
-load_file("setsps.hoc")
-setsps()
-load_file("setmyelin.hoc")
-setmy()
-load_file("setstim.hoc")
-seticlamp()
-load_file("getparam.hoc")
-load_file("writeses.hoc")
 // --------------------------------------------------------------------------------
 
 
+axontype = getaxontype()
+print_axontype()
 
-print "\nChange Axon Type"
-	
-if (axontype == 1) {
+changeaxontype()
 
-	print "\nCurrent axon type: ", axontype, "= no myelin"
-
-} else if (axontype == 2) {
-
-	print "\nCurrent axon type: ", axontype, "= single cable"
-
-} else if (axontype == 3) {
-
-	print "\nCurrent axon type: ", axontype, "= double cable without paranodes"
-
-} else if (axontype == 4) {
-
-	print "\nCurrent axon type: ", axontype, "= double cable with paranodes"
-
-}
-
-// Change axon type
-strdef axonqstr
-axonqstr = "\nPlease select one from the following axon types:\n1 = no myelin\n2 = single cable\n3 = double cable without paranodes\n4 = double cable with paranodes\n"
-axontype = xred(axonqstr, axontype, 1, 4)
-
-writebit(ses, "axontype.dat", axontype)
-
-if (axontype == 1) {
-
-	print "\nSuccessfully changed axon type to: no myelin"
-
-} else if (axontype == 2) {
-
-	print "\nSuccessfully changed axon type to: single cable"
-
-} else if (axontype == 3) {
-
-	print "\nSuccessfully changed axon type to: double cable without paranodes"
-
-} else if (axontype == 4) {
-
-	print "\nSuccessfully changed axon type to: double cable with paranodes"
-
-}
-
-print "\nPlease restart the model"
+print "Please restart the model"

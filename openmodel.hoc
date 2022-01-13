@@ -7,19 +7,18 @@
 
 
 // ------------------------------Directories---------------------------------------
-strdef root, lib, ses, out
+strdef root, lib, ses, data
 
 root = getcwd()
 sprint(lib, "%s%s", root, "lib/")
 sprint(ses, "%s%s", root, "ses/")
-sprint(out, "%s%s", root, "out/")
+sprint(data, "%s%s", root, "data/")
 // --------------------------------------------------------------------------------
 
 
 load_file("stdgui.hoc")
 chdir(lib)
 load_file("startlib.hoc")
-loadfile(ses, "time.dat")
 loadfile(ses, "morph.hoc")
 mode_ = getvar(ses, "mode.dat")
 setmaxform()
@@ -61,6 +60,8 @@ axbleb_exists = getvar(ses, "axbleb_exists.dat")
 bigsecl()
 axontype = getaxontype()
 celltypevec = getcelltype()
+paral = setparal()
+juxtal = setjuxtal()
 lilsecl()
 load_file("setnseg.hoc")
 setnseg(mode_, idata, fracl, minmaxnseg)
@@ -93,15 +94,15 @@ if (idata) {
 	dt = setnsig(dt, nsigt)
 	bess = getvar(ses, "bessfil.dat")
 	nsigv = getnsig(vdatmat.getcol(1))
-	nf = getnf()	
+	nf = getnf()
 	
 	if ((num = iampvec.indwhere("==", stim.amp)) != -1) {
 	
-		tol = settol(num)
+		tol = settol(num, !chkpara())
 	
 	} else {
 	
-		tol = settol(0)
+		tol = settol(0, !chkpara())
 	}
 	
 	maxstepsize = setmaxstepsize(tol)
@@ -152,6 +153,7 @@ setstimpanel()
 setparampanel(mode_, idata)
 
 load_file("getfit.hoc")
+loadfile(ses, "time.dat")
 
 adj_injbound(mode_)
 print_modeltype(mode_, idata)

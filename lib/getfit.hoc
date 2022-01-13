@@ -9,29 +9,29 @@
 // -------------------------------Variables----------------------------------------
 objref paramvec, solnvec, elogvec, plogvec, nefunvec, optibox
 objref genvec, spacemat, genvec, mutmat, permvec, chkparamvec
-objref pmat, vvec, rangemat
-objref eqlist, pqlist
+objref pmat, tmat, vvec, simvec, rangemat
+objref eqlist, pqlist, tlist, exitlist
 objref boundvec, origboundlist, newboundlist, weightvec, weightmat, origweightlist, newweightlist, errlist, scalelist
 objref drand, diamvec, speedvec, graphobj, prand, krand
 
 solnvec = new Vector()
 genvec = new Vector()
 spacemat = new Matrix()
+chkparamvec = new Vector()
 
 prand = new Random()
 
 elogvec = new Vector()
 plogvec = new Vector()
 nefunvec = new Vector()
-chkparamvec = new Vector()
 
-strdef pheader, eheader, vheader, pnnheader, varstr, plogdir, elogdir, logstr, logmatstr, outstr, esimstr, psimstr
+strdef pheader, eheader, vheader, pnnheader, varstr, plogdir, elogdir, logdir, logstr, logmatstr, datastr, esimstr, psimstr
 strdef mutstart, mutp, mutcom, mutend, mutexec
+strdef rampstr1, rampstr2, rampstr3, rampstr4, rampstr5, rampstr6
 
 nefun_ = 0
 nquad_ = 0
 fitoff = 1
-runtime = 0
 hourlog = 1
 chkhour = 2
 
@@ -49,7 +49,7 @@ newg = 0
 
 // --------------------------------------------------------------------------------
 // $1 = mode_
-proc adj_injbound() {local f, pifdelt localobj tempxvec
+proc adj_injbound() {local f, pifdelt, k localobj tempxvec
 
 	if (!$1) {
 	
@@ -65,12 +65,24 @@ proc adj_injbound() {local f, pifdelt localobj tempxvec
 					RegionFitness[f].boundary.x[0] = pifdelt
 					RegionFitness[f].weight.x[0] = 0
 
-					tempxvec = new Vector()
-					tempxvec.append(RegionFitness[f].xdat)
+					tempxvec = new Vector(RegionFitness[f].xdat)
+					
+					for k = 0, tempxvec.size-1 {
+
+						tempxvec.x[k] = RegionFitness[f].xdat.x[k]
+					}
+					
 					RegionFitness[f].set_modelx(tempxvec)
 					
 					num = setnsig(pifdelt, 5)
-					print "Fit start time adjusted to ", num, "ms for ", FitnessGenerator[0].yvarlist.o(f).s
+
+					if (numarg() == 2 && argtype(2) == 0) {
+
+						if ($2) {
+
+							print "Fit start time adjusted to ", num, "ms for ", FitnessGenerator[0].yvarlist.o(f).s
+						}
+					}
 				}
 			}
 		}
@@ -142,67 +154,29 @@ proc adj_weight() {local points_to_adv, f, k, lo_bound, up_bound, indlo, indhi l
 			}
 		}
 
-		weightvec = new Vector()
-		weightvec.append(RegionFitness[f].weight.x[0])
-		weightvec.append(tempvec)
+		weightvec = new Vector(tempvec.size+1)
+		weightvec.x[0] = 0
 
-		RegionFitness[f].boundary = new Vector()
-		RegionFitness[f].boundary.append(boundvec)
+		for k = 1, weightvec.size-1 {
+
+			weightvec.x[k] = tempvec.x[k-1]
+		}		
+
+		RegionFitness[f].boundary = new Vector(boundvec.size)
+
+		for k = 0, boundvec.size-1 {
+
+			RegionFitness[f].boundary.x[k] = boundvec.x[k]	
+		}
 		
-		RegionFitness[f].weight = new Vector()
-		RegionFitness[f].weight.append(weightvec)
+		RegionFitness[f].weight = new Vector(weightvec.size)
+
+		for k = 0, weightvec.size-1 {
+
+			RegionFitness[f].weight.x[k] = weightvec.x[k]
+		}
 
 		RegionFitness[f].set_modelx(tempxvec)
-	}
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------------------------------------------------------
-proc nopelog() {
-
-	sscanf(elogvec.label, "%lf", &esim)
-	sscanf(plogvec.label, "%lf", &psim)
-
-	sprint(esimstr, "%s", elogvec.label)
-	sprint(psimstr, "%s", plogvec.label)
-
-	elogvec.label("")
-	plogvec.label("")
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------------------------------------------------------
-proc pelog() {
-
-	if (!numarg()) {
-
-		sprint(esimstr, "%d", esim)
-		sprint(psimstr, "%d", psim)
-		
-		elogvec.label(esimstr)
-		plogvec.label(psimstr)
-	}
-
-	if (numarg() == 1) {
-
-		esim = $1
-		sprint(esimstr, "%d", esim)
-		elogvec.label(esimstr)
-	}
-
-	if (numarg() == 2) {
-
-		esim = $1
-		sprint(esimstr, "%d", esim)
-		elogvec.label(esimstr)
-
-		psim = $2
-		sprint(psimstr, "%d", psim)
-		plogvec.label(psimstr)
 	}
 }
 // --------------------------------------------------------------------------------
@@ -603,13 +577,11 @@ proc initfit() {
 	plogvec.resize(0)
 	nefunvec.resize(0)
 
-	chkparamvec = initchkparam($1, $2, chkparamvec)
+	initchkparam($1, $2)
 
 	nefun_ = 0
 	nquad_ = 0
 	runtime = 0
-	hourlog = 1
-	chkhour = 2
 	fitoff = 1
 }
 // --------------------------------------------------------------------------------
@@ -643,6 +615,74 @@ func chktime() {localobj krand
 	} else {
 
 		return 0
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc nopelog() {
+
+	sprint(esimstr, "%s", elogvec.label)
+	sprint(psimstr, "%s", plogvec.label)
+
+	sscanf(esimstr, "%lf", &esim)
+	sscanf(psimstr, "%lf", &psim)
+
+	elogvec.label("")
+	plogvec.label("")
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc pelog() {
+
+	if (!numarg()) {
+		
+		elogvec.label(esimstr)
+		plogvec.label(psimstr)
+
+		sscanf(esimstr, "%lf", &esim)
+		sscanf(psimstr, "%lf", &psim)
+	}
+
+	if (numarg() == 1 && argtype(1) == 0) {
+
+		esim = $1
+		sprint(esimstr, "%g", esim)
+		elogvec.label(esimstr)
+	}
+
+	if (numarg() == 2 && argtype(1) == 0 && argtype(2) == 0) {
+
+		esim = $1
+		sprint(esimstr, "%g", esim)
+		elogvec.label(esimstr)
+
+		psim = $2
+		sprint(psimstr, "%g", psim)
+		plogvec.label(psimstr)
+	}
+
+	if (numarg() == 1 && argtype(1) == 2) {
+
+		sprint(esimstr, "%s", $s1)
+		sscanf($s1, "%lf", &esim)
+		elogvec.label(esimstr)
+	}
+
+	if (numarg() == 2 && argtype(1) == 2 && argtype(2) == 2) {
+
+		sprint(esimstr, "%s", $s1)
+		sscanf($s1, "%lf", &esim)
+		elogvec.label(esimstr)
+
+		sprint(psimstr, "%s", $s2)
+		sscanf($s2, "%lf", &psim)
+		plogvec.label(psimstr)
 	}
 }
 // --------------------------------------------------------------------------------
@@ -695,14 +735,25 @@ proc updpelog() {local f, p, ydatsize, yfitsize
 
 
 // --------------------------------------------------------------------------------
-proc savepelog() {local k localobj tempvec
+proc savepelog() {local k, has_iampdir localobj tempvec
 
 	if (strf.len(elogvec.label) && strf.len(plogvec.label)) {
 
 		sscanf(elogvec.label, "%lf", &esim)
 		sscanf(plogvec.label, "%lf", &psim)
 
-		if (getiampdir()) {
+		if (numarg() == 3 && argtype(1) == 0 && argtype(2) == 2 && argtype(3) == 2) {
+
+			has_iampdir = getiampdir($1, $s2, $s3)
+			sprint(iampstr, "%s", $s2)
+			sprint(iampdir, "%s", $s3)
+		
+		} else {
+
+			has_iampdir = getiampdir()
+		}
+
+		if (has_iampdir) {
 
 			if (elogvec.size && plogvec.size) {
 
@@ -713,39 +764,39 @@ proc savepelog() {local k localobj tempvec
 									
 					sprint(format, "%s%s", "%s", vformvec)
 
-					sprint(outstr, "%s", "")
+					sprint(datastr, "%s", "")
 
 					// save elog
 					for k = 0, elogvec.size-1 {
 
-						sprint(outstr, format, outstr, elogvec.x[k])
+						sprint(datastr, format, datastr, elogvec.x[k])
 					}
 
 					elogvec.resize(0)
 
-					sprint(filestr, "%d%s", esim, ".dat")
+					sprint(filestr, "%s%s", elogvec.label, ".dat")
 
-					writestr(elogdir, filestr, outstr, 1)
+					writestr(elogdir, filestr, datastr, 1)
 
-					sprint(outstr, "%s", "")
+					sprint(datastr, "%s", "")
 
 					sprint(format, "%s%s", "%s", maxformvec)
 
 					// save plog
 					for k = 0, plogvec.size-1 {
 
-						sprint(outstr, format, outstr, plogvec.x[k])
+						sprint(datastr, format, datastr, plogvec.x[k])
 					}
 
 					plogvec.resize(0)
 
-					sprint(filestr, "%d%s", psim, ".dat")
+					sprint(filestr, "%s%s", plogvec.label, ".dat")
 
-					writestr(plogdir, filestr, outstr, 1)
+					writestr(plogdir, filestr, datastr, 1)
 
-					sprint(outstr, "%s", "")
+					sprint(datastr, "%s", "")
 				
-				} else {
+				} else {		
 
 					crdir(iampdir, "elog")
 					crdir(iampdir, "plog")
@@ -764,24 +815,24 @@ proc savepelog() {local k localobj tempvec
 		
 		} else {
 
-			if (chkdir(root, "out")) {
+			if (chkdir(root, "data")) {
 
 				getmod()
 
-				if (chkdir(out, modstr)) {
+				if (chkdir(data, modstr)) {
 
 					crdir(moddir, iampstr)
 					savepelog()
 				
 				} else {
 
-					crdir(out, modstr)
+					crdir(data, modstr)
 					savepelog()
 				}
 			
 			} else {
 
-				crdir(root, "out")
+				crdir(root, "data")
 				savepelog()
 			}
 		}
@@ -1087,20 +1138,22 @@ proc getmutation() {local k, m localobj tempvec
 
 
 // --------------------------------------------------------------------------------
-obfunc initchkparam() {local k, p, unitsize, tempnum
+proc initchkparam() {local k, p, unitsize, tempnum
 
-	// chkparamvec (=$o3) created and sized to current number of fit parameters,
-	// and initialized to all parameters being non-optimal (=1).
 	// Note: only vector objects seem to cross the para/non-para line for functions
-	// called by init(), where init() does not take arguments, to maintain compatibility with
-	// with other calls to init().
-	$o3.resize(4*(unitsize = setnp($1, $2)))
+	// called by init(). init() also does not take arguments, to maintain compatibility with
+	// with other programme calls.	
+	chkparamvec.resize(4*(unitsize = setnp($1, $2)))
 	
 	for p = 0, unitsize-1 {
 
-		$o3.x[p] = 1
-		$o3.x[2*unitsize+p] = 1
-		$o3.x[3*unitsize+p] = phivec.x[p]/plowvec.x[p]
+		// column 0: eligibility for repicking or biophysical boundary imposition
+		chkparamvec.x[p] = 1
+		// column 1: initialized to 0, i.e. no repicking or changing the given parameter.
+		// column 2: lower biophysical bound (norm)
+		chkparamvec.x[2*unitsize+p] = 1
+		// column 3: upper biophysical bound
+		chkparamvec.x[3*unitsize+p] = phivec.x[p]/plowvec.x[p]
 	}
 
 	// remove eligibility from already optimal or currently non-optimized parameters (in increasing order of parameter numbers)
@@ -1108,7 +1161,7 @@ obfunc initchkparam() {local k, p, unitsize, tempnum
 
 		for p = 0, solnvec.size-1 {
 
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 	}
 
@@ -1117,11 +1170,18 @@ obfunc initchkparam() {local k, p, unitsize, tempnum
 		sscanf(elogvec.label, "%lf", &esim)
 		sscanf(plogvec.label, "%lf", &psim)
 
-		if (esim == -1 && psim == -1) {
+		if (esim > -1 && psim > -1) {
 
 			for p = 0, unitsize-1 {
 
-				$o3.x[p] = 0
+				chkparamvec.x[p] = 1
+			}
+		
+		} else {
+
+			for p = 0, unitsize-1 {
+
+				chkparamvec.x[p] = 0
 			}
 		}
 	}
@@ -1132,113 +1192,111 @@ obfunc initchkparam() {local k, p, unitsize, tempnum
 
 		if (!doargvec.x[p] || !$2) {
 
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 
 		// lc_Na_de: sufficiently restricted by Na_so		
 		if (p == 1+tempnum) {
 
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 
 		// Na_end: no effective restriction can me made
 		if (p == 6+tempnum) {
 
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}		
 
 		// Nap_ais: no clear evidence of more or less Nap anywhere along the primary axon, just its presence
 		if (p == 8+tempnum) {
 
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 
 		// Nap_int: no clear evidence of more or less Nap anywhere along the primary axon, just its presence
 		if (p == 9+tempnum) {
 
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 
 		// Nap_nod: no clear evidence of more or less Nap anywhere along the primary axon, just its presence
 		if (p == 10+tempnum) {
 
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 
 		// Nap_end: no clear evidence of more or less Nap anywhere along the primary axon, just its presence
 		if (p == 11+tempnum) {
 
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 
 		// lc_Kv1_Kv_de is sufficiently restricted by Kv1_so and Kv_so
 		if (p == 13+tempnum) {
 
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 
 		// Kv1_end: no clear restrictions
 		if (p == 18+tempnum) {
 
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 
 		// Kv_so: no clear restrictions
 		if (p == 20+tempnum) {
 
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 
 		// Kv7_prox: no clear restrictions
 		if (p == 23+tempnum) {
 
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 
 		// Kv7_end: no clear restrictions
 		if (p == 27+tempnum) {
 			
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 
 		// KCa: no clear restrictions
 		if (p == 29+tempnum) {
 			
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 
 		// Ca: no clear restrictions
 		if (p == 30+tempnum) {
 			
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 
 		// It2: no clear restrictions
 		if (p == 31+tempnum) {
 			
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 
 		// H_so: no clear restrictions
 		if (p == 32+tempnum) {
 			
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 
 		// tc_H_de: no clear restrictions
 		if (p == 33+tempnum) {
 			
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 
 		// H_ax: no clear restrictions
 		if (p == 34+tempnum) {
 			
-			$o3.x[p] = 0
+			chkparamvec.x[p] = 0
 		}
 	}
-
-	return $o3
 }
 // --------------------------------------------------------------------------------
 
@@ -1606,79 +1664,133 @@ obfunc mutchkparam() {local p, unitsize localobj tempvec
 
 
 // --------------------------------------------------------------------------------
-proc optimizewrap() {local tempnum, iiamp localobj rangemat
+proc optimizewrap() {local nd_, np, tempnum, scount, total_scount, scounter, exitcount, r, k, maxtime_, tolopt, maxstepsizeopt, p, ucount, exit_case localobj rangemat
 
-	initfit()
-	savepelog()
+	nd_ = nd
+	nd = 1
 
-	tempnum = iampvec.indwhere("==", stim.amp)
+	setgen(mode_, idata)
 
-	if (tempnum != -1) {
+	print "NU algorithm (GUI version)"
+	getmod()
 
-		iiamp = tempnum
+	if (mode_ == 0) {
+
+		np = genvec.size
+
+	} else {
+
+		np = getnp()
+	}
+	
+	print np, "parameters found for NU optimization (model type: ", modstr, ")"
+
+	if ((tempnum = iampvec.indwhere("==", stim.amp)) > -1) {		
+
+		scount = getscount(mode_, idata)
+
+		rangemat = new Matrix(2, 1)
+		
+		rangemat.x[0][0] = tempnum
+		rangemat.x[1][0] = tempnum
+
+		total_scount = scount
+
+		getiamp(tempnum, rampstr1)
+		getiamp(tempnum, rampstr2)
+
+		print "\nOptimization selected for stimulation amplitudes from ", rampstr1, " to ", rampstr2
+
+		print "Total optimizations for selected injection amplitude(s) = ", total_scount, "\n"
+
+		scounter = 0
+		exitcount = 0
+
+		crdir(root, "data")
+		crdir(data, modstr)
+		
+		pmat = new Matrix(total_scount, getnp())
+		eqlist = crveclist(eqlist, total_scount, 0)
+		pqlist = crveclist(pqlist, total_scount, 0)
+		exitlist = crveclist(exitlist, total_scount, 3)
+
+		for r = 0, rangemat.ncol-1 {
+
+			for k = rangemat.x[0][r], rangemat.x[1][r] {
+
+				getiampdir(k, iampstr, iampdir)
+				crdir(moddir, iampstr)
+				savepelog(k)
+				savelog(iampdir, "eq")
+				savelog(iampdir, "pq")
+				savelog(iampdir, "fe")
+				savelog(iampdir, "fp")
+				savelog(iampdir, "t")
+				savelog(iampdir, "v")
+				savelog(iampdir, "exit")
+				saveopt(iampdir, scount)
+				
+				getsim(0, 0)
+
+				print "\n", simvec.size, "simulation(s) chosen for injection amplitude ", iampstr			
+
+				maxtime_ = maxtime
+				maxtime = 1e9
+
+				scounter += 1
+
+				reseticlamp(mode_, idata, k, 0, 1)
+				tolopt = settol(k, 1)
+				maxstepsizeopt = setmaxstepsize(tolopt)
+
+				pelog(0, 0)
+
+				print "\nRunning simulation ", 1, "of ", 1, "for injection amplitude ", iampstr
+
+				for p = 0, pmat.ncol-1 {
+
+					pmat.x[0][p] = RunFitParm[p].val
+				}
+
+				initfit(mode_, idata)
+				adj_injbound(mode_, 1)
+
+				// ucount = 0 if simulation did not complete due to overtime
+				ucount = 0
+
+				// exit_case by default is 0 (= no exit), unless there is a reason to exit (=1)
+				exit_case = 0
+
+				// ensure fitoff first, to restore variables therafter
+				// fitoff = 0
+
+				// $1 = iiamp
+				// $2 = mode_
+				// $3 = ll
+				// $4 = uopt
+				// $o5 = p from pmat, to be optimized
+				// $6 = tol
+				// $7 = maxstepsize
+				// $o8 = eqvec from eqlist, to be updated with resultant quad errors
+				// $o9 = pqvec from pqlist, to be updated with resultant quad parameters
+				// $10 = sim
+				// $11 = scount
+				// $o12 = exitlist vec
+				// $13 = hoc_ac_ = internal id number; here, for GUI-based calls to optimize (718573=GUI)
+				// $14 = ucount, local variable determining if simulation could not finish due to lack of time
+				// $15 = exit_case, by default 0 (no exit) unless certain criteria are met (see optimize())			
+				optimize(k, mode_, 0, 0, pmat.getrow(0), tolopt, maxstepsizeopt, eqlist.o(0), pqlist.o(0), simvec.x[0], 0, exitlist.o(0), 718573, ucount, exit_case)
+
+				nd = nd_
+				maxtime = maxtime_
+			}
+		}
 	
 	} else {
 
-		iiamp = 0
+		print "\nVoltage response data must correspond to selected current injection amplitude\nStopping..."
+		stop
 	}
-
-	crdir(root, "out", 0)
-	getmod()
-	crdir(out, modstr)
-	// create iampdir
-
-	getmat(ses, vdatfilestr, vdatmat)
-	tdatvec = new Vector()
-	tdatvec.append(vdatmat.getcol(0))
-	nsigt = getnsig(tdatvec)
-	dt = setnsig(dt, nsigt)
-	nsigv = getnsig(vdatmat.getcol(1))
-	
-	setmaxform()
-	setmaxformvec()
-	setvform()
-	setvformvec()
-	settform()
-	settformvec()
-
-	croutmat(1)
-	croutlist(1)
-
-	getpheader()
-	geteheader()
-	getvheader(1)
-
-	adj_injbound(mode_)
-
-	getpnorm()
-
-	tol = settol(iiamp)
-	maxstepsize = setmaxstepsize(tol)
-
-	eqlist.o(0).resize(0)
-	pqlist.o(0).resize(0)
-
-	saveopt(iampdir, 1)
-
-	print "\nRunning simulation 1 of 1"
-
-	// required optimize parameters:
-	// $1 = iiamp
-	// $2 = mode_
-	// $3 = ll
-	// $4 = uopt
-	// $o5 = pnormvec
-	// $6 = tol
-	// $7 = maxstepsize
-	// $o8 = eqvec from eqlist, to be updated with resultant quad errors
-	// $o9 = pqvec from pqlist, to be updated with resultant quad parameters
-	// $o10 = elogvec from eloglist, to be updated
-	// $o11 = plogvec from ploglist, to be updated
-	// $12 = sim
-	// $13 = scount
-	// $14 = istart
-	// $15 = internal job id, for GUI-based calls to optimize (718573=GUI)
-	optimize(iiamp, mode_, ll, uopt, pnormvec, tol, maxstepsize, eqlist.o(0), pqlist.o(0), 0, 0, 0, 718573)
 }
 // --------------------------------------------------------------------------------
 
@@ -1709,7 +1821,7 @@ proc setoptpanel() {
 // change fit data according to iiamp and imported vdat
 // $1 = iiamp
 // $2 = mode_
-proc changedata() {local f localobj boundvec, weightvec, tempxvec
+proc changedata() {local f, k localobj boundvec, weightvec, tempxvec
 
 	for f = 0, nf-1 {
 
@@ -1717,24 +1829,47 @@ proc changedata() {local f localobj boundvec, weightvec, tempxvec
 		if (RegionFitness[f].boundary.x[0] != RegionFitness[f].xdat.x[0] || RegionFitness[f].boundary.x[RegionFitness[f].boundary.size-1] != RegionFitness[f].xdat.x[RegionFitness[f].xdat.size-1] || RegionFitness[f].boundary.size > 2) {
 
 			// store those bounds in boundvec
-			boundvec = new Vector()
-			boundvec.append(RegionFitness[f].boundary)
+			boundvec = new Vector(RegionFitness[f].boundary.size)
+
+			for k = 0, boundvec.size-1 {
+
+				boundvec.x[k] = RegionFitness[f].boundary.x[k]
+			}
+
+			// store associated time data
+			tempxvec = new Vector(RegionFitness[f].xdat_.size)
+
+			for k = 0, tempxvec.size-1 {
+
+				tempxvec.x[k] = RegionFitness[f].xdat_.x[k]
+			}
+			
 			// also store the associated weights in weightvec
-			weightvec = new Vector()
-			weightvec.append(RegionFitness[f].weight)
+			weightvec = new Vector(RegionFitness[f].weight.size)
+
+			for k = 0, weightvec.size-1 {
+
+				weightvec.x[k] = RegionFitness[f].weight.x[k]	
+			}
 
 			// set data to new iamp
 			RegionFitness[f].set_data(vdatmat.getcol(0), vdatmat.getcol($1*nf+f+1))
 
 			// restore previous boudaries and weights (the associated dw get taken care of)
-			RegionFitness[f].boundary = new Vector()
-			RegionFitness[f].boundary.append(boundvec)
-			RegionFitness[f].weight = new Vector()
-			RegionFitness[f].weight.append(weightvec)
+			RegionFitness[f].boundary = new Vector(boundvec.size)
 
-			// to finalize the restoration in the GUI, need...
-			tempxvec = new Vector()
-			tempxvec.append(RegionFitness[f].xdat)
+			for k = 0, boundvec.size-1 {
+
+				RegionFitness[f].boundary.x[k] = boundvec.x[k]	
+			}
+			
+			RegionFitness[f].weight = new Vector(weightvec.size)
+
+			for k = 0, weightvec.size-1 {
+
+				RegionFitness[f].weight.x[k] = weightvec.x[k]
+			}
+			
 			RegionFitness[f].set_modelx(tempxvec)
 		
 		} else {
@@ -1746,7 +1881,11 @@ proc changedata() {local f localobj boundvec, weightvec, tempxvec
 
 	strdef chgdata_iampstr
 	getiamp($1, chgdata_iampstr)
-	print "\nFit data changed to ", chgdata_iampstr, " voltage response"	
+
+	if ($2) {
+
+		print "\nFit data changed to ", chgdata_iampstr, " voltage response"		
+	}
 }
 // --------------------------------------------------------------------------------
 
@@ -1756,10 +1895,15 @@ proc changedata() {local f localobj boundvec, weightvec, tempxvec
 proc reseticlamp() {local wstart, wkill, win, interval, wcount
 	
 	{stim.amp = iampvec.x[$3]}
-	printclamp()
-	changedata($3)
+	
+	if ($5) {
 
-	if (!$4) {
+		printclamp()
+	}
+	
+	changedata($3, $5)
+
+	if ($4) {
 
 		writenum(ses, iampfilestr, iampvec.x[$3])
 		writefitdata($3)
@@ -1854,13 +1998,13 @@ func getoptsoln() {local k localobj tempmat
 
 			updfitparam(solnvec)
 
-			print "Optimal parameters loaded for ", modstr, "/", iampstr
+			print "\nOptimal parameters loaded for ", modstr, "/", iampstr
 
 			return solnvec.size
 		
 		} else {
 
-			print "Optimal parameters do not exist for ", modstr, "/", iampstr
+			print "\nOptimal parameters do not exist for ", modstr, "/", iampstr
 
 			getoptpas($1, $2)
 
@@ -1869,7 +2013,7 @@ func getoptsoln() {local k localobj tempmat
 	
 	} else {
 
-		print "Optimization directory does not exist for ", modstr, "/", iampstr
+		print "\nOptimization directory does not exist for ", modstr, "/", iampstr
 
 		getoptpas($1, $2)
 
@@ -1888,9 +2032,9 @@ func getoptpas() {local k
 	strf.tail(modstr, "-", optpas_modstr)
 	sprint(optpas_modstr, "%s%s", "pas-", optpas_modstr)
 
-	sprint(optpas_moddir, "%s%s%s", out, optpas_modstr, "/")
+	sprint(optpas_moddir, "%s%s%s", data, optpas_modstr, "/")
 	
-	if (chkdir(out, optpas_modstr)) {
+	if (chkdir(data, optpas_modstr)) {
 
 		if (chkdir(optpas_moddir, "\npematr.dat")) {
 
