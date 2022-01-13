@@ -9,8 +9,8 @@ Automated generation, GUI-based exploration, and multiscale optimization of neur
 -------------------------------------------------------------------------------------------------------------------
 
 To run a model for the first time:
-	- Download and install NEURON (github.com/neuronsimulator).
-	- Download Salto (github.com/cccohen/Salto).
+	- Download and install NEURON (https://github.com/neuronsimulator/).
+	- Download Salto (https://github.com/cccohen/Salto/).
 	- Import cellular morphology via getmorph.hoc.
 	- Load morphology and identify recorded sections with loadmorph.hoc.
 	- Run setup.hoc
