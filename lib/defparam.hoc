@@ -220,11 +220,11 @@ lc_Kv_Kv1_de_high = 2000
 lc_Kv_Kv1_de_def = 200
 
 Kv1_prox_low = 0.001
-Kv1_prox_high = 10000
+Kv1_prox_high = 20000
 Kv1_prox_def = 500
 
 Kv1_ais_low = 0.001
-Kv1_ais_high = 10000
+Kv1_ais_high = 20000
 Kv1_ais_def = 3000
 
 Kv1_juxta_low = 0.001
@@ -240,7 +240,7 @@ Kv1_nod_high = 2000
 Kv1_nod_def = 200
 
 Kv1_end_low = 0.001
-Kv1_end_high = 10000
+Kv1_end_high = 20000
 Kv1_end_def = 400
 
 Kv1_col_low = 0.001
