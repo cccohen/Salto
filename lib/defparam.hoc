@@ -203,7 +203,7 @@ Nap_int_high = 10
 Nap_int_def = 1e-2
 
 Nap_nod_low = 1e-6
-Nap_nod_high = 1000
+Nap_nod_high = 100
 Nap_nod_def = 1
 
 Nap_end_low = 1e-6
