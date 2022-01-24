@@ -175,8 +175,8 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 			// create new (default) boundaries
 			RegionFitness[f].boundary = new Vector(2)
 			
-			RegionFitness[f].boundary.x[0] = RegionFitness[f].xdat.x[0]
-			RegionFitness[f].boundary.x[1] = RegionFitness[f].xdat.x[RegionFitness[f].xdat.size-1]
+			RegionFitness[f].boundary.x[0] = temptvec.x[0]
+			RegionFitness[f].boundary.x[1] = temptvec.x[temptvec.size-1]
 			
 			// set these new boundaries (must use different xdat vector)
 			// use whole tdat
@@ -186,6 +186,11 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 			// generate error function
 			FitnessGenerator[0].efun()
 			pelog()
+
+			// ensure FitnessGenerator[0].yveclist.o(f) is of the correct size (= RegionFitness[f].ydat_.size, the fit data, and 
+			// RegionFitness[f].dw_.size, the weight placer). In theory, it should be set after the completion of efun(). In practice,
+			// the call to meansqerr gets done before this update takes place. Therefore, the resize must be done here first.
+			FitnessGenerator[0].yveclist.o(f).resize(temptvec.size)
 			
 			// store current default error in eqlist vec
 			$o8.x[$o8.size-(nf+1)+f] = RegionFitness[f].ydat_.meansqerr(FitnessGenerator[0].yveclist.o(f), RegionFitness[f].dw_)
