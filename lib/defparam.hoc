@@ -216,7 +216,7 @@ Kv1_so_high = 2000
 Kv1_so_def = 100
 
 lc_Kv_Kv1_de_low = 20
-lc_Kv_Kv1_de_high = 2000
+lc_Kv_Kv1_de_high = 1200
 lc_Kv_Kv1_de_def = 200
 
 Kv1_prox_low = 0.001

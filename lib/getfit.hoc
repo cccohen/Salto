@@ -8,7 +8,7 @@
 
 // -------------------------------Variables----------------------------------------
 objref paramvec, solnvec, elogvec, plogvec, nefunvec, optibox
-objref genvec, spacemat, genvec, mutmat, permvec, chkparamvec
+objref genvec, spacemat, genvec, mutmat, permvec, chkparamvec, chkparamboundsvec
 objref pmat, tmat, vvec, simvec, rangemat
 objref eqlist, pqlist, tlist, exitlist
 objref boundvec, origboundlist, newboundlist, weightvec, weightmat, origweightlist, newweightlist, errlist, scalelist
@@ -18,6 +18,7 @@ solnvec = new Vector()
 genvec = new Vector()
 spacemat = new Matrix()
 chkparamvec = new Vector()
+chkparamboundsvec = new Vector()
 
 prand = new Random()
 
@@ -65,7 +66,7 @@ proc adj_injbound() {local f, pifdelt, k localobj tempxvec
 					RegionFitness[f].boundary.x[0] = pifdelt
 					RegionFitness[f].weight.x[0] = 0
 
-					tempxvec = new Vector(RegionFitness[f].xdat)
+					tempxvec = new Vector(RegionFitness[f].xdat.size)
 					
 					for k = 0, tempxvec.size-1 {
 
@@ -1640,10 +1641,44 @@ obfunc chkparam() {local p, unitsize, tempnum
 
 
 // --------------------------------------------------------------------------------
+proc chkparambounds() {local p, unitsize, chkbound
+
+	initchkparam($1, $2)
+	unitsize = chkparamvec.size/4
+	chkbound = 0
+
+	for p = 0, unitsize-1 {		
+
+		if (RunFitParm[p].val*plowvec.x[p] > phivec.x[p] || RunFitParm[p].val*plowvec.x[p] < plowvec.x[p]) {
+
+			chkparamvec.x[p] = 1
+			chkparamvec.x[unitsize+p] = 1
+			chkbound = 1
+		}
+	}
+
+	if (chkbound) {
+
+		print "---------------------------"
+		for i = 0, chkparamvec.size-1 {
+
+			print "chkparamvec.x[", i, "] = ", chkparamvec.x[i]
+		}
+		print "---------------------------"
+
+		updfitparam(mutchkparam(chkparamvec))
+		initchkparam($1, $2)
+	}
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
 obfunc mutchkparam() {local p, unitsize localobj tempvec
 	
 	unitsize = $o1.size/4
-	tempvec = new Vector(unitsize)	
+	tempvec = new Vector(unitsize)
 
 	for p = 0, unitsize-1 {
 

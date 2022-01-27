@@ -77,6 +77,7 @@ func orgopt() {local tolopt, maxstepsizeopt, ind, lastsim, p, ucount, exit_case
 	}
 
 	initfit($2, idata)
+	chkparambounds($2, idata)
 
 	// ucount = 0 if simulation did not complete due to overtime
 	ucount = 0
@@ -1094,7 +1095,8 @@ proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_
 			savelog(iampdir, "exit")		
 			saveopt(iampdir, scount)
 			
-			getsim(0, getscount(mode_, idata))
+			// getsim(0, getscount(mode_, idata))
+			getsim(344, 344)
 			print "\n", simvec.size, "simulation(s) chosen for injection amplitude ", iampstr
 
 			if (loaduopt(iampdir, scount, istart)) {
