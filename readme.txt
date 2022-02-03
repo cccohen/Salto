@@ -20,7 +20,7 @@ To run a model for the first time:
 
 -------------------------------Contents-------------------------------
 getmorph.hoc
-	- Import cellular morphology (in ASCII format or other)
+	- Import cellular morphology (in ASCII format and others)
 
 loadmorph.hoc
 	- Load cellular morphology in 3D.
@@ -64,7 +64,7 @@ resetaxon.hoc
 startopt.hoc
 	- Run massive optimization of passive parameters using custom optimization procedure.
 	- May be run in parallel at the NSG (https://www.nsgportal.org/) or properly configured machines.
-	- Saves simulation results in an "outdir", in a subfolder entitled *modeltype*
+	- Saves simulation results in the data directory, in subfolders titled *modeltype*
 
 extractopt.hoc
 	- Extract and rank optimized solutions returned by startopt.hoc.

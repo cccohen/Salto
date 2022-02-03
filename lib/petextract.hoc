@@ -187,6 +187,9 @@ proc extract_log() {local nline, line, nrows, k, f, qstart, q, exitcount localob
 
 				print "...Extraction completed for ", logstr
 			
+			} else {
+
+				print "...Nothing to extract for ", logstr
 			}
 
 		} else {

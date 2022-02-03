@@ -1659,13 +1659,6 @@ proc chkparambounds() {local p, unitsize, chkbound
 
 	if (chkbound) {
 
-		print "---------------------------"
-		for i = 0, chkparamvec.size-1 {
-
-			print "chkparamvec.x[", i, "] = ", chkparamvec.x[i]
-		}
-		print "---------------------------"
-
 		updfitparam(mutchkparam(chkparamvec))
 		initchkparam($1, $2)
 	}
