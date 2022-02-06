@@ -27,9 +27,9 @@ loadmorph.hoc
 	- Identify cellular locations of interest by section name and sublocation (0-1).
 
 setup.hoc
-	- Quintessential starting point to create a model cell.
-	- Requires recording setup information and data.
-	- Initialize the model cell (mode, axon type, session options, etc).
+	- Starting point for creating a model cell.
+	- Adds electrophysiological data, if present.
+	- Initializes the model (mode, data, session options, etc).
 
 compilemod.hoc
 	- Compile or recompile mod files.
