@@ -96,7 +96,7 @@ proc adj_injbound() {local f, pifdelt, k localobj tempxvec
 // --------------------------------------------------------------------------------
 // Places a voltage derivative-adjusted weight scale on voltage traces. No arguments.
 
-proc adj_weight() {local points_to_adv, f, k, lo_bound, up_bound, indlo, indhi localobj tempvec, tempxvec, tempyvec, boundvec, weightvec
+proc adj_weight() {local points_to_adv, f, k, lo_bound, up_bound, indlo, indhi, iidel localobj tempvec, tempxvec, tempyvec, boundvec, weightvec
 
 	points_to_adv = 1/dt/bess
 	tempvec = new Vector()
@@ -152,6 +152,19 @@ proc adj_weight() {local points_to_adv, f, k, lo_bound, up_bound, indlo, indhi l
 			if (tempvec.x[k] < 1) {
 
 				tempvec.x[k] = 1
+			}
+		}
+
+		// scale idel portion up by idur/idel if idur && idel > 0 && idur > idel
+		if (stim.del > 0 && stim.dur > 0 && stim.dur/stim.del > 1) {
+
+			// find idel
+			iidel = tempxvec.indwhere(">=", stim.del)
+
+			// weightvec units to scale corresponding to idel
+			for k = 0, ((iidel+1)/points_to_adv)-1 {
+
+				tempvec.x[k] *= stim.dur/stim.del
 			}
 		}
 
