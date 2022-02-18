@@ -4,7 +4,7 @@ Salto v1.0
 The contents of this package are released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International license (CC BY-NC-ND 4.0, in English).
 -------------------------------------------------------------------------------------------------------------------
 
-Automated generation, GUI-based exploration, and multiscale optimization of neuron models
+Automated generation, GUI-based exploration, and multiscale optimization of neuron models. Part of a future peer-reviewed article in progress, an early draft of which is available in my dissertation, Chapter 3 (https://ln5.sync.com/dl/19f3dd150#t6eg8zrr-brmqefnb-jppv4fhi-hjrtzt5q).
 
 -------------------------------------------------------------------------------------------------------------------
 
