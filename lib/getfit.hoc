@@ -7,7 +7,7 @@
 
 
 // -------------------------------Variables----------------------------------------
-objref paramvec, solnvec, elogvec, plogvec, nefunvec, optibox
+objref paramvec, solnvec, elogvec, plogvec, nefunvec, optibox, atoltoolobj
 objref genvec, spacemat, genvec, mutmat, permvec, chkparamvec, chkparamboundsvec
 objref pmat, tmat, vvec, simvec, rangemat
 objref eqlist, pqlist, tlist, exitlist
@@ -44,6 +44,33 @@ esim = -1
 psim = -1
 
 newg = 0
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc activate_cvode() {
+
+	NumericalMethodPanel[0].varstep(1)
+	atoltoolobj = new AtolTool()
+	atoltoolobj.activate(1)
+	CVode[0].atol($2)
+	CVode[0].use_fast_imem(1)
+	CVode[0].minstep($1)
+	CVode[0].maxstep($3)
+	atoltoolobj.analyse()
+	atoltoolobj.rescale()
+	atoltoolobj.refresh()
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
+proc deactivate_cvode() {
+
+	NumericalMethodPanel[0].varstep(0)
+}
 // --------------------------------------------------------------------------------
 
 

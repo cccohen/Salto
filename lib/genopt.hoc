@@ -46,7 +46,6 @@ func orgopt() {local tolopt, maxstepsizeopt, ind, lastsim, p, ucount, exit_case
 	// the full simulation number includes the cycle number, i.e. how many x-hour cycles are being run for simulation y.
 	// represented as sim = y.x
 	ind = indwherelast($o11, ">", float_epsilon)+1
-	
 	sprint(tempstr, "%d%s%d", $8, ".", ind)
 	pelog(tempstr, tempstr)
 	
@@ -55,7 +54,13 @@ func orgopt() {local tolopt, maxstepsizeopt, ind, lastsim, p, ucount, exit_case
 
 	reseticlamp(mode_, idata, $1, 0, !$3)
 	tolopt = settol($1, !$3)
-	maxstepsizeopt = setmaxstepsize(tolopt)
+	maxstepsizeopt = setmaxstepsize(tolopt)	
+
+	activate_cvode(dt, tolopt, maxstepsizeopt)
+
+	// in case final sim values are out of restricted subspaces or bounds
+	initfit($2, idata)
+	chkparambounds($2, idata)
 
 	if ($2 == 1) {
 
@@ -1095,7 +1100,7 @@ proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_
 			savelog(iampdir, "exit")		
 			saveopt(iampdir, scount)
 			
-			getsim(0, getscount(mode_, idata))
+			getsim(0, getscount())
 			print "\n", simvec.size, "simulation(s) chosen for injection amplitude ", iampstr
 
 			if (loaduopt(iampdir, scount, istart)) {

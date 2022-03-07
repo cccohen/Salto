@@ -8,7 +8,7 @@
 
 // -------------------------------Variables----------------------------------------
 objref getfile, writefile, llc, strf, PWM, timer
-objref tempobj, tempmat, templist, tempseclist, tempvec, testvec, tempxvec, tempyvec, temptvec, rvec
+objref tempobj, pubobj, tempmat, templist, tempseclist, tempvec, testvec, tempxvec, tempyvec, temptvec, rvec
 objref recloclist, recseclist, loclist, subloclist, sublocvec, iampvec, piplist, fitvarlist, pnamelist, vvarlist, dirlist
 objref secref, tsecref, cdiamvec, pvec, pnormvec
 objref BBvec, celltypevec, injvec, vdatmat, newvdatmat, vdatlist, vdatvec, tdatvec, tcmpvec, vpathlist
@@ -745,6 +745,32 @@ obfunc crveclist() {local k localobj tempmat
 
 
 // --------------------------------------------------------------------------------
+obfunc crmatlist() {local k localobj templist, tempmat
+	
+	$o1 = new List()
+
+	if ($2 && $3) {
+
+		for k = 0, $2-1 {			
+			
+			if (numarg() == 4) {
+
+				$o1.append(crveclist(templist, $3, $4))
+
+			} else {
+
+				$o1.append(crveclist(templist, $3))
+			}
+		}
+	}
+
+	return $o1
+}
+// --------------------------------------------------------------------------------
+
+
+
+// --------------------------------------------------------------------------------
 obfunc resizeveclist() {local k, q localobj templist
 
 	templist = crveclist(templist, $2, $3)
@@ -1451,16 +1477,14 @@ proc importiamp() {local upiamp, iamp, tempsize, tempnum, firstamp
 
 	chkout()
 
-	print iampvecfilestr, " saved in ", ses, "\n"
+	print "\n", iampvecfilestr, " saved in ", ses, "\n"
 }
 // --------------------------------------------------------------------------------
 
 
 
 // --------------------------------------------------------------------------------
-// imports current injection and voltage response data
-
-proc importv() {local k, rec, import localobj tempmat, vdatvec, tcmpvec
+proc importv() {local k, q, rec, ncols, import localobj vpathlist, tempmat, tcmpvec
 
 	if (numarg() == 1 && argtype(1) == 2) {
 
@@ -1480,7 +1504,7 @@ proc importv() {local k, rec, import localobj tempmat, vdatvec, tcmpvec
 
 	print "\nImport ", modestr, " voltage responses:\n"
 
-	importqstr = "Please select one of the following:\n\n(1) Import voltage responses individually for each injection amplitude at each recording location.\n(2) Import all voltage responses for all injection amplitudes at each recording location.\n\n(Should be used with trcsProcessor to ensure proper formatting)"
+	importqstr = "Please select one of the following:\n\n(1) Import voltage responses individually for each injection amplitude at each recording location.\n(2) Import all voltage responses for all injection amplitudes at each recording location.\n\n(May be used with trcsProcessor to ensure proper formatting)"
 	
 	import = xred(importqstr, 2, 1, 2)
 
@@ -1491,86 +1515,64 @@ proc importv() {local k, rec, import localobj tempmat, vdatvec, tcmpvec
 		chdir(root)
 		
 		sprint(tempdir, "%s", root)
-		crveclist(vpathlist, nrec)
+		crmatlist(vpathlist, iampvec.size, nrec)
+		vdatmat = new Matrix(nrows, 1+iampvec.size*nrec)
 
 		for k = 0, iampvec.size-1 {
 
-			for rec = 0, recloclist.count-1 {
+			for rec = 0, nrec-1 {
 
 				sprint(tempstr, "%s%g%s%s", "Please select voltage responses for ", iampvec.x[k], " nA at ", recloclist.o(rec).label)
-
 				getfile.chooser("r", tempstr, "*.dat", "accept", "cancel", tempdir)
 
 				if (getfile.chooser()) {
 
 					sprint(tempstr, "%s", getfile.getname())
-					vpathlist.o(rec).label(tempstr)
+					vpathlist.o(k).o(rec).label(tempstr)
 					sprint(tempdir, "%s", getfile.dir())
 					
 					getfile.close()
+
+					nrows = getmat(vpathlist.o(k).o(rec).label, tempmat)
+					ncols = tempmat.ncol
+					
+					if (ncols != 2) {
+
+						print "\nError: number of imported v traces for ", recloclist.o(rec).label, " do not correspond to that of one recording location"
+						stop
+					}
+
+					if (vdatmat.nrow == 1) {
+
+						vdatmat.resize(nrows, vdatmat.ncol)
+					
+					} else {
+
+						if (nrows != vdatmat.nrow) {
+
+							print "Error: row numbers for voltage responses at ", recloclist.o(0).label, " with injection amplitude ", iampvec.x[0], " nA do not match those at ", recloclist.o(rec).label, " with injection amplitude ", iampvec.x[k], " nA"
+							stop
+						}
+					}
+
+					if (k == 0 && rec == 0) {
+
+						tdatvec = new Vector(nrows)
+
+						for q = 0, tdatvec.size-1 {
+
+							tdatvec.x[q] = tempmat.x[q][0]
+						}
+
+						vdatmat.setcol(0, tdatvec)
+					}
+
+					vdatmat.setcol(k*nrec+rec+1, tempmat.getcol(1))
 				}
 			}
 		}
 
 		chkout()
-
-		// first var in trcsProcessor-formatted mat should be nrows
-		// start with first vrec...
-		nrows = getmat(vpathlist.o(0).label, tempmat)
-		// ncols for vdatmat must 1 (time) + nrec*iampvec.size
-		ncols = 1 + nrec * iampvec.size
-
-		if (tempmat.ncol-1 != iampvec.size) {
-			
-			print "Number of imported v for ", recloclist.o(0).label, " does not correspond to that of injection amplitudes"
-			stop
-		}
-		
-		// create vdatmat
-		vdatmat = new Matrix(nrows, ncols)
-		// fill vdatmat
-		// start with laying out first vrec (the inj/rec)...
-		// set time
-		vdatmat.setcol(0, tempmat.getcol(0))
-		tdatvec = new Vector()
-		tdatvec.append(vdatmat.getcol(0))
-		// fill remaining v cols
-		for col = 0, tempmat.ncol-2 {
-
-			vdatmat.setcol(nrec*col+1, tempmat.getcol(col+1))
-		}
-
-		if (nrec > 1) {
-
-			for rec = 1, nrec-1 {
-
-				nrows = getmat(vpathlist.o(rec).label, tempmat)
-
-				if (nrows != vdatmat.nrow) {
-
-					print "Number of rows for ", recloclist.o(rec).label, "does not correspond to those already imported"
-					stop
-				
-				} else {
-
-					tcmpvec = new Vector()
-					tcmpvec.append(tempmat.getcol(0))
-
-					if (tcmpvec.size != tdatvec.size || (tcmpvec.x[0] != tdatvec.x[0] && tcmpvec.x[1] != tdatvec.x[1] && tcmpvec.x[tcmpvec.size-1] != tdatvec.x[tdatvec.size-1])) {
-
-						print "Time vectors for ", recloclist.o(rec).label, " and ", recloclist.o(rec).label, "do not match"
-						stop
-
-					} else {
-
-						for col = 0, tempmat.ncol-2 {
-
-							vdatmat.setcol(nrec*col+rec+1, tempmat.getcol(col+1))
-						}
-					}
-				}
-			}
-		}
 	}
 
 	if (import == 2) {
@@ -1607,7 +1609,7 @@ proc importv() {local k, rec, import localobj tempmat, vdatvec, tcmpvec
 
 		if (tempmat.ncol-1 != iampvec.size) {
 			
-			print "Number of imported v for ", recloclist.o(0).label, " does not correspond to that of injection amplitudes"
+			print "\nError: number of imported v for ", recloclist.o(0).label, " does not correspond to that of injection amplitudes"
 			stop
 		}
 		
@@ -1633,7 +1635,7 @@ proc importv() {local k, rec, import localobj tempmat, vdatvec, tcmpvec
 
 				if (nrows != vdatmat.nrow) {
 
-					print "Number of rows for ", recloclist.o(rec).label, "does not correspond to those already imported"
+					print "Error: number of rows for ", recloclist.o(rec).label, "does not correspond to those already imported"
 					stop
 				
 				} else {
@@ -1666,7 +1668,7 @@ proc importv() {local k, rec, import localobj tempmat, vdatvec, tcmpvec
 
 	sprint (tempstr, "%s%s", ses, vdatfilestr)
 	print "\nVoltage responses imported and saved as ", tempstr
-	print "Changes will be reflected in the model at the next open."
+	print "Changes will be reflected in the model at next open"
 }
 // --------------------------------------------------------------------------------
 

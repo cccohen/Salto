@@ -179,7 +179,7 @@ Na_ais_high = 75000
 Na_ais_def = 10000
 
 Na_int_low = 0.001
-Na_int_high = 1000
+Na_int_high = 2000
 Na_int_def = 100
 
 Na_nod_low = 0.001
@@ -191,7 +191,7 @@ Na_end_high = 75000
 Na_end_def = 400
 
 Na_col_low = 0.001
-Na_col_high = 1000
+Na_col_high = 2000
 Na_col_def = 200
 
 Nap_ais_low = 1e-6

@@ -8,7 +8,7 @@
 
 // ----------------------------------------------------------------------------------------
 // init protocol, initializing and updating the model for each simulation run
-proc init() {local savet, savesteps, savedt, q
+proc init() {local savet, savesteps, savedt, q, qend
 
 	dt = setnsig(dt, nsigt)
 
@@ -22,7 +22,17 @@ proc init() {local savet, savesteps, savedt, q
 	updpelog()
 
 	finitialize(v_init)
-	fcurrent()
+
+	if (cvode.active()) {
+		
+		cvode.re_init()
+		qend = 1000
+	
+	} else {
+	
+		fcurrent()
+		qend = 500
+	}
 
 	if (mode_ == 1) {
 
@@ -30,19 +40,35 @@ proc init() {local savet, savesteps, savedt, q
 		savesteps = steps_per_ms
 		savedt = dt
 
-		steps_per_ms = 1e-9
-		dt = 1e9
+		t = -500
+		steps_per_ms = 1
+		dt = 1		
 		
-		for q = 0, 399 {
+		for q = 1, qend {
 
 			fadvance()
 		}
 
+		t = savet
 		steps_per_ms = savesteps
 		dt = savedt
-		t = savet
+
+		if (cvode.active()) {
+			
+			cvode.re_init()
+		
+		} else {
+		
+			fcurrent()
+		}
 	}
 
 	frecord_init()
+
+	if (cvode.active()) {
+
+		cvode.event(stim.del)
+		cvode.event(stim.del+stim.dur)
+	}
 }
 // ----------------------------------------------------------------------------------------
