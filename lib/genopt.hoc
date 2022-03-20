@@ -1100,7 +1100,7 @@ proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_
 			savelog(iampdir, "exit")		
 			saveopt(iampdir, scount)
 			
-			getsim(0, getscount())
+			getsim(0, getscount(mode_, idata))
 			print "\n", simvec.size, "simulation(s) chosen for injection amplitude ", iampstr
 
 			if (loaduopt(iampdir, scount, istart)) {

@@ -151,9 +151,9 @@ proc adj_weight() {local points_to_adv, f, k, lo_bound, up_bound, indlo, indhi, 
 			tempyvec.x[k] = RegionFitness[f].ydat.x[k]
 		}
 
-		indlo = tempxvec.indwhere("==", lo_bound)
-		indhi = tempxvec.indwhere("==", up_bound)
-				
+		indlo = tempxvec.indwhere(">=", lo_bound)
+		indhi = tempxvec.indwhere(">=", up_bound)
+
 		tempvec = new Vector()
 		boundvec = new Vector()
 

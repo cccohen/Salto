@@ -72,7 +72,7 @@ if (mode_ == 0) {
 }
 
 
-print "\nPlease confirm starting IClamp:\n"
+print "\nPlease confirm starting IClamp:"
 setfilestr(mode_, idata)
 iampvec = getvec(ses, iampvecfilestr, iampvec)
 changeiclamp()
