@@ -588,7 +588,7 @@ proc setions() {
 
 	forsec AIS {
 
-		// non-uniformly distributed
+		// sigmoidally distributed
 		insert nais
 		insert kv1ax
 		insert kv7
@@ -660,49 +660,30 @@ proc setions() {
 	// cell-wide ionic mechanisms and constants
 	forsec cellular {
 
-		if (ismembrane("na_ion")) {
+		ena = 55
+		ek = -85
+		eh = -45
+		eca = 140
+		ion_style("ca_ion",0,1,0,0,0)
 
-			ena = 55
-		}
+		// Layer 5 LVA Ca constants
+		vh1_it2 = 56
+		vh2_it2 = 415
+		ah_it2 = 30
+		v12m_it2 = 45
+		v12h_it2 = 65
+		am_it2 = 3
+		vm1_it2 = 50
+		vm2_it2 = 125
 
-		if (ismembrane("k_ion")) {
-
-			ek = -85
-		}
-
-		if (ismembrane("ca_ion")) {
-
-			eca = 140
-			ion_style("ca_ion",0,1,0,0,0)
-
-			// Layer 5 LVA Ca constants
-			vh1_it2 = 56
-			vh2_it2 = 415
-			ah_it2 = 30
-			v12m_it2 = 45
-			v12h_it2 = 65
-			am_it2 = 3
-			vm1_it2 = 50
-			vm2_it2 = 125
-
-			// calcium extrusion rate, in ms
-			taur_cad = 80
-		}
-
-		if (ismembrane("ih_ion")) {
-
-			eh = -45
-		}
-
-		if (ismembrane("k_ion") && ismembrane("ca_ion")) {
-
-			// Ca-sensitivity of KCa channel
-			caix_kca = 0.7
-			// activation rate KCa
-			Ra_kca = 1
-			// inactivation rate KCa
-			Rb_kca = 2.5
-		}
+		// Ca-sensitivity of KCa channel
+		caix_kca = 0.7
+		// activation rate KCa
+		Ra_kca = 1
+		// inactivation rate KCa
+		Rb_kca = 2.5
+		// calcium extrusion rate, in ms
+		taur_cad = 80
 	}
 	
 	distions()
@@ -759,24 +740,26 @@ proc distions() {local seg, pos, dist_, nint, k, m, inttype localobj tempvec
 			// preAIS, border dependent, dependent upon preAIS border percentage (defparam)
 			if (dist_ < preAIS_border) {
 
-				gbar_na(pos) = (Na_so_norm * Na_so_low) * exp(-dist_/lc_Na_de)
 				gbar_nais(pos) = 0
 				gbar_nap(pos) = 0
-				
 				gbar_kv1ax(pos) = 0
+					
+				gbar_na(pos) = (Na_so_norm * Na_so_low) * exp(-dist_/lc_Na_de)
+				
 				gbar_kv1(pos) = (Kv1_so_norm * Kv1_so_low) * exp(-dist_/lc_Kv_Kv1_de)
 				gbar_kv(pos) = (Kv_so_norm * Kv_so_low) * exp(-dist_/lc_Kv_Kv1_de)
-				gbar_kv7(pos) = Kv7_de_norm * Kv7_de_low
 			
-				gbar_ih(pos) = H_so_norm * H_so_low * exp(tc_H_de_norm * tc_H_de_low * dist_)				
+				gbar_ih(pos) = H_so_norm * H_so_low * exp(tc_H_de_norm * tc_H_de_low * dist_)
+
+				gbar_kv7(pos) = Kv7_de_norm * Kv7_de_low
 
 			} else {
 
 				gbar_na(pos) = 0
-				gbar_nap(pos) = Nap_ais_norm * Nap_ais_low
 				gbar_kv1(pos) = 0
 				gbar_kv(pos) = 0
-				gbar_ih(pos) = H_ax_norm * H_ax_low				
+				gbar_ih(pos) = H_ax_norm * H_ax_low
+				gbar_nap(pos) = Nap_ais_norm * Nap_ais_low
 
 				if (dist_ < Nais_midpoint) {
 

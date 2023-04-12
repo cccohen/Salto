@@ -54,12 +54,6 @@ proc setplay() {local k, iamp, iampind localobj tempmat
 			playveclist.o(k).label(tempdir)
 
 			sscanf(dirlist.o(k).label, "%lf", &iamp)
-
-			if (strf.substr(dirlist.o(k).label, "pA") > -1) {
-
-				iamp /= 1000				
-			}
-
 			iampind = getiampind(iamp)
 
 			sprint(playstr, "%s%d%s%d%s", "playopt(", k, ", ", iampind, ")")
@@ -89,7 +83,7 @@ proc playopt() {local m, input_row, end_row
 
 	while (playvec.x[$1]) {
 
-		reseticlamp(mode_, idata, $2, 0, 0)
+		reseticlamp(mode_, idata, $2, 0, 1)
 
 		print "\nPlaying optimization results from:"
 		print playveclist.o($1).label, "\n"

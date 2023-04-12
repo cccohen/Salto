@@ -147,12 +147,27 @@ proc extract_log() {local nline, line, nrows, k, f, qstart, q, exitcount localob
 
 					if (tempobj.size) {
 
-						if (tempobj.size > tempmat.ncol) {
+						if (strcmp($s2, "v")) {
 
-							tempmat.resize(nrows, tempobj.size)
+							if (tempobj.size > tempmat.ncol) {
+
+								tempmat.resize(nrows, tempobj.size)
+							}
+
+							tempmat.setrow(tempvec.x[k], tempobj)
+					
+						} else {
+
+							for f = 0, nf-1 {
+
+								qstart = f*nrows
+				
+								for q = 0, nrows-1 {
+
+									tempmat.x[q][nf*tempvec.x[k]+f+1] = tempobj.x[qstart+q]
+								}
+							}
 						}
-
-						tempmat.setrow(tempvec.x[k], tempobj)
 					}
 				}
 
@@ -179,7 +194,7 @@ proc extract_log() {local nline, line, nrows, k, f, qstart, q, exitcount localob
 						}
 					}
 
-					print "\n", exitcount, "of ", tempmat.nrow, "optimizations completed both fast and slow components of the NU algorithm in folder:\n", $s1
+					print "\n", exitcount, "of ", tempmat.nrow, "optimizations completed both fast and slow components of the NU algorithm."
 					print "Therefore, ", tempmat.nrow-exitcount, "core(s) is/are required for the next round of optimizations.\n"
 				}			
 
@@ -187,9 +202,6 @@ proc extract_log() {local nline, line, nrows, k, f, qstart, q, exitcount localob
 
 				print "...Extraction completed for ", logstr
 			
-			} else {
-
-				print "...Nothing to extract for ", logstr
 			}
 
 		} else {

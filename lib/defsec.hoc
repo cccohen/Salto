@@ -116,7 +116,7 @@ proc lilsecl() {local section, start_section, end_section, praxcount localobj te
 	getstrlist(ses, "aisloc.dat", aislist)
 	list2seclist(aislist, AIS)
 
-	// secref for axon, the very first axonal section
+	// secref for axon
 	forsec aislist.o(0).label {
 
 		axon0 = new SectionRef()
@@ -240,15 +240,12 @@ func setparal() {
 
 		// measured by EM (Cohen et al. 2020)
 		paral = 2.3
-	
-	} else if (celltypevec.x[0] == 2) {
+	}
+
+	if (celltypevec.x[0] == 2) {
 
 		// measured by paranodin/Caspr aggregates (Coman et al. 2006)
 		paral = 2.7
-	
-	} else {
-
-		paral = 0
 	}
 
 	return paral
@@ -264,16 +261,13 @@ func setjuxtal() {
 
 		// measured by Kv1.1 immunostaining (Nie et al. 2003)
 		juxtal = 8
-	
-	} else if (celltypevec.x[0] == 2) {
+	}
+
+	if (celltypevec.x[0] == 2) {
 
 		// measured by Kv1.2 aggregates (Coman et al. 2006)
 		juxtal = 4.6
-	
-	} else {
-
-		juxtal = 0
-	} 
+	}
 
 	return juxtal	
 }

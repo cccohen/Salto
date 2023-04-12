@@ -33,47 +33,29 @@ ucounter = 0
 // $8 = sim
 // $9 = scount
 // $o10 = exitlist vec
-// $o11 = simulation cycle (time) vector.
+// $11 = current simulation cycle within given simulation number (>=0).
 // $12 (extra argument) = hoc_ac_, a unique optimization id variable
 // $13 (extra argument) = ucount, a local variable determining if simulation could not finish due to lack of time
 // $14 (extra argument) = exit_case, by default 0 (no exit) unless certain criteria are met (see optimize())
 
-func orgopt() {local tolopt, maxstepsizeopt, ind, lastsim, p, ucount, exit_case
+func orgopt() {local tolopt, maxstepsizeopt, lastsim, p, ucount, exit_case
+
+	reseticlamp(mode_, idata, $1, 0, !$3)
+	tolopt = settol($1, !$3)
+	maxstepsizeopt = setmaxstepsize(tolopt)
 
 	// pelog needs to occur before calls to change weight, which call efun(), which calls init()
 	// which calls upd/savepelog(), which uses the pelog labels to identify whether and which sim is operating.
 	// pelog() only sets log vector labels.
 	// the full simulation number includes the cycle number, i.e. how many x-hour cycles are being run for simulation y.
 	// represented as sim = y.x
-	ind = indwherelast($o11, ">", float_epsilon)+1
-	sprint(tempstr, "%d%s%d", $8, ".", ind)
-	pelog(tempstr, tempstr)
-	
+	sprint(tempstr, "%d%s%d", $8, ".", $11)
+	sscanf(tempstr, "%lf", &lastsim)
+	pelog(lastsim, lastsim)
+	sprint(tempstr, "%s", "")
+
 	getiamp($1, iampstr)
 	print "\nRunning simulation ", $8+1, "of ", $9+1, "for injection amplitude ", iampstr
-
-	reseticlamp(mode_, idata, $1, 0, !$3)
-	tolopt = settol($1, !$3)
-	maxstepsizeopt = setmaxstepsize(tolopt)	
-
-	activate_cvode(dt, tolopt, maxstepsizeopt)
-
-	// in case final sim values are out of restricted subspaces or bounds
-	initfit($2, idata)
-	chkparambounds($2, idata)
-
-	if ($2 == 1) {
-
-		adj_weight()
-
-		// exit case fast sim finished, start slow
-		if ($o10.x[0] && !$o10.x[1]) {
-
-			add_weight($2, idata)
-		}		
-	}
-
-	adj_injbound($2, !$3)
 
 	// assign fit parameters
 	for p = 0, $o5.size-1 {
@@ -81,8 +63,14 @@ func orgopt() {local tolopt, maxstepsizeopt, ind, lastsim, p, ucount, exit_case
 		RunFitParm[p].val = $o5.x[p]
 	}
 
+	// exit case fast sim finished, start slow
+	if ($o10.x[0] && !$o10.x[1]) {
+
+		add_weight($2, idata)
+	}
+
 	initfit($2, idata)
-	chkparambounds($2, idata)
+	adj_injbound($2, !$3)
 
 	// ucount = 0 if simulation did not complete due to overtime
 	ucount = 0
@@ -90,7 +78,7 @@ func orgopt() {local tolopt, maxstepsizeopt, ind, lastsim, p, ucount, exit_case
 	exit_case = 0
 
 	// for simplicity, everything received by genopt is sent to optimize, in order
-	optimize($1, $2, $3, $4, $o5, tolopt, maxstepsizeopt, $o6, $o7, $8, $9, $o10, $o11, hoc_ac_, ucount, exit_case)
+	optimize($1, $2, $3, $4, $o5, tolopt, maxstepsizeopt, $o6, $o7, $8, $9, $o10, hoc_ac_, ucount, exit_case)
 
 	// the number of calls to genopt gets counted
 	return 1
@@ -119,12 +107,11 @@ func orgopt() {local tolopt, maxstepsizeopt, ind, lastsim, p, ucount, exit_case
 // $10 = sim
 // $11 = scount
 // $o12 = exitlist vec
-// $o13 = simulation cycle (time) vector.
-// $14 = hoc_ac_ = id, which genopt sends on its own to optimize
-// $15 = ucount, local variable determining if simulation could not finish due to lack of time
-// $16 = exit_case, by default 0 (no exit) unless certain criteria are met (see optimize())
+// $13 = hoc_ac_ = id, which genopt sends on its own to optimize
+// $14 = ucount, local variable determining if simulation could not finish due to lack of time
+// $15 = exit_case, by default 0 (no exit) unless certain criteria are met (see optimize())
 
-proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec, weightvec, tempvec, tempmat, tempxvec, temptvec
+proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec, weightvec, tempxvec, tempvec
 
 	// variable tracking whether optimize is running
 	fitoff = 0
@@ -146,23 +133,7 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 		
 		for f = 0, nf-1 {
 
-			// save current time data
-			temptvec = new Vector(RegionFitness[f].xdat.size)
-
-			for k = 0, temptvec.size-1 {
-
-				temptvec.x[k] = RegionFitness[f].xdat.x[k]
-			}
-
-			// save current bounded time data
-			tempxvec = new Vector(RegionFitness[f].xdat_.size)
-
-			for k = 0, tempxvec.size-1 {
-
-				tempxvec.x[k] = RegionFitness[f].xdat_.x[k]
-			}
-
-			// save current boundaries
+			// save previous boundaries
 			boundvec = new Vector(RegionFitness[f].boundary.size)
 			
 			for k = 0, boundvec.size-1 {
@@ -170,7 +141,7 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 				boundvec.x[k] = RegionFitness[f].boundary.x[k]
 			}
 
-			// save current weights
+			// save previous weights
 			weightvec = new Vector(RegionFitness[f].weight.size)
 			
 			for k = 0, weightvec.size-1 {
@@ -178,25 +149,32 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 				weightvec.x[k] = RegionFitness[f].weight.x[k]
 			}			
 
-			// create new (default) boundaries
+			// set new (default) boundaries
 			RegionFitness[f].boundary = new Vector(2)
 			
-			RegionFitness[f].boundary.x[0] = temptvec.x[0]
-			RegionFitness[f].boundary.x[1] = temptvec.x[temptvec.size-1]
+			RegionFitness[f].boundary.x[0] = RegionFitness[f].xdat.x[0]
+			RegionFitness[f].boundary.x[1] = RegionFitness[f].xdat.x[RegionFitness[f].xdat.size-1]
 			
-			// set these new boundaries (must use different xdat vector)
-			// use whole tdat
-			RegionFitness[f].set_modelx(temptvec)
+			// make these new boundaries effective (must use different xdat vector)
+			tempxvec = new Vector(RegionFitness[f].xdat.size)
+
+			for k = 0, tempxvec.size-1 {
+
+				tempxvec.x[k] = RegionFitness[f].xdat.x[k]
+			}
+
+			RegionFitness[f].set_modelx(tempxvec)
+
+			// ensure yveclist vector of the fit generator is of the correct size, i.e. the default
+			// for a correct call to meansqerr by RegionFitness[f].ydat_, comparing FitnessGenerator[0].yveclist.o(f) to RegionFitness[f].dw_
+			// for that comparison to work, yveclist.o(f).size must equal that of RegionFitness[f].dw_ and RegionFitness[f].ydat_, both of which
+			// are now default, i.e. RegionFitness[f].xdat.size.
+			FitnessGenerator[0].yveclist.o(f).resize(RegionFitness[f].xdat.size)
 			
 			nopelog()
 			// generate error function
 			FitnessGenerator[0].efun()
 			pelog()
-
-			// ensure FitnessGenerator[0].yveclist.o(f) is of the correct size (= RegionFitness[f].ydat_.size, the fit data, and 
-			// RegionFitness[f].dw_.size, the weight placer). In theory, it should be set after the completion of efun(). In practice,
-			// the call to meansqerr gets done before this update takes place. Therefore, the resize must be done here first.
-			FitnessGenerator[0].yveclist.o(f).resize(temptvec.size)
 			
 			// store current default error in eqlist vec
 			$o8.x[$o8.size-(nf+1)+f] = RegionFitness[f].ydat_.meansqerr(FitnessGenerator[0].yveclist.o(f), RegionFitness[f].dw_)
@@ -225,12 +203,10 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 				RegionFitness[f].weight.x[k] = weightvec.x[k]
 			}
 			
-			// set these new boundaries and weights (must use different xdat vector)
-			// use bounded tdat
 			RegionFitness[f].set_modelx(tempxvec)
 
 			// restore correct FitnessGenerator yveclist vector fit size
-			FitnessGenerator[0].yveclist.o(f).resize(tempxvec.size)
+			FitnessGenerator[0].yveclist.o(f).resize(RegionFitness[f].xdat_.size)
 		}
 
 		// pqvec from pqlist is resized to accomodate the new resultant parameters (+getnp())
@@ -257,8 +233,8 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 			print "\nCompleted simulation ", $10+1, "of ", $11+1, "at ", iampstr, " in ", setnsig(runtime/3600, 3), "hour(s)"
 			print "Reason for exit: runtime is over set maximum of ", setnsig(maxtime/3600, 3), "hour(s) (simulation ", $10+1, "of ", $11+1, "at ", iampstr, ")"
 
-			$15 = 1
-			$16 = 1			
+			$14 = 1
+			$15 = 1			
 
 			$o12.x[1] = 0
 			$o12.x[2] = 0
@@ -275,7 +251,7 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 					print "\nCompleted simulation ", $10+1, "of ", $11+1, "at ", iampstr, " in ", setnsig(runtime/3600, 3), "hour(s)"
 					print "Reason for exit: error is below set threshold of ", $6, "mV^2 (simulation ", $10+1, "of ", $11+1, "at ", iampstr, ")"
 
-					$16 = 1
+					$15 = 1
 
 					if (nquad_ == 1) {
 
@@ -306,7 +282,7 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 					print "\nCompleted simulation ", $10+1, "of ", $11+1, "at ", iampstr, " in ", setnsig(runtime/3600, 3), "hour(s)"
 					print "Reason for exit: error improvement is decreasing and below set threshold, or error is below set threshold of ", $6, "mV^2 (simulation ", $10+1, "of ", $11+1, "at ", iampstr, ")"
 
-					$16 = 1
+					$15 = 1
 
 					$o12.x[1] = 1
 					$o12.x[2] = 1
@@ -322,7 +298,7 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 			}
 		}
 
-		if ($16) {
+		if ($15) {
 
 			exite = -($o12.x[2]+1)*(nf+1)-1
 			exitp = -($o12.x[2]+1)*getnp()
@@ -400,41 +376,21 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 
 				// ---------------------------t---------------------------
 				tempvec = new Vector()
-
-				if ($o13.size) {
-
-					tempvec.resize($o13.size+1)
-
-					for k = 0, tempvec.size-2 {
-
-						tempvec.x[k] = $o13.x[k]
-					}
-				
-				} else {
-
-					tempvec.resize(1)
-				}
-				
+				tempvec.resize(tempvec.size+1)
 				tempvec.x[tempvec.size-1] = vvec.x[vvec.size-1]
 
 				savelog(iampdir, "t", tempvec, tformvec, $10)
-
-				vvec.resize(vvec.size-1)
 				// -------------------------------------------------------
 
 				// ---------------------------v---------------------------
-				tempmat = new Matrix(RegionFitness[0].xdat.size, nf+1)
-				tempmat.setcol(0, RegionFitness[0].xdat)
+				tempvec = new Vector(vvec.size-1)
+				
+				for k = 0, tempvec.size-1 {
 
-				for f = 0, nf-1 {
-
-					for k = 0, tempmat.nrow-1 {
-
-						tempmat.x[k][f+1] = vvec.x[k+f*tempmat.nrow]
-					}
+					tempvec.x[k] = vvec.x[k]
 				}
 				
-				savelog(iampdir, "v", tempmat, vformvec, $10)
+				savelog(iampdir, "v", tempvec, vformvec, $10)
 				// -------------------------------------------------------
 
 				print "\nResults saved for simulation ", $10+1, "of ", $11+1, "at ", iampstr
@@ -445,12 +401,12 @@ proc optimize() {local p, f, k, q, tempnum, exite, exitp localobj vvec, boundvec
 		
 		} else {
 
-			optimize($1, $2, $3, $4, $o5, $6, $7, $o8, $o9, $10, $11, $o12, $o13, $14, $15, $16)
+			optimize($1, $2, $3, $4, $o5, $6, $7, $o8, $o9, $10, $11, $o12, $13, $14, $15)
 		}
 	}
 
 	// send out uopt statistic
-	data_out($14, $3, $15, $o12)
+	data_out($13, $3, $14, $o12)
 }
 // ---------------------------------------------------------------------------------------
 
@@ -671,6 +627,8 @@ func loaduopt() {local uopt, k, q, r, p, ind, f localobj tempmat, tempvec
 
 	if (uoptvec.size) {
 
+		"check 1"
+
 		// add into eqlist previous (completed quad) errors + current error (not necessarily from a completed quad)
 		getmat($s1, "eqmat.dat", tempmat)
 		
@@ -709,7 +667,7 @@ func loaduopt() {local uopt, k, q, r, p, ind, f localobj tempmat, tempvec
 
 		q = 0
 		k = simvec.x[q]
-		while (k <= simvec.x[simvec.size-1]) {
+		while (k <= simvec.x[simvec.size-1]) {			
 
 			// initialize pmat to rpmat
 			pmat.setrow($3*($2+1)+k, rpmat.getrow(k))
@@ -748,39 +706,7 @@ func loaduopt() {local uopt, k, q, r, p, ind, f localobj tempmat, tempvec
 		}		
 
 		uopt = 1
-		
-		// load previous t
-		getmat($s1, "tmat.dat", tempmat)
-
-		q = 0
-		k = simvec.x[q]
-		while (k <= simvec.x[simvec.size-1]) {
-
-			tlist.o($3*($2+1)+k).resize(0)
-
-			// if previous results have been saved, then load those times
-			if ((ind = indwherelast(tempmat.getrow(k), ">", float_epsilon)) > -1) {
-
-				tlist.o($3*($2+1)+k).resize(ind+1)
-
-				// ind-2 to exclude the step-back code (ind) and tol (ind-2)
-				for r = 0, ind {
-
-					tlist.o($3*($2+1)+k).x[r] = tempmat.getrow(k).x[r]
-				}
-			}
-
-			q += 1
-
-			if (q < simvec.size) {
-
-				k = simvec.x[q]
-
-			} else {
-
-				k = simvec.x[simvec.size-1]+1
-			}
-		}
+		getmat($s1, "tmat.dat", tmat)			
 	}
 
 	if (uopt) {
@@ -925,33 +851,32 @@ proc saveopt() {localobj tempmat
 // $o3 = vector of data to be saved
 // $s4 = format string
 // $5 = sim number
-// $o6 = subsim number, passed as sim cycle (time) vector
-proc savelog() {local k, f, ind localobj rvec, tempvec
+proc savelog() {local k, f localobj rvec, tempvec
 
 	sprint(logstr, "%s%s", $s2, "log")
 
-	if (numarg() >= 5) {
+	if (numarg() == 5) {
 
 		if (chkdir($s1, logstr)) {
-						
+
+			sprint(format, "%s%s", "%s", $s4)
+			sprint(datastr, "%s", "")
+
+			for k = 0, $o3.size-1 {
+
+				sprint(datastr, format, datastr, $o3.x[k])
+			}
+
 			sprint(filestr, "%d%s", $5, ".dat")
-			sprint(logdir, "%s%s%s", $s1, logstr, "/")			
+			sprint(logdir, "%s%s%s", $s1, logstr, "/")
 
-			if (strcmp($s2, "v")) {
+			if (!strcmp($s2, "t")) {
 
-				sprint(datastr, "%s", "")
-				sprint(format, "%s%s", "%s", $s4)
-
-				for k = 0, $o3.size-1 {
-
-					sprint(datastr, format, datastr, $o3.x[k])
-				}
-				
-				writestr(logdir, filestr, datastr, 0)
-
+				writestr(logdir, filestr, datastr, 1)
+			
 			} else {
 
-				savemat(logdir, filestr, $o3, $s4)
+				writestr(logdir, filestr, datastr, 0)
 			}
 		}
 
@@ -1079,7 +1004,6 @@ proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_
 	pmat = new Matrix(total_scount, getnp())
 	eqlist = crveclist(eqlist, total_scount, 0)
 	pqlist = crveclist(pqlist, total_scount, 0)
-	tlist = crveclist(tlist, total_scount, 0)
 	exitlist = crveclist(exitlist, total_scount, 3)
 
 	for r = 0, rangemat.ncol-1 {
@@ -1087,26 +1011,32 @@ proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_
 		for k = rangemat.x[0][r], rangemat.x[1][r] {
 
 			istart += 1
-			
 			getiampdir(k, iampstr, iampdir)
-			crdir(moddir, iampstr)
-			savepelog(k, iampstr, iampdir)
-			savelog(iampdir, "eq")
-			savelog(iampdir, "pq")
-			savelog(iampdir, "fe")
-			savelog(iampdir, "fp")
-			savelog(iampdir, "t")
-			savelog(iampdir, "v")
-			savelog(iampdir, "exit")		
-			saveopt(iampdir, scount)
-			
 			getsim(0, getscount(mode_, idata))
 			print "\n", simvec.size, "simulation(s) chosen for injection amplitude ", iampstr
 
 			if (loaduopt(iampdir, scount, istart)) {
+
+				crdir(moddir, iampstr)
+				savepelog(k, iampstr, iampdir)
+				savelog(iampdir, "eq")
+				savelog(iampdir, "pq")
+				savelog(iampdir, "fe")
+				savelog(iampdir, "fp")
+				savelog(iampdir, "t")
+				savelog(iampdir, "v")
+				savelog(iampdir, "exit")
+				saveopt(iampdir, scount)				
 				
 				print "\nUnfinished optimization(s) loaded for model ", modstr, "/", iampstr
-				print "Total unfinished optimizations at ", iampstr, " = ", uoptvec.sum
+				print "Total unfinished optimizations = ", uoptvec.sum, "for injection amplitude, ", iampstr
+
+				initfit(mode_, idata)
+
+				if (mode_ == 1) {
+
+					adj_weight()
+				}
 
 				for sim = 0, simvec.size-1 {
 
@@ -1115,13 +1045,14 @@ proc parallex() {local k, r, m, sim, istart, scount, scounter, exitcount, total_
 
 					if (!chkpara()) {
 						
-						scounter += orgopt(k, mode_, chkpara(), uoptvec.x[sim], pmat.getrow(istart*(scount+1)+simvec.x[sim]), eqlist.o(istart*(scount+1)+simvec.x[sim]), pqlist.o(istart*(scount+1)+simvec.x[sim]), simvec.x[sim], scount, exitlist.o(istart*(scount+1)+simvec.x[sim]), tlist.o(istart*(scount+1)+simvec.x[sim]))
+						scounter += orgopt(k, mode_, chkpara(), uoptvec.x[sim], pmat.getrow(istart*(scount+1)+simvec.x[sim]), eqlist.o(istart*(scount+1)+simvec.x[sim]), pqlist.o(istart*(scount+1)+simvec.x[sim]), simvec.x[sim], scount, exitlist.o(istart*(scount+1)+simvec.x[sim]), indwherelast(tmat.getrow(sim), ">", 0))
 					
 					} else {
 
-						// cannot pass a 13th object (can pass a number) in para that is not a vector (tested: matrices and lists)
-						// tested on personal OpenMPI (nrn 7.5) and NSG Stampede2 Intel Skylake (nrn 7.5)						
-						llc.submit("orgopt", k, mode_, chkpara(), uoptvec.x[sim], pmat.getrow(istart*(scount+1)+simvec.x[sim]), eqlist.o(istart*(scount+1)+simvec.x[sim]), pqlist.o(istart*(scount+1)+simvec.x[sim]), simvec.x[sim], scount, exitlist.o(istart*(scount+1)+simvec.x[sim]), tlist.o(istart*(scount+1)+simvec.x[sim]))
+						// cannot pass a 13th object in para that is not a vector (tested: matrices and lists)
+						// tested on personal OpenMPI (nrn 7.5) and NSG Stampede2 Intel Skylake (nrn 7.5)
+						// Can pass a 13th number
+						llc.submit("orgopt", k, mode_, chkpara(), uoptvec.x[sim], pmat.getrow(istart*(scount+1)+simvec.x[sim]), eqlist.o(istart*(scount+1)+simvec.x[sim]), pqlist.o(istart*(scount+1)+simvec.x[sim]), simvec.x[sim], scount, exitlist.o(istart*(scount+1)+simvec.x[sim]), indwherelast(tmat.getrow(sim), ">", 0))
 					}
 				}
 			

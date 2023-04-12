@@ -4,13 +4,13 @@ Salto v1.0
 The contents of this package are released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International license (CC BY-NC-ND 4.0, in English).
 -------------------------------------------------------------------------------------------------------------------
 
-Automated generation, GUI-based exploration, and multiscale optimization of neuron models. Part of a peer-reviewed article in progress, an early draft of which is available in my dissertation, Chapter 3 (https://ln5.sync.com/dl/19f3dd150#t6eg8zrr-brmqefnb-jppv4fhi-hjrtzt5q).
+Automated generation, GUI-based exploration, and multiscale optimization of neuron models
 
 -------------------------------------------------------------------------------------------------------------------
 
 To run a model for the first time:
-	- Download and install NEURON (https://neuron.yale.edu/neuron/download)
-	- Download Salto (https://github.com/cccohen/Salto/).
+	- Download and install NEURON (github.com/neuronsimulator).
+	- Download Salto (github.com/cccohen/Salto).
 	- Import cellular morphology via getmorph.hoc.
 	- Load morphology and identify recorded sections with loadmorph.hoc.
 	- Run setup.hoc
@@ -20,16 +20,16 @@ To run a model for the first time:
 
 -------------------------------Contents-------------------------------
 getmorph.hoc
-	- Import cellular morphology (in ASCII format and others)
+	- Import cellular morphology (in ASCII format or other)
 
 loadmorph.hoc
 	- Load cellular morphology in 3D.
 	- Identify cellular locations of interest by section name and sublocation (0-1).
 
 setup.hoc
-	- Starting point for creating a model cell.
-	- Adds electrophysiological data, if present.
-	- Initializes the model (mode, data, session options, etc).
+	- Quintessential starting point to create a model cell.
+	- Requires recording setup information and data.
+	- Initialize the model cell (mode, axon type, session options, etc).
 
 compilemod.hoc
 	- Compile or recompile mod files.
@@ -64,11 +64,12 @@ resetaxon.hoc
 startopt.hoc
 	- Run massive optimization of passive parameters using custom optimization procedure.
 	- May be run in parallel at the NSG (https://www.nsgportal.org/) or properly configured machines.
-	- Saves simulation results in the data directory, in subfolders titled *modeltype*
+	- Saves simulation results in an "outdir", in a subfolder entitled *modeltype*
 
 extractopt.hoc
 	- Extract and rank optimized solutions returned by startopt.hoc.
 	- Required to be run before resubmitting startopt, finish unfinished optimizations.
+	- Note: unfinished optimizations due to lack of simulation time may also be finished first by adding simulation time. This is usually set at setup, but may also be changed thereafter in /ses/time.dat by increasing maxtime (time unit is s).
 
 playopt.hoc
 	- Play optimized and ranked solutions of current model setup.

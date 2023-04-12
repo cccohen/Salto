@@ -27,7 +27,7 @@ load_file("startlib.hoc")
 
 
 strdef modqstr
-modqstr = "Compile mod files for this system?\t[y/n]\n(Mod files are required for running active or passive models, even though active mechanisms are not implemented in passive models)"
+modqstr = "Compile mod files for this system?\t[y/n]\n(Mod files are required for running active and passive models, even though active mechanisms are not implemented in passive models)"
 
 ans = sred(modqstr, "y", "ny")
 

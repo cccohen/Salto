@@ -7,10 +7,10 @@
 
 
 // -------------------------------Variables----------------------------------------
-objref paramvec, solnvec, elogvec, plogvec, nefunvec, optibox, atoltoolobj
-objref genvec, spacemat, genvec, mutmat, permvec, chkparamvec, chkparamboundsvec
+objref paramvec, solnvec, elogvec, plogvec, nefunvec, optibox
+objref genvec, spacemat, genvec, mutmat, permvec, chkparamvec
 objref pmat, tmat, vvec, simvec, rangemat
-objref eqlist, pqlist, tlist, exitlist
+objref eqlist, pqlist, exitlist
 objref boundvec, origboundlist, newboundlist, weightvec, weightmat, origweightlist, newweightlist, errlist, scalelist
 objref drand, diamvec, speedvec, graphobj, prand, krand
 
@@ -18,7 +18,6 @@ solnvec = new Vector()
 genvec = new Vector()
 spacemat = new Matrix()
 chkparamvec = new Vector()
-chkparamboundsvec = new Vector()
 
 prand = new Random()
 
@@ -49,35 +48,8 @@ newg = 0
 
 
 // --------------------------------------------------------------------------------
-proc activate_cvode() {
-
-	NumericalMethodPanel[0].varstep(1)
-	atoltoolobj = new AtolTool()
-	atoltoolobj.activate(1)
-	CVode[0].atol($2)
-	CVode[0].use_fast_imem(1)
-	CVode[0].minstep($1)
-	CVode[0].maxstep($3)
-	atoltoolobj.analyse()
-	atoltoolobj.rescale()
-	atoltoolobj.refresh()
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------------------------------------------------------
-proc deactivate_cvode() {
-
-	NumericalMethodPanel[0].varstep(0)
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------------------------------------------------------
 // $1 = mode_
-proc adj_injbound() {local f, pifdelt, k localobj tempxvec
+proc adj_injbound() {local f, pifdelt localobj tempxvec
 
 	if (!$1) {
 	
@@ -93,13 +65,8 @@ proc adj_injbound() {local f, pifdelt, k localobj tempxvec
 					RegionFitness[f].boundary.x[0] = pifdelt
 					RegionFitness[f].weight.x[0] = 0
 
-					tempxvec = new Vector(RegionFitness[f].xdat.size)
-					
-					for k = 0, tempxvec.size-1 {
-
-						tempxvec.x[k] = RegionFitness[f].xdat.x[k]
-					}
-					
+					tempxvec = new Vector()
+					tempxvec.append(RegionFitness[f].xdat)
 					RegionFitness[f].set_modelx(tempxvec)
 					
 					num = setnsig(pifdelt, 5)
@@ -123,7 +90,7 @@ proc adj_injbound() {local f, pifdelt, k localobj tempxvec
 // --------------------------------------------------------------------------------
 // Places a voltage derivative-adjusted weight scale on voltage traces. No arguments.
 
-proc adj_weight() {local points_to_adv, f, k, lo_bound, up_bound, indlo, indhi, iidel localobj tempvec, tempxvec, tempyvec, boundvec, weightvec
+proc adj_weight() {local points_to_adv, f, k, lo_bound, up_bound, indlo, indhi localobj tempvec, tempxvec, tempyvec, boundvec, weightvec
 
 	points_to_adv = 1/dt/bess
 	tempvec = new Vector()
@@ -151,9 +118,9 @@ proc adj_weight() {local points_to_adv, f, k, lo_bound, up_bound, indlo, indhi, 
 			tempyvec.x[k] = RegionFitness[f].ydat.x[k]
 		}
 
-		indlo = tempxvec.indwhere(">=", lo_bound)
-		indhi = tempxvec.indwhere(">=", up_bound)
-
+		indlo = tempxvec.indwhere("==", lo_bound)
+		indhi = tempxvec.indwhere("==", up_bound)
+				
 		tempvec = new Vector()
 		boundvec = new Vector()
 
@@ -182,40 +149,15 @@ proc adj_weight() {local points_to_adv, f, k, lo_bound, up_bound, indlo, indhi, 
 			}
 		}
 
-		// scale idel portion up by idur/idel if idur && idel > 0 && idur > idel
-		if (stim.del > 0 && stim.dur > 0 && stim.dur/stim.del > 1) {
+		weightvec = new Vector()
+		weightvec.append(RegionFitness[f].weight.x[0])
+		weightvec.append(tempvec)
 
-			// find idel
-			iidel = tempxvec.indwhere(">=", stim.del)
-
-			// weightvec units to scale corresponding to idel
-			for k = 0, ((iidel+1)/points_to_adv)-1 {
-
-				tempvec.x[k] *= stim.dur/stim.del
-			}
-		}
-
-		weightvec = new Vector(tempvec.size+1)
-		weightvec.x[0] = 0
-
-		for k = 1, weightvec.size-1 {
-
-			weightvec.x[k] = tempvec.x[k-1]
-		}		
-
-		RegionFitness[f].boundary = new Vector(boundvec.size)
-
-		for k = 0, boundvec.size-1 {
-
-			RegionFitness[f].boundary.x[k] = boundvec.x[k]	
-		}
+		RegionFitness[f].boundary = new Vector()
+		RegionFitness[f].boundary.append(boundvec)
 		
-		RegionFitness[f].weight = new Vector(weightvec.size)
-
-		for k = 0, weightvec.size-1 {
-
-			RegionFitness[f].weight.x[k] = weightvec.x[k]
-		}
+		RegionFitness[f].weight = new Vector()
+		RegionFitness[f].weight.append(weightvec)
 
 		RegionFitness[f].set_modelx(tempxvec)
 	}
@@ -665,11 +607,11 @@ func chktime() {localobj krand
 // --------------------------------------------------------------------------------
 proc nopelog() {
 
+	sscanf(elogvec.label, "%lf", &esim)
+	sscanf(plogvec.label, "%lf", &psim)
+
 	sprint(esimstr, "%s", elogvec.label)
 	sprint(psimstr, "%s", plogvec.label)
-
-	sscanf(esimstr, "%lf", &esim)
-	sscanf(psimstr, "%lf", &psim)
 
 	elogvec.label("")
 	plogvec.label("")
@@ -682,22 +624,22 @@ proc nopelog() {
 proc pelog() {
 
 	if (!numarg()) {
+
+		sprint(esimstr, "%g", esim)
+		sprint(psimstr, "%g", psim)
 		
 		elogvec.label(esimstr)
 		plogvec.label(psimstr)
-
-		sscanf(esimstr, "%lf", &esim)
-		sscanf(psimstr, "%lf", &psim)
 	}
 
-	if (numarg() == 1 && argtype(1) == 0) {
+	if (numarg() == 1) {
 
 		esim = $1
 		sprint(esimstr, "%g", esim)
 		elogvec.label(esimstr)
 	}
 
-	if (numarg() == 2 && argtype(1) == 0 && argtype(2) == 0) {
+	if (numarg() == 2) {
 
 		esim = $1
 		sprint(esimstr, "%g", esim)
@@ -705,24 +647,6 @@ proc pelog() {
 
 		psim = $2
 		sprint(psimstr, "%g", psim)
-		plogvec.label(psimstr)
-	}
-
-	if (numarg() == 1 && argtype(1) == 2) {
-
-		sprint(esimstr, "%s", $s1)
-		sscanf($s1, "%lf", &esim)
-		elogvec.label(esimstr)
-	}
-
-	if (numarg() == 2 && argtype(1) == 2 && argtype(2) == 2) {
-
-		sprint(esimstr, "%s", $s1)
-		sscanf($s1, "%lf", &esim)
-		elogvec.label(esimstr)
-
-		sprint(psimstr, "%s", $s2)
-		sscanf($s2, "%lf", &psim)
 		plogvec.label(psimstr)
 	}
 }
@@ -815,7 +739,8 @@ proc savepelog() {local k, has_iampdir localobj tempvec
 
 					elogvec.resize(0)
 
-					sprint(filestr, "%s%s", elogvec.label, ".dat")
+					// %g has 6 significant digits, therefore allowing up 99999 simulations per cycle.
+					sprint(filestr, "%g%s", esim, ".dat")
 
 					writestr(elogdir, filestr, datastr, 1)
 
@@ -831,7 +756,7 @@ proc savepelog() {local k, has_iampdir localobj tempvec
 
 					plogvec.resize(0)
 
-					sprint(filestr, "%s%s", plogvec.label, ".dat")
+					sprint(filestr, "%g%s", psim, ".dat")
 
 					writestr(plogdir, filestr, datastr, 1)
 
@@ -1681,37 +1606,10 @@ obfunc chkparam() {local p, unitsize, tempnum
 
 
 // --------------------------------------------------------------------------------
-proc chkparambounds() {local p, unitsize, chkbound
-
-	initchkparam($1, $2)
-	unitsize = chkparamvec.size/4
-	chkbound = 0
-
-	for p = 0, unitsize-1 {		
-
-		if (RunFitParm[p].val*plowvec.x[p] > phivec.x[p] || RunFitParm[p].val*plowvec.x[p] < plowvec.x[p]) {
-
-			chkparamvec.x[p] = 1
-			chkparamvec.x[unitsize+p] = 1
-			chkbound = 1
-		}
-	}
-
-	if (chkbound) {
-
-		updfitparam(mutchkparam(chkparamvec))
-		initchkparam($1, $2)
-	}
-}
-// --------------------------------------------------------------------------------
-
-
-
-// --------------------------------------------------------------------------------
 obfunc mutchkparam() {local p, unitsize localobj tempvec
 	
 	unitsize = $o1.size/4
-	tempvec = new Vector(unitsize)
+	tempvec = new Vector(unitsize)	
 
 	for p = 0, unitsize-1 {
 
@@ -1889,7 +1787,7 @@ proc setoptpanel() {
 // change fit data according to iiamp and imported vdat
 // $1 = iiamp
 // $2 = mode_
-proc changedata() {local f, k localobj boundvec, weightvec, tempxvec
+proc changedata() {local f localobj boundvec, weightvec, tempxvec
 
 	for f = 0, nf-1 {
 
@@ -1897,47 +1795,24 @@ proc changedata() {local f, k localobj boundvec, weightvec, tempxvec
 		if (RegionFitness[f].boundary.x[0] != RegionFitness[f].xdat.x[0] || RegionFitness[f].boundary.x[RegionFitness[f].boundary.size-1] != RegionFitness[f].xdat.x[RegionFitness[f].xdat.size-1] || RegionFitness[f].boundary.size > 2) {
 
 			// store those bounds in boundvec
-			boundvec = new Vector(RegionFitness[f].boundary.size)
-
-			for k = 0, boundvec.size-1 {
-
-				boundvec.x[k] = RegionFitness[f].boundary.x[k]
-			}
-
-			// store associated time data
-			tempxvec = new Vector(RegionFitness[f].xdat_.size)
-
-			for k = 0, tempxvec.size-1 {
-
-				tempxvec.x[k] = RegionFitness[f].xdat_.x[k]
-			}
-			
+			boundvec = new Vector()
+			boundvec.append(RegionFitness[f].boundary)
 			// also store the associated weights in weightvec
-			weightvec = new Vector(RegionFitness[f].weight.size)
-
-			for k = 0, weightvec.size-1 {
-
-				weightvec.x[k] = RegionFitness[f].weight.x[k]	
-			}
+			weightvec = new Vector()
+			weightvec.append(RegionFitness[f].weight)
 
 			// set data to new iamp
 			RegionFitness[f].set_data(vdatmat.getcol(0), vdatmat.getcol($1*nf+f+1))
 
 			// restore previous boudaries and weights (the associated dw get taken care of)
-			RegionFitness[f].boundary = new Vector(boundvec.size)
+			RegionFitness[f].boundary = new Vector()
+			RegionFitness[f].boundary.append(boundvec)
+			RegionFitness[f].weight = new Vector()
+			RegionFitness[f].weight.append(weightvec)
 
-			for k = 0, boundvec.size-1 {
-
-				RegionFitness[f].boundary.x[k] = boundvec.x[k]	
-			}
-			
-			RegionFitness[f].weight = new Vector(weightvec.size)
-
-			for k = 0, weightvec.size-1 {
-
-				RegionFitness[f].weight.x[k] = weightvec.x[k]
-			}
-			
+			// to finalize the restoration in the GUI, need...
+			tempxvec = new Vector()
+			tempxvec.append(RegionFitness[f].xdat)
 			RegionFitness[f].set_modelx(tempxvec)
 		
 		} else {
