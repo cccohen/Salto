@@ -516,15 +516,55 @@ proc savevec() {
 
 
 // --------------------------------------------------------------------------------
-proc loaddll() {
+proc loaddll() {local tempnum
+	// old
+	// if (unix_mac_pc() == 4 || unix_mac_pc() == 2) {
 
-	if (unix_mac_pc() == 4 || unix_mac_pc() == 2) {
+	// 	nrn_load_dll("x86_64/.libs/libnrnmech.0.so")
 
-		nrn_load_dll("x86_64/.libs/libnrnmech.0.so")
+	// } else if (unix_mac_pc() == 1) {
 
-	} else if (unix_mac_pc() == 1) {
-
-		nrn_load_dll("x86_64/.libs/libnrnmech.so.0")
+	// 	nrn_load_dll("x86_64/.libs/libnrnmech.so.0")
+	// }
+	if (!(unix_mac_pc() == 1 || unix_mac_pc() == 2 || unix_mac_pc() == 4)) {
+		print "\nOperating system not supported\n"
+		stop
+	}
+	sprint(tempdir, "%s", lib)
+	if (chkdir(tempdir, "arm64") == 1) {
+		sprint(tempdir, "%s%s", tempdir, "arm64/.libs/")
+	} else if (chkdir(tempdir, "x86_64") == 1) {
+		sprint(tempdir, "%s%s", tempdir, "x86_64/.libs/")
+	} else {
+		print "\nCompiled mechanisms not loaded from ", lib, "\n"
+		return
+	}
+	sprint(tempdir, "%s%s", tempdir, "libnrnmech.")
+	tempstr = nrnversion(0)
+	sscanf(tempstr, "%lf", &tempnum)
+	sprint(tempstr, "%s", "")
+	if (tempnum >= 7.8) {
+		if (unix_mac_pc() == 1 || unix_mac_pc() == 2 || unix_mac_pc() == 4) {
+			sprint(tempstr, "%s", "so")
+		}
+	} else {
+		if (unix_mac_pc() == 1) {
+			sprint(tempstr, "%s", "so.0")
+		}
+		if (unix_mac_pc() == 2 || unix_mac_pc() == 4) {
+			sprint(tempstr, "%s", "0.so")
+		}
+	}
+	sprint(tempdir, "%s%s", tempdir, tempstr)
+	tempnum = nrn_load_dll(tempdir)
+	if (tempnum == 1) {
+		print "\nCompiled mechanisms loaded from ", lib, "\n"
+		sprint(tempdir, "%s", "")
+		sprint(tempstr, "%s", "")
+	}
+	if (tempnum == 0) {
+		print "\nCompiled mechanisms not loaded from ", lib, "\n"
+		return	
 	}
 }
 // --------------------------------------------------------------------------------
