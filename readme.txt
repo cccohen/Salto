@@ -4,7 +4,10 @@ Salto v1.0
 The contents of this package are released to the public under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International license (CC BY-NC-ND 4.0, in English).
 -------------------------------------------------------------------------------------------------------------------
 
-Automated generation, GUI-based exploration, and multiscale optimization of neuron models
+Automated generation, GUI-based exploration, and multiscale optimization of neuron models.
+
+Current version: fully-operational and tested for fixed timestep voltage recording applications, with both passive and active biophysical elements, including notably evoked action potentials (the example used in this version).
+In development: a version for variable timestep applications, across passive and active bioelectric mechanisms, for voltage responses to both short and long pulse current stimuli.
 
 -------------------------------------------------------------------------------------------------------------------
 
@@ -63,7 +66,7 @@ resetaxon.hoc
 
 startopt.hoc
 	- Run massive optimization of passive parameters using custom optimization procedure.
-	- May be run in parallel at the NSG (https://www.nsgportal.org/) or properly configured machines.
+	- May be run in parallel at the NSG (https://www.nsgportal.org/) or other configered machines.
 	- Saves simulation results in an "outdir", in a subfolder entitled *modeltype*
 
 extractopt.hoc
